@@ -10,7 +10,12 @@ try:
 except ImportError:
     import fitz  # Legacy fallback
 
-from blender_pdf_vector_importer.core.PDFPrimitiveExtractor import _norm_color, extract_page
+from blender_pdf_vector_importer.core.PDFPrimitiveExtractor import (
+    _merge_stacked_fractions,
+    _norm_color,
+    extract_page,
+)
+from blender_pdf_vector_importer.core.PDFPrimitives import NormalizedText
 from blender_pdf_vector_importer.core.document import ExtractionOptions, extract_document
 from blender_pdf_vector_importer.importer import apply_uniform_scale, run_import
 
@@ -107,6 +112,27 @@ class TestCorePipeline(unittest.TestCase):
         self.assertAlmostEqual(rgb[0], 1.0, places=3)
         self.assertAlmostEqual(rgb[1], 0.0, places=3)
         self.assertAlmostEqual(rgb[2], 0.0, places=3)
+
+    def test_stacked_fraction_text_is_merged(self) -> None:
+        def text_item(idx: int, text: str, y: float) -> NormalizedText:
+            return NormalizedText(
+                id=idx,
+                text=text,
+                normalized=text,
+                insertion=(12.0, y),
+                bbox=(10.0, y - 0.5, 14.0, y + 0.5),
+                font_size=2.0,
+                page_number=1,
+            )
+
+        merged = _merge_stacked_fractions([
+            text_item(1, "15", 12.0),
+            text_item(2, "/", 10.0),
+            text_item(3, "16", 8.5),
+        ])
+
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0].text, "15/16")
 
     def test_extract_page_handles_quad_path_items(self) -> None:
         class _QuadPage:
