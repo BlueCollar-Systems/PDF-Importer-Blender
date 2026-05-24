@@ -45,7 +45,7 @@ After enabling the addon:
 
 1. **File > Import > PDF Vector (.pdf)**
 2. Select a PDF file
-3. Choose a preset and adjust options in the import panel
+3. Choose import mode (Auto, Vector, Raster, or Hybrid) and adjust options in the import panel
 4. Click **Import PDF Vector**
 
 Geometry is grouped into collections by page and (optionally) by source layer or color.
