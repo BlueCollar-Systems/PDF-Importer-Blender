@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from ..importer import run_import
+from ..view_focus import focus_view_on_collection
 
 MM_TO_M = 0.001
 
@@ -86,13 +87,8 @@ def import_into_blender(pdf_path: str, mode: str = "auto",
                 if os.path.isfile(placement.path):
                     _create_image_plane(placement, page_collection)
 
-    # Autofit viewport to imported geometry
     try:
-        for area in bpy.context.screen.areas:
-            if area.type == "VIEW_3D":
-                with bpy.context.temp_override(area=area):
-                    bpy.ops.view3d.view_all()
-                break
+        focus_view_on_collection(root_collection)
     except Exception:
         pass
 
