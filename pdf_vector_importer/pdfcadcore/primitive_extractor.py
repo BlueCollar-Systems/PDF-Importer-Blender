@@ -25,9 +25,9 @@ def _xy(obj) -> Tuple[float, float]:
     return 0.0, 0.0
 
 
-def _norm_color(col) -> Tuple[float, float, float]:
+def _norm_color(col) -> Optional[Tuple[float, float, float]]:
     if col is None:
-        return (0.0, 0.0, 0.0)
+        return None
     try:
         if isinstance(col, (int, float)):
             g = max(0.0, min(1.0, float(col)))
@@ -47,7 +47,7 @@ def _norm_color(col) -> Tuple[float, float, float]:
             vals.append(vals[-1] if vals else 0.0)
         return (vals[0], vals[1], vals[2])
     except (TypeError, ValueError, AttributeError):
-        return (0.0, 0.0, 0.0)
+        return None
 
 
 def _parse_dashes(raw) -> Tuple[Optional[list], float]:
@@ -150,12 +150,28 @@ def _quad_to_points(
     return out
 
 
+def _page_mediabox_height(page) -> float:
+    """Media-box height for Y-flip (PDF user space, not crop-relative)."""
+    try:
+        mbox = page.mediabox
+        return float(mbox.height)
+    except AttributeError:
+        return float(page.rect.height)
+
+
 def extract_page(page, page_num: int, scale: float = 1.0,
                  flip_y: bool = True) -> PageData:
     """Extract normalized primitives from a PyMuPDF page."""
-    page_h = page.rect.height
-    page_w_mm = page.rect.width * MM_PER_PT * scale
-    page_h_mm = page.rect.height * MM_PER_PT * scale
+    try:
+        mbox = page.mediabox
+        page_w_pts = float(mbox.width)
+        page_h_pts = float(mbox.height)
+    except AttributeError:
+        page_w_pts = float(page.rect.width)
+        page_h_pts = float(page.rect.height)
+    page_h = page_h_pts
+    page_w_mm = page_w_pts * MM_PER_PT * scale
+    page_h_mm = page_h_pts * MM_PER_PT * scale
 
     primitives = []
     drawings = page.get_drawings()
@@ -289,7 +305,7 @@ def extract_page(page, page_num: int, scale: float = 1.0,
                 area=area, page_number=page_num
             ))
 
-    text_items = _extract_text(page, page_h, page_num, flip_y, scale)
+    text_items = _extract_text(page, page_h_pts, page_num, flip_y, scale)
 
     return PageData(
         page_number=page_num,
@@ -297,6 +313,48 @@ def extract_page(page, page_num: int, scale: float = 1.0,
         primitives=primitives, text_items=text_items,
         layers=[], xobject_names=[]
     )
+
+
+def _span_baseline_pdf(span: dict, line: dict) -> Tuple[float, float]:
+    """Return PDF user-space (x, baseline_y) for one span.
+
+    PyMuPDF ``origin`` is usually the baseline anchor.  When it is missing or
+    an outlier, fall back to bbox bottom minus descender — same approach as the
+    FreeCAD host importer so DXF/CAD text does not sit on dimension geometry.
+    """
+    origin = span.get("origin")
+    ox = oy = None
+    if origin and len(origin) >= 2:
+        try:
+            ox, oy = float(origin[0]), float(origin[1])
+        except (TypeError, ValueError):
+            ox = oy = None
+
+    sb = span.get("bbox")
+    size_pt = max(float(span.get("size", 3)), 1.0)
+    desc = abs(float(span.get("descender", 0.15)))
+    baseline_bbox = None
+    if sb and len(sb) >= 4:
+        x0 = float(sb[0])
+        y1 = max(float(sb[1]), float(sb[3]))
+        baseline_bbox = (x0, y1 - desc * size_pt)
+
+    if ox is not None and oy is not None:
+        if baseline_bbox is not None:
+            drift = abs(oy - baseline_bbox[1])
+            drift_tol = max(0.9, size_pt * 0.28)
+            if drift <= drift_tol:
+                return ox, oy
+        return ox, oy
+
+    if baseline_bbox is not None:
+        return baseline_bbox
+
+    lb = line.get("bbox", (0, 0, 0, 0))
+    if lb and len(lb) >= 4:
+        y1 = max(float(lb[1]), float(lb[3]))
+        return float(lb[0]), y1 - desc * size_pt
+    return 0.0, 0.0
 
 
 def _extract_text(page, page_h, page_num, flip_y, scale) -> List[NormalizedText]:
@@ -332,13 +390,7 @@ def _extract_text(page, page_h, page_num, flip_y, scale) -> List[NormalizedText]
                 if not text:
                     continue
 
-                origin = span.get("origin")
-                if origin and len(origin) >= 2:
-                    x, y = float(origin[0]), float(origin[1])
-                else:
-                    bb = span.get("bbox") or line.get("bbox", (0, 0, 0, 0))
-                    x, y = float(bb[0]), float(bb[3] if len(bb) >= 4 else bb[1])
-
+                x, y = _span_baseline_pdf(span, line)
                 px, py = _to_mm(x, y, page_h, flip_y, scale)
                 size = max(float(span.get("size", 3)), 1.0) * MM_PER_PT * scale
                 font = str(span.get("font", ""))
@@ -549,30 +601,84 @@ def _merge_stacked_fractions(items: List[NormalizedText]) -> List[NormalizedText
                         if spread < best_spread:
                             best_spread = spread
                             best_pair = (ni, di)
-                if best_pair is None:
+                if best_pair is not None:
+                    numer_idx, denom_idx = best_pair
+                    numer = items[numer_idx]
+                    denom = items[denom_idx]
+                    sizes = [numer.font_size, slash.font_size, denom.font_size]
+                    if max(sizes) <= 2.0 * min(sizes):
+                        merged_text = f"{numer.text.strip()}/{denom.text.strip()}"
+                        avg_size = sum(sizes) / 3.0
+                        merged_item = NormalizedText(
+                            id=next_id(),
+                            text=merged_text,
+                            normalized=merged_text.upper().strip(),
+                            insertion=slash.insertion,
+                            bbox=_merged_bbox(numer.bbox, slash.bbox, denom.bbox),
+                            font_size=avg_size,
+                            rotation=slash.rotation,
+                            font_name=slash.font_name or numer.font_name,
+                            color=slash.color or numer.color,
+                            page_number=page_num,
+                            generic_tags=_classify_generic(merged_text),
+                        )
+                        merged_indices.update([numer_idx, si, denom_idx])
+                        replacements[si] = merged_item
+                        continue
+
+            # ----------------------------------------------------------
+            # Pattern C: Horizontal fraction (e.g. "3" + "/" + "4" on one line)
+            # ----------------------------------------------------------
+            horiz_digits = []
+            for ci in indices:
+                if ci == si or ci in merged_indices:
                     continue
-                numer_idx, denom_idx = best_pair
+                cand = items[ci]
+                ct = cand.text.strip()
+                if not _DIGITS_RE.match(ct):
+                    continue
+                if len(ct) >= 2 and _split_concatenated_fraction(ct) is not None:
+                    continue
+                cx = cand.insertion[0]
+                cy = cand.insertion[1]
+                if abs(cy - sy) > 1.2:
+                    continue
+                horiz_digits.append(ci)
+
+            left = [ci for ci in horiz_digits if items[ci].insertion[0] < sx - 0.05]
+            right = [ci for ci in horiz_digits if items[ci].insertion[0] > sx + 0.05]
+            if len(left) == 1 and len(right) == 1:
+                numer_idx, denom_idx = left[0], right[0]
                 numer = items[numer_idx]
                 denom = items[denom_idx]
-                sizes = [numer.font_size, slash.font_size, denom.font_size]
-                if max(sizes) <= 2.0 * min(sizes):
-                    merged_text = f"{numer.text.strip()}/{denom.text.strip()}"
-                    avg_size = sum(sizes) / 3.0
-                    merged_item = NormalizedText(
-                        id=next_id(),
-                        text=merged_text,
-                        normalized=merged_text.upper().strip(),
-                        insertion=slash.insertion,
-                        bbox=_merged_bbox(numer.bbox, slash.bbox, denom.bbox),
-                        font_size=avg_size,
-                        rotation=slash.rotation,
-                        font_name=slash.font_name or numer.font_name,
-                        color=slash.color or numer.color,
-                        page_number=page_num,
-                        generic_tags=_classify_generic(merged_text),
-                    )
-                    merged_indices.update([numer_idx, si, denom_idx])
-                    replacements[si] = merged_item
+                try:
+                    n_val = int(numer.text.strip())
+                    d_val = int(denom.text.strip())
+                except ValueError:
+                    n_val = d_val = -1
+                if d_val in _VALID_DENOMS and 0 < n_val < d_val:
+                    gap_l = sx - numer.insertion[0]
+                    gap_r = denom.insertion[0] - sx
+                    if gap_l <= 8.0 and gap_r <= 8.0:
+                        sizes = [numer.font_size, slash.font_size, denom.font_size]
+                        if max(sizes) <= 2.0 * min(sizes):
+                            merged_text = f"{numer.text.strip()}/{denom.text.strip()}"
+                            avg_size = sum(sizes) / 3.0
+                            merged_item = NormalizedText(
+                                id=next_id(),
+                                text=merged_text,
+                                normalized=merged_text.upper().strip(),
+                                insertion=slash.insertion,
+                                bbox=_merged_bbox(numer.bbox, slash.bbox, denom.bbox),
+                                font_size=avg_size,
+                                rotation=slash.rotation,
+                                font_name=slash.font_name or numer.font_name,
+                                color=slash.color or numer.color,
+                                page_number=page_num,
+                                generic_tags=_classify_generic(merged_text),
+                            )
+                            merged_indices.update([numer_idx, si, denom_idx])
+                            replacements[si] = merged_item
 
     if not merged_indices:
         return items

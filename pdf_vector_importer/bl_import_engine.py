@@ -939,10 +939,13 @@ def import_pdf(
                 raw_drawings = page.get_drawings()
                 text_blocks = page.get_text("blocks") or []
                 text_words = page.get_text("words") or []
+                mbox = page.mediabox
+                page_area = float(mbox.width) * float(mbox.height)
                 classification = classify_page_content(
                     raw_drawings,
                     text_blocks_count=len(text_blocks),
                     text_words_count=len(text_words),
+                    page_area=page_area,
                 )
                 if classification["type"] in ("glyph_flood", "fill_art", "raster_candidate"):
                     _progress(
@@ -956,7 +959,6 @@ def import_pdf(
                 page, page_num,
                 scale=import_cfg.user_scale,
                 flip_y=import_cfg.flip_y,
-                strict_text_fidelity=import_cfg.strict_text_fidelity,
             )
             _progress(_page_progress(i, 0.35), f"Parsed page {page_num}: {len(page_data.primitives)} primitives")
 
