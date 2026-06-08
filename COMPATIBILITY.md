@@ -16,7 +16,7 @@ Every mode uses consolidated maximum-fidelity parameters (BCS-ARCH-001).
 | 2.83–2.93 | 3.9 | legacy pin | ⚠️ Expected after legacy testing |
 | 2.79 and earlier | | | ❌ Not supported |
 
-`bl_info["blender"]` in the add-on currently declares **(3, 6, 0)** minimum for the packaged release zip; older 3.x may work when installed manually but is not release-gated.
+`bl_info["blender"]` declares **(3, 0, 0)** minimum in both add-on entrypoints (`pdf_vector_importer` and `blender_pdf_vector_importer`). Blender **3.6 LTS** is the recommended baseline for bundled-Python/PyMuPDF support; 3.0–3.5 are **Expected** after manual install of dependencies.
 
 ### Text rendering (3D-capable host)
 
@@ -29,4 +29,4 @@ Every mode uses consolidated maximum-fidelity parameters (BCS-ARCH-001).
 
 ## CI coverage
 
-GitHub Actions: Python **3.10, 3.11, 3.12**, pytest, BCS-ARCH mode smoke on synthetic PDFs.
+GitHub Actions: Python **3.9, 3.10, 3.11, 3.12**, `pdfcadcore_sync_check.py`, pytest, BCS-ARCH mode smoke on synthetic PDFs.

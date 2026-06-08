@@ -161,5 +161,19 @@ class TestTextDefaults(unittest.TestCase):
         self.assertNotIn('layout.prop(self, "detect_arcs")', source)
 
 
+class TestBlenderVersionFloor(unittest.TestCase):
+    """bl_info minimum Blender version must match COMPATIBILITY.md (3.0+)."""
+
+    ADDON_INIT = REPO_ROOT / "pdf_vector_importer" / "__init__.py"
+
+    def test_primary_addon_declares_blender_3_0(self) -> None:
+        source = self.ADDON_INIT.read_text(encoding="utf-8")
+        self.assertIn('"blender": (3, 0, 0)', source)
+
+    def test_legacy_entrypoint_matches_primary_floor(self) -> None:
+        source = LEGACY_ADDON_INIT_PY.read_text(encoding="utf-8")
+        self.assertIn('"blender": (3, 0, 0)', source)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -7,7 +7,7 @@ bl_info = {
     "name": "PDF Vector Importer for Blender",
     "author": "BlueCollar Systems",
     "version": (1, 0, 0),
-    "blender": (3, 6, 0),
+    "blender": (3, 0, 0),
     "location": "File > Import > PDF Vector Drawing (.pdf)",
     "description": "Import vector geometry, text, and images from PDFs",
     "category": "Import-Export",
