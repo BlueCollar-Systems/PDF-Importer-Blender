@@ -8,9 +8,10 @@ for p in (REPO, os.path.join(REPO, "pdf_vector_importer")):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-PDF = os.environ.get(
-    "TEST_PDF",
-    r"C:\Users\Rowdy Payton\Desktop\PDFTest Files\TX_Alvord_20220525_TM_geo.pdf",
+from corpus_paths import resolve_corpus_pdf
+
+PDF = os.environ.get("TEST_PDF") or str(
+    resolve_corpus_pdf("TX_Alvord_20220525_TM_geo.pdf") or ""
 )
 
 
