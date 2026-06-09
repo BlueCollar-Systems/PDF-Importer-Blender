@@ -13,11 +13,52 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Source-compat guard for Blender 3.0/3.1 hosts (Python 3.9).
+  # Syntax-only: the vendored PyMuPDF wheel is cp310-abi3, so the full
+  # dependency suite runs on >=3.10 (D5 ABI floor).
+  legacy-syntax:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile all Python modules (legacy floor)
+        run: python -m compileall pdf_vector_importer blender_pdf_vector_importer
+
+  version-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check pyproject/bl_info version consistency
+        run: |
+          PYPROJECT_VER=$(grep -oP '(?<=^version = ")[^"]+' pyproject.toml | head -n1)
+          MAIN_VER=$(grep -oP '"version":\s*\(\K[0-9]+,\s*[0-9]+,\s*[0-9]+' pdf_vector_importer/__init__.py | head -n1 | tr -d ' ' | tr ',' '.')
+          LEGACY_VER=$(grep -oP '"version":\s*\(\K[0-9]+,\s*[0-9]+,\s*[0-9]+' blender_pdf_vector_importer/__init__.py | head -n1 | tr -d ' ' | tr ',' '.')
+          echo "pyproject=$PYPROJECT_VER main=$MAIN_VER legacy=$LEGACY_VER"
+          if [ -z "$PYPROJECT_VER" ] || [ -z "$MAIN_VER" ] || [ -z "$LEGACY_VER" ]; then
+            echo "ERROR: could not read one or more versions"
+            exit 1
+          fi
+          if [ "$PYPROJECT_VER" != "$MAIN_VER" ] || [ "$PYPROJECT_VER" != "$LEGACY_VER" ]; then
+            echo "ERROR: version mismatch (pyproject=$PYPROJECT_VER main=$MAIN_VER legacy=$LEGACY_VER)"
+            exit 1
+          fi
+
   syntax-check:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12"]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
