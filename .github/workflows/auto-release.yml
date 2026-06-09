@@ -80,6 +80,17 @@ jobs:
           )
           pyproject.write_text(pyproject_text, encoding="utf-8")
 
+          legacy_init = pathlib.Path("blender_pdf_vector_importer/__init__.py")
+          if legacy_init.exists():
+              legacy_text = legacy_init.read_text(encoding="utf-8")
+              legacy_text = re.sub(
+                  r'("version":\s*\()(\d+),\s*(\d+),\s*(\d+)(\))',
+                  rf'\g<1>{major}, {minor}, {next_patch}\5',
+                  legacy_text,
+                  count=1,
+              )
+              legacy_init.write_text(legacy_text, encoding="utf-8")
+
           readme_text = readme.read_text(encoding="utf-8")
           readme_text = re.sub(
               r"(Version-)(\d+\.\d+\.\d+)(-(green|blue)\.svg)",
@@ -103,7 +114,7 @@ jobs:
           set -e
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pdf_vector_importer/__init__.py pyproject.toml README.md
+          git add pdf_vector_importer/__init__.py blender_pdf_vector_importer/__init__.py pyproject.toml README.md
           if git diff --cached --quiet; then
             echo "No version bump changes to commit."
           else
