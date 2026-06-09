@@ -959,6 +959,9 @@ def import_pdf(
                 page, page_num,
                 scale=import_cfg.user_scale,
                 flip_y=import_cfg.flip_y,
+                detect_arcs=import_cfg.detect_arcs,
+                arc_fit_tol_mm=import_cfg.arc_fit_tol_mm,
+                min_arc_angle_deg=import_cfg.min_arc_angle_deg,
             )
             _progress(_page_progress(i, 0.35), f"Parsed page {page_num}: {len(page_data.primitives)} primitives")
 
