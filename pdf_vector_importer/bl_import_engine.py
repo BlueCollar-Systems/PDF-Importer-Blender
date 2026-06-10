@@ -18,7 +18,7 @@ import bpy
 
 from .dependency_manager import check_pymupdf, ensure_lib_path
 from .pdfcadcore import (
-    ImportConfig, extract_page, recognition, reset_ids,
+    ImportConfig, extract_page, iter_pages, recognition, reset_ids,
     classify_page_content, tag_hatch_primitives, cleanup_primitives,
 )
 from .bl_geometry_builder import build_page
@@ -927,11 +927,55 @@ def import_pdf(
         _page_arrangement = _normalize_page_arrangement(config.get("page_arrangement"))
         _page_gap_ratio = _normalize_page_gap_ratio(config.get("page_gap_ratio"))
 
-        for i, page_idx in enumerate(page_indices):
-            page_num = page_idx + 1
-            _progress(_page_progress(i, 0.05), f"Extracting page {page_num}/{len(page_indices)}...")
+        use_streaming = len(page_indices) > 1
+        page_numbers = [idx + 1 for idx in page_indices]
+        stream_cancelled = False
 
-            page = doc.load_page(page_idx)
+        def _iter_pages_for_import():
+            """Yield (loop_index, page_idx, page_num, page, page_data) per page."""
+            extract_kwargs = dict(
+                scale=import_cfg.user_scale,
+                flip_y=import_cfg.flip_y,
+                detect_arcs=import_cfg.detect_arcs,
+                arc_fit_tol_mm=import_cfg.arc_fit_tol_mm,
+                min_arc_angle_deg=import_cfg.min_arc_angle_deg,
+            )
+            if use_streaming:
+                def _on_stream_progress(prog):
+                    nonlocal stream_cancelled
+                    _progress(
+                        _page_progress(prog.page_index - 1, 0.35),
+                        f"Extracted page {prog.page_number}/{prog.total_pages}: "
+                        f"{prog.primitive_count} primitives ({prog.elapsed_s:.1f}s)",
+                    )
+                    if prog.over_budget:
+                        _progress(
+                            _page_progress(prog.page_index - 1, 0.38),
+                            f"Page {prog.page_number} exceeded soft budget ({prog.elapsed_s:.1f}s)",
+                        )
+                    return False if stream_cancelled else None
+
+                for loop_i, (page_num, page_data) in enumerate(
+                    iter_pages(
+                        doc,
+                        pages=page_numbers,
+                        progress=_on_stream_progress,
+                        **extract_kwargs,
+                    )
+                ):
+                    page_idx = page_num - 1
+                    page = doc.load_page(page_idx)
+                    yield loop_i, page_idx, page_num, page, page_data
+            else:
+                page_idx = page_indices[0]
+                page_num = page_idx + 1
+                page = doc.load_page(page_idx)
+                page_data = extract_page(page, page_num, **extract_kwargs)
+                yield 0, page_idx, page_num, page, page_data
+
+        for i, page_idx, page_num, page, page_data in _iter_pages_for_import():
+            _progress(_page_progress(i, 0.05), f"Processing page {page_num}/{len(page_indices)}...")
+
             import_mode = (import_cfg.import_mode or "auto").strip().lower()
 
             # 9a. Auto-mode classification (before extraction)
@@ -954,15 +998,6 @@ def import_pdf(
                     )
                     import_mode = "raster"
 
-            # 9b. Extract primitives via pdfcadcore
-            page_data = extract_page(
-                page, page_num,
-                scale=import_cfg.user_scale,
-                flip_y=import_cfg.flip_y,
-                detect_arcs=import_cfg.detect_arcs,
-                arc_fit_tol_mm=import_cfg.arc_fit_tol_mm,
-                min_arc_angle_deg=import_cfg.min_arc_angle_deg,
-            )
             _progress(_page_progress(i, 0.35), f"Parsed page {page_num}: {len(page_data.primitives)} primitives")
 
             # 9c. Geometry cleanup (remove micro-segments)

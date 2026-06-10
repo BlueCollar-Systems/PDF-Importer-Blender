@@ -24,7 +24,7 @@ DIST = ROOT / "dist"
 PKG = ROOT / "pdf_vector_importer"
 
 # Patterns to exclude from the release zip
-_EXCLUDE_DIRS = {"__pycache__", "tests", ".pytest_cache"}
+_EXCLUDE_DIRS = {"__pycache__", "tests", ".pytest_cache", "_archived"}
 _EXCLUDE_SUFFIXES = {".pyc", ".pyo"}
 
 

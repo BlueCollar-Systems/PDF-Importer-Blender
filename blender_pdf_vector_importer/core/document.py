@@ -12,10 +12,10 @@ try:
 except ImportError:
     import fitz  # Legacy fallback
 
-from .PDFDocumentProfiler import profile as profile_page
-from .PDFGeometryCleanup import circle_fit
-from .PDFPrimitiveExtractor import extract_page
-from .PDFPrimitives import PageData
+from pdf_vector_importer.pdfcadcore.document_profiler import profile as profile_page
+from pdf_vector_importer.pdfcadcore.geometry_cleanup import circle_fit
+from pdf_vector_importer.pdfcadcore.primitive_extractor import extract_page
+from pdf_vector_importer.pdfcadcore.primitives import PageData
 
 MM_PER_PT = 25.4 / 72.0
 

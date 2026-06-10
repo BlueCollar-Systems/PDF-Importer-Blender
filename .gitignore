@@ -13,4 +13,7 @@ build/
 .pytest_cache/
 .ruff_cache/
 dev_logs/
+benchmarks/
+llm_context_*.md
+blender_pdf_vector_importer/_archived/
 pdf_vector_importer/pdfcadcore/lib/

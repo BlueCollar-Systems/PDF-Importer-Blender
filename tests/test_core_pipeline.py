@@ -92,6 +92,22 @@ class TestCorePipeline(unittest.TestCase):
         )
         self.assertEqual(len(extraction.pages), 2)
 
+    def test_iter_pages_streams_multi_page_pdf(self) -> None:
+        from pdf_vector_importer.pdfcadcore import iter_pages
+
+        progress_calls: list[int] = []
+        pages = list(
+            iter_pages(
+                str(self.pdf_path),
+                progress=lambda p: progress_calls.append(p.page_number) or True,
+            )
+        )
+        self.assertEqual(len(pages), 2)
+        self.assertEqual([num for num, _ in pages], [1, 2])
+        self.assertGreaterEqual(len(progress_calls), 2)
+        for _page_num, page_data in pages:
+            self.assertGreaterEqual(len(page_data.primitives), 1)
+
     def test_raster_mode_renders_page_image(self) -> None:
         run = run_import(str(self.pdf_path), mode="raster", overrides={"pages": "1"})
         summary = run.extraction.summary()

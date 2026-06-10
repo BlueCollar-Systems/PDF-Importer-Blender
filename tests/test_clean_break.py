@@ -13,7 +13,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 OPERATORS_PY = REPO_ROOT / "pdf_vector_importer" / "operators.py"
 LEGACY_ADDON_INIT_PY = REPO_ROOT / "blender_pdf_vector_importer" / "__init__.py"
 ADDON_CONFIG_PY = REPO_ROOT / "pdf_vector_importer" / "pdfcadcore" / "import_config.py"
-CLI_CONFIG_PY = REPO_ROOT / "blender_pdf_vector_importer" / "core" / "PDFImportConfig.py"
 
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess:
@@ -148,10 +147,9 @@ class TestTextDefaults(unittest.TestCase):
     """Core config defaults must not silently return to Labels."""
 
     def test_embedded_configs_default_to_3d_text(self) -> None:
-        for path in (ADDON_CONFIG_PY, CLI_CONFIG_PY):
-            source = path.read_text(encoding="utf-8")
-            self.assertIn('text_mode: str = "3d_text"', source)
-            self.assertNotIn('text_mode: str = "labels"', source)
+        source = ADDON_CONFIG_PY.read_text(encoding="utf-8")
+        self.assertIn('text_mode: str = "3d_text"', source)
+        self.assertNotIn('text_mode: str = "labels"', source)
 
     def test_legacy_addon_entrypoint_has_text_mode_not_arc_dial(self) -> None:
         source = LEGACY_ADDON_INIT_PY.read_text(encoding="utf-8")
