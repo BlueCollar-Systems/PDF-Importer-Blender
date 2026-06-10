@@ -973,7 +973,7 @@ def import_pdf(
                 page_data = extract_page(page, page_num, **extract_kwargs)
                 yield 0, page_idx, page_num, page, page_data
 
-        for i, page_idx, page_num, page, page_data in _iter_pages_for_import():
+        for i, _page_idx, page_num, page, page_data in _iter_pages_for_import():
             _progress(_page_progress(i, 0.05), f"Processing page {page_num}/{len(page_indices)}...")
 
             import_mode = (import_cfg.import_mode or "auto").strip().lower()
