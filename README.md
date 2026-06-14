@@ -28,7 +28,7 @@ Powered by the pdfcadcore shared extraction library and PyMuPDF.
    python build_release.py
    ```
 2. In Blender: **Edit > Preferences > Add-ons > Install...**
-3. Choose `dist/pdf_vector_importer_v1.0.0.zip`
+3. Choose `dist/Blender-PDF-Importer_v1.0.0.zip`
 4. Enable **PDF Vector Importer**
 5. If prompted, click **Install PyMuPDF** in the addon preferences panel
 

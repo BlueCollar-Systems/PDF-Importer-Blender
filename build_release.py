@@ -11,7 +11,7 @@ Usage:
     python build_release.py
 
 Output:
-    dist/pdf_vector_importer_vX.Y.Z.zip
+    dist/Blender-PDF-Importer_vX.Y.Z.zip
 """
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def _should_exclude(path: Path) -> bool:
 
 def main() -> int:
     version = _read_version()
-    out_path = DIST / f"pdf_vector_importer_v{version}.zip"
+    out_path = DIST / f"Blender-PDF-Importer_v{version}.zip"
 
     DIST.mkdir(parents=True, exist_ok=True)
 

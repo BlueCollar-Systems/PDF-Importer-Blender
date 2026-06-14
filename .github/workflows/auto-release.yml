@@ -141,7 +141,7 @@ jobs:
         run: |
           set -e
           TAG="v${{ steps.version.outputs.version }}"
-          TITLE="PDF Vector Importer for Blender v${{ steps.version.outputs.version }}"
+          TITLE="v${{ steps.version.outputs.version }} — PDF Vector Importer for Blender"
 
           git fetch --tags --force
           if ! git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
