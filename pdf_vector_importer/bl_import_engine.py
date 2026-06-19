@@ -28,12 +28,21 @@ from .bl_text_builder import build_all_text
 _MM_PER_PT = 25.4 / 72.0
 _MM_TO_M = 0.001
 
-_IMPORTER_VERSION = "1.0.22"
-
-
 def _default_import_report_path(filepath: str) -> str:
     base = os.path.splitext(os.path.basename(filepath))[0]
     return os.path.join(tempfile.gettempdir(), f"{base}_import_report.json")
+
+
+def _importer_version() -> str:
+    try:
+        from . import bl_info
+
+        version = bl_info.get("version", "")
+        if isinstance(version, (tuple, list)):
+            return ".".join(str(part) for part in version)
+        return str(version or "")
+    except (ImportError, AttributeError, TypeError):
+        return ""
 
 
 def _pymupdf_version() -> str:
@@ -73,7 +82,7 @@ def write_import_report(
         runtime_version=(
             f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
         ),
-        importer_version=_IMPORTER_VERSION,
+        importer_version=_importer_version(),
         pdf_path=filepath,
         mode=import_mode,
         pages=int(stats.get("pages_imported", stats.get("pages", 0)) or 0),

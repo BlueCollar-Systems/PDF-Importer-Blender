@@ -18,6 +18,7 @@ if "bmesh" not in sys.modules:
     sys.modules["bmesh"] = types.SimpleNamespace()
 
 from pdf_vector_importer.bl_import_engine import write_import_report  # noqa: E402
+from pdf_vector_importer import bl_info  # noqa: E402
 
 
 class TestImportReportWriter(unittest.TestCase):
@@ -52,7 +53,8 @@ class TestImportReportWriter(unittest.TestCase):
             self.assertEqual(data["schema"], "bcs.import_report/1.1")
             self.assertEqual(data["host"]["app"], "blender")
             self.assertEqual(data["host"]["version"], "4.1.0")
-            self.assertEqual(data["importer"]["version"], "1.0.22")
+            expected_version = ".".join(str(part) for part in bl_info["version"])
+            self.assertEqual(data["importer"]["version"], expected_version)
             self.assertEqual(data["result"]["primitives"], 9)
             self.assertEqual(data["result"]["text_entities"], 3)
             self.assertEqual(data["result"]["layers"], 4)
