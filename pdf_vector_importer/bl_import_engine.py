@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 import tempfile
 import time
 from typing import Callable, Dict, List, Optional
@@ -26,6 +27,71 @@ from .bl_text_builder import build_all_text
 
 _MM_PER_PT = 25.4 / 72.0
 _MM_TO_M = 0.001
+
+_IMPORTER_VERSION = "1.0.22"
+
+
+def _default_import_report_path(filepath: str) -> str:
+    base = os.path.splitext(os.path.basename(filepath))[0]
+    return os.path.join(tempfile.gettempdir(), f"{base}_import_report.json")
+
+
+def _pymupdf_version() -> str:
+    try:
+        from .pdfcadcore.fitz_loader import import_fitz
+        from .dependency_manager import get_lib_dir
+
+        fitz = import_fitz(prefer_lib_dir=str(get_lib_dir()))
+        return str(getattr(fitz, "__version__", "") or "")
+    except (ImportError, RuntimeError, OSError):
+        return ""
+
+
+def write_import_report(
+    filepath: str,
+    config: Dict,
+    stats: Dict,
+    *,
+    import_mode: str = "auto",
+    raster_pages: int = 0,
+    output_path: Optional[str] = None,
+) -> str:
+    """Emit bcs.import_report/1.1 JSON for one import run."""
+    from .pdfcadcore.import_report import build_import_report
+
+    path = (
+        output_path
+        or config.get("import_report_path")
+        or _default_import_report_path(filepath)
+    )
+    elapsed = float(stats.get("elapsed", 0.0) or 0.0)
+    fallback_used = raster_pages > 0 or import_mode == "raster"
+    report = build_import_report(
+        host_app="blender",
+        host_version=".".join(str(v) for v in bpy.app.version),
+        runtime_lang="python",
+        runtime_version=(
+            f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+        ),
+        importer_version=_IMPORTER_VERSION,
+        pdf_path=filepath,
+        mode=import_mode,
+        pages=int(stats.get("pages_imported", stats.get("pages", 0)) or 0),
+        primitive_count=int(stats.get("primitives", 0) or 0),
+        text_count=int(stats.get("text_items", 0) or 0),
+        layer_count=int(stats.get("collections", 0) or 0),
+        elapsed_ms=elapsed * 1000.0,
+        fallback_used=fallback_used,
+        fallback_reason="raster_fallback" if fallback_used else None,
+        pdf_engine_version=_pymupdf_version(),
+        extra={
+            "curves": int(stats.get("curves", 0) or 0),
+            "meshes": int(stats.get("meshes", 0) or 0),
+            "images": int(stats.get("images", 0) or 0),
+        },
+    )
+    report.write_json(path)
+    return path
 
 
 def _iter_collection_tree(root_collection: bpy.types.Collection):
@@ -1172,6 +1238,17 @@ def import_pdf(
         except Exception:
             total_stats["focused"] = 0
         total_stats["elapsed"] = elapsed
+        try:
+            report_path = write_import_report(
+                filepath,
+                config,
+                total_stats,
+                import_mode=(import_cfg.import_mode or "auto").strip().lower(),
+                raster_pages=raster_pages_imported,
+            )
+            total_stats["import_report_path"] = report_path
+        except (OSError, RuntimeError, TypeError, ValueError, ImportError) as exc:
+            total_stats["import_report_error"] = str(exc)
         return total_stats
 
     finally:
