@@ -8,7 +8,12 @@ import unittest
 from pathlib import Path
 
 
-TEST_PDF = Path(r"C:\Users\Rowdy Payton\Desktop\PDFTest Files\1015 - Rev 0.pdf")
+TEST_PDF_CANDIDATES = (
+    Path(r"C:\Users\Rowdy Payton\Desktop\PDFTest Files\1015 - Rev 0.pdf"),
+    Path(r"C:\Users\Rowdy Payton\Desktop\PDFTest Files\1017 - Rev 0.pdf"),
+    Path(r"C:\Users\Rowdy Payton\Desktop\PDFTest Files\1021 - Rev 0.pdf"),
+)
+TEST_PDF = next((path for path in TEST_PDF_CANDIDATES if path.is_file()), TEST_PDF_CANDIDATES[0])
 REPO_ROOT = Path(__file__).resolve().parents[1]
 OPERATORS_PY = REPO_ROOT / "pdf_vector_importer" / "operators.py"
 LEGACY_ADDON_INIT_PY = REPO_ROOT / "blender_pdf_vector_importer" / "__init__.py"
