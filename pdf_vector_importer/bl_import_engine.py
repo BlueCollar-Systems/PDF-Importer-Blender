@@ -942,7 +942,7 @@ def import_pdf(
         from pdfcadcore.fitz_loader import import_fitz
         from .dependency_manager import get_lib_dir
 
-        fitz = import_fitz(prefer_lib_dir=str(get_lib_dir()))
+        import_fitz(prefer_lib_dir=str(get_lib_dir()))
 
         # 2. Verify file exists
         if not os.path.isfile(filepath):
