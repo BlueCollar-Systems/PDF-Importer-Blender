@@ -1159,6 +1159,7 @@ def import_pdf(
                     visual_style=visual_style,
                     z_offset_m=text_z_offset_m,
                     strict_text_fidelity=import_cfg.strict_text_fidelity,
+                    text_mode=import_cfg.text_mode,
                     progress_callback=_text_progress,
                 )
 

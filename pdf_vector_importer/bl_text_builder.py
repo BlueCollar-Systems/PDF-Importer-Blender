@@ -20,6 +20,7 @@ from .pdfcadcore.primitives import NormalizedText
 MM_TO_M = 0.001
 _FONT_SIZE_SCALE = 1.0
 _FONT_CACHE: Optional[bpy.types.VectorFont] = None
+_TEXT_MODES = {"labels", "3d_text", "glyphs", "geometry"}
 
 
 def _normalize_style(style: str) -> str:
@@ -27,6 +28,17 @@ def _normalize_style(style: str) -> str:
     if key in {"source", "blueprint", "high_contrast"}:
         return key
     return "source"
+
+
+def _normalize_text_mode(text_mode: str) -> str:
+    mode = (text_mode or "3d_text").strip().lower()
+    if mode in _TEXT_MODES:
+        return mode
+    return "3d_text"
+
+
+def _text_extrusion_depth(font_size: float) -> float:
+    return max(font_size * 0.12, 0.00025)
 
 
 def _styled_text_color(
@@ -157,6 +169,7 @@ def build_text(
     visual_style: str = "source",
     z_offset_m: float = 0.0,
     strict_text_fidelity: bool = True,
+    text_mode: str = "3d_text",
 ) -> Optional[bpy.types.Object]:
     """
     Create a Blender Text curve object from a NormalizedText item.
@@ -172,7 +185,8 @@ def build_text(
     if not text_item.text or not text_item.text.strip():
         return None
 
-    obj_name = f"P{page_number}_text_{text_item.id}"
+    mode = _normalize_text_mode(text_mode)
+    obj_name = f"P{page_number}_text_{mode}_{text_item.id}"
 
     # Create font curve data
     font_data = bpy.data.curves.new(name=obj_name, type="FONT")
@@ -202,11 +216,22 @@ def build_text(
         except Exception:
             font_data.align_y = "BOTTOM"
 
-    # Extrude to zero — flat text
-    font_data.extrude = 0.0
+    if mode == "3d_text":
+        font_data.extrude = _text_extrusion_depth(font_data.size)
+    else:
+        font_data.extrude = 0.0
+    if mode in {"glyphs", "geometry"}:
+        try:
+            font_data.resolution_u = max(int(getattr(font_data, "resolution_u", 12) or 12), 24)
+        except Exception:
+            pass
 
     # Create object and set position
     obj = bpy.data.objects.new(obj_name, font_data)
+    try:
+        obj["pdf_text_mode"] = mode
+    except Exception:
+        pass
 
     if center_anchor and text_item.bbox is not None:
         bx0, by0, bx1, by1 = text_item.bbox
@@ -234,7 +259,41 @@ def build_text(
         pass
 
     collection.objects.link(obj)
+    if mode in {"glyphs", "geometry"}:
+        obj = _meshify_text_object(obj, collection, mode)
     return obj
+
+
+def _meshify_text_object(
+    obj: bpy.types.Object,
+    collection: bpy.types.Collection,
+    mode: str,
+) -> bpy.types.Object:
+    """Convert text curves to mesh geometry when Blender can evaluate them."""
+    try:
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        evaluated = obj.evaluated_get(depsgraph)
+        mesh = bpy.data.meshes.new_from_object(evaluated, depsgraph=depsgraph)
+        mesh.name = f"{obj.name}_mesh"
+        mesh_obj = bpy.data.objects.new(obj.name, mesh)
+        mesh_obj.matrix_world = obj.matrix_world.copy()
+        mesh_obj.color = obj.color
+        for mat in getattr(obj.data, "materials", []):
+            mesh.materials.append(mat)
+        mesh_obj["pdf_text_mode"] = mode
+        mesh_obj["pdf_text_source"] = getattr(obj.data, "body", "")
+        collection.objects.link(mesh_obj)
+        try:
+            collection.objects.unlink(obj)
+        except Exception:
+            pass
+        try:
+            bpy.data.objects.remove(obj, do_unlink=True)
+        except Exception:
+            pass
+        return mesh_obj
+    except Exception:
+        return obj
 
 
 def build_all_text(
@@ -244,6 +303,7 @@ def build_all_text(
     visual_style: str = "source",
     z_offset_m: float = 0.0,
     strict_text_fidelity: bool = True,
+    text_mode: str = "3d_text",
     progress_callback=None,
 ) -> int:
     """
@@ -277,6 +337,7 @@ def build_all_text(
             visual_style=visual_style,
             z_offset_m=z_offset_m,
             strict_text_fidelity=strict_text_fidelity,
+            text_mode=text_mode,
         )
         if obj is not None:
             count += 1

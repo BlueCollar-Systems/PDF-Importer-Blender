@@ -13,6 +13,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 OPERATORS_PY = REPO_ROOT / "pdf_vector_importer" / "operators.py"
 LEGACY_ADDON_INIT_PY = REPO_ROOT / "blender_pdf_vector_importer" / "__init__.py"
 ADDON_CONFIG_PY = REPO_ROOT / "pdf_vector_importer" / "pdfcadcore" / "import_config.py"
+IMPORT_ENGINE_PY = REPO_ROOT / "pdf_vector_importer" / "bl_import_engine.py"
+TEXT_BUILDER_PY = REPO_ROOT / "pdf_vector_importer" / "bl_text_builder.py"
 
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess:
@@ -150,6 +152,18 @@ class TestTextDefaults(unittest.TestCase):
         source = ADDON_CONFIG_PY.read_text(encoding="utf-8")
         self.assertIn('text_mode: str = "3d_text"', source)
         self.assertNotIn('text_mode: str = "labels"', source)
+
+    def test_engine_passes_text_mode_to_builder(self) -> None:
+        source = IMPORT_ENGINE_PY.read_text(encoding="utf-8")
+        self.assertIn("text_mode=import_cfg.text_mode", source)
+
+    def test_text_builder_modes_have_distinct_outputs(self) -> None:
+        source = TEXT_BUILDER_PY.read_text(encoding="utf-8")
+        self.assertIn('text_mode: str = "3d_text"', source)
+        self.assertIn('if mode == "3d_text":', source)
+        self.assertIn("font_data.extrude = _text_extrusion_depth(font_data.size)", source)
+        self.assertIn('if mode in {"glyphs", "geometry"}:', source)
+        self.assertIn("def _meshify_text_object(", source)
 
     def test_legacy_addon_entrypoint_has_text_mode_not_arc_dial(self) -> None:
         source = LEGACY_ADDON_INIT_PY.read_text(encoding="utf-8")
