@@ -23,14 +23,18 @@ Powered by the pdfcadcore shared extraction library and PyMuPDF.
 
 ### Blender Add-on (Recommended)
 
-1. Build a release zip:
+1. Download `Blender-PDF-Importer_vX.Y.Z.zip` from Releases, or build it with:
    ```bash
    python build_release.py
    ```
 2. In Blender: **Edit > Preferences > Add-ons > Install...**
-3. Choose `dist/Blender-PDF-Importer_v1.0.0.zip`
+3. Choose `Blender-PDF-Importer_vX.Y.Z.zip`
 4. Enable **PDF Vector Importer**
-5. If prompted, click **Install PyMuPDF** in the addon preferences panel
+
+Release ZIPs include a private PyMuPDF runtime under `pdf_vector_importer/lib`,
+so users do not need system Python, pip, or operating-system packages. The
+preferences-panel **Install PyMuPDF** button remains for source/dev installs and
+repairing a manually modified add-on folder.
 
 ### Manual Install
 
@@ -70,8 +74,8 @@ Evidence levels:
 ## Requirements
 
 - Blender 3.0 or newer
-- Python 3.10+
-- PyMuPDF >=1.24,<2.0 (auto-installed via addon preferences)
+- Bundled Blender Python 3.10+
+- PyMuPDF >=1.24,<2.0, bundled in release ZIPs
 
 ## Development
 
@@ -108,7 +112,7 @@ python -m blender_pdf_vector_importer.batch_cli "C:\path\to\pdfs" --recursive --
 | Clipped/XObject-heavy PDFs | Complex clip stacks and deeply nested form XObjects can produce partial geometry |
 | Very large PDFs | Documents with >10,000 primitives may cause slow import due to per-object dependency graph updates |
 | Embedded subset fonts | Text using embedded subset fonts may not render correctly |
-| PyMuPDF required | PyMuPDF must be installable in Blender's bundled Python (see dependency manager) |
+| PyMuPDF required | Release ZIPs bundle PyMuPDF; source/dev installs can use the preferences-panel installer |
 | Legacy hosts | Blender/Python combinations outside the listed compatibility matrix are expected-only until verified |
 
 ## License

@@ -15,17 +15,27 @@ Output:
 """
 from __future__ import annotations
 
+import shutil
 import re
+import subprocess
+import sys
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
 ROOT = Path(__file__).resolve().parent
 DIST = ROOT / "dist"
 PKG = ROOT / "pdf_vector_importer"
+LIB_DIR = PKG / "lib"
 
 # Patterns to exclude from the release zip
 _EXCLUDE_DIRS = {"__pycache__", "tests", ".pytest_cache", "_archived"}
 _EXCLUDE_SUFFIXES = {".pyc", ".pyo"}
+_VENDORED_LIB = PKG / "lib"
+_REQUIRED_RUNTIME_FILES = (
+    _VENDORED_LIB / "pymupdf" / "__init__.py",
+    _VENDORED_LIB / "pymupdf" / "_mupdf.pyd",
+    _VENDORED_LIB / "pymupdf" / "mupdfcpp64.dll",
+)
 
 
 def _read_version() -> str:
@@ -48,11 +58,57 @@ def _should_exclude(path: Path) -> bool:
     return False
 
 
+def _verify_vendored_pymupdf() -> None:
+    """Ensure release ZIPs include a private PyMuPDF runtime."""
+    if not LIB_DIR.is_dir():
+        raise RuntimeError(
+            f"Missing vendored dependency folder: {LIB_DIR}. "
+            "Install PyMuPDF into pdf_vector_importer/lib before building."
+        )
+    code = (
+        "import sys; "
+        f"sys.path.insert(0, r'{LIB_DIR}'); "
+        "import pymupdf as fitz; "
+        "print(getattr(fitz, '__version__', '') or getattr(fitz, 'VersionBind', ''))"
+    )
+    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    if proc.returncode != 0 or not proc.stdout.strip():
+        raise RuntimeError(
+            "Vendored PyMuPDF could not be imported from pdf_vector_importer/lib. "
+            f"stderr: {proc.stderr.strip()}"
+        )
+
+
+def _prune_vendored_pymupdf() -> None:
+    for rel in (
+        Path("pymupdf") / "mupdf-devel",
+    ):
+        path = _VENDORED_LIB / rel
+        if path.exists():
+            shutil.rmtree(path)
+
+
+def _verify_vendored_runtime() -> None:
+    missing = [path for path in _REQUIRED_RUNTIME_FILES if not path.exists()]
+    dist_info = list(_VENDORED_LIB.glob("pymupdf-*.dist-info/COPYING"))
+    if missing or not dist_info:
+        details = [str(path.relative_to(ROOT)) for path in missing]
+        if not dist_info:
+            details.append("pdf_vector_importer/lib/pymupdf-*.dist-info/COPYING")
+        raise RuntimeError(
+            "Release build requires bundled PyMuPDF runtime files. Missing: "
+            + ", ".join(details)
+        )
+
+
 def main() -> int:
     version = _read_version()
     out_path = DIST / f"Blender-PDF-Importer_v{version}.zip"
 
     DIST.mkdir(parents=True, exist_ok=True)
+    _verify_vendored_pymupdf()
+    _verify_vendored_runtime()
+    _prune_vendored_pymupdf()
 
     count = 0
     with ZipFile(out_path, "w", ZIP_DEFLATED) as zf:
@@ -67,7 +123,7 @@ def main() -> int:
             count += 1
 
         # Include project metadata at the top level
-        for meta in ("README.md", "LICENSE"):
+        for meta in ("README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"):
             meta_path = ROOT / meta
             if meta_path.exists():
                 zf.write(meta_path, meta)
