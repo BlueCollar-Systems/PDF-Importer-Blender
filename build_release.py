@@ -33,6 +33,7 @@ _EXCLUDE_SUFFIXES = {".pyc", ".pyo"}
 _VENDORED_LIB = PKG / "lib"
 _REQUIRED_RUNTIME_FILES = (
     _VENDORED_LIB / "pymupdf" / "__init__.py",
+    _VENDORED_LIB / "pymupdf" / "_extra.pyd",
     _VENDORED_LIB / "pymupdf" / "_mupdf.pyd",
     _VENDORED_LIB / "pymupdf" / "mupdfcpp64.dll",
 )
@@ -60,11 +61,13 @@ def _should_exclude(path: Path) -> bool:
 
 def _verify_vendored_pymupdf() -> None:
     """Ensure release ZIPs include a private PyMuPDF runtime."""
-    if not LIB_DIR.is_dir():
-        raise RuntimeError(
-            f"Missing vendored dependency folder: {LIB_DIR}. "
-            "Install PyMuPDF into pdf_vector_importer/lib before building."
+    _verify_vendored_runtime()
+    if sys.platform != "win32":
+        print(
+            "Vendored PyMuPDF Windows runtime files present; "
+            f"skipping binary import check on {sys.platform}."
         )
+        return
     code = (
         "import sys; "
         f"sys.path.insert(0, r'{LIB_DIR}'); "
@@ -107,7 +110,6 @@ def main() -> int:
 
     DIST.mkdir(parents=True, exist_ok=True)
     _verify_vendored_pymupdf()
-    _verify_vendored_runtime()
     _prune_vendored_pymupdf()
 
     count = 0

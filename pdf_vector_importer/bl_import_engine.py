@@ -93,6 +93,8 @@ def write_import_report(
         fallback_used=fallback_used,
         fallback_reason="raster_fallback" if fallback_used else None,
         pdf_engine_version=_pymupdf_version(),
+        import_text=bool(config.get("import_text", True)),
+        text_mode=str(config.get("text_mode") or "3d_text"),
         extra={
             "curves": int(stats.get("curves", 0) or 0),
             "meshes": int(stats.get("meshes", 0) or 0),

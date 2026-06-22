@@ -42,7 +42,7 @@ class TestImportReportWriter(unittest.TestCase):
             ):
                 result = write_import_report(
                     str(Path(tmp) / "sample.pdf"),
-                    {},
+                    {"import_text": True, "text_mode": "glyphs"},
                     stats,
                     import_mode="vector",
                     output_path=str(report_path),
@@ -59,6 +59,8 @@ class TestImportReportWriter(unittest.TestCase):
             self.assertEqual(data["result"]["text_entities"], 3)
             self.assertEqual(data["result"]["layers"], 4)
             self.assertEqual(data["extra"]["curves"], 5)
+            self.assertEqual(data["extra"]["import_text"], True)
+            self.assertEqual(data["extra"]["text_mode"], "glyphs")
 
 
 if __name__ == "__main__":

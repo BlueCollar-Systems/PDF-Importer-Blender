@@ -15,6 +15,7 @@ LEGACY_ADDON_INIT_PY = REPO_ROOT / "blender_pdf_vector_importer" / "__init__.py"
 ADDON_CONFIG_PY = REPO_ROOT / "pdf_vector_importer" / "pdfcadcore" / "import_config.py"
 IMPORT_ENGINE_PY = REPO_ROOT / "pdf_vector_importer" / "bl_import_engine.py"
 TEXT_BUILDER_PY = REPO_ROOT / "pdf_vector_importer" / "bl_text_builder.py"
+BUILD_RELEASE_PY = REPO_ROOT / "build_release.py"
 
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess:
@@ -185,6 +186,16 @@ class TestBlenderVersionFloor(unittest.TestCase):
     def test_legacy_entrypoint_matches_primary_floor(self) -> None:
         source = LEGACY_ADDON_INIT_PY.read_text(encoding="utf-8")
         self.assertIn('"blender": (3, 0, 0)', source)
+
+
+class TestReleasePackaging(unittest.TestCase):
+    """Release packaging must work on Linux CI while bundling Windows runtime."""
+
+    def test_non_windows_ci_does_not_import_windows_pymupdf_binary(self) -> None:
+        source = BUILD_RELEASE_PY.read_text(encoding="utf-8")
+        self.assertIn('if sys.platform != "win32":', source)
+        self.assertIn("skipping binary import check", source)
+        self.assertIn('_VENDORED_LIB / "pymupdf" / "_extra.pyd"', source)
 
 
 if __name__ == "__main__":
