@@ -75,6 +75,12 @@ def write_import_report(
     )
     elapsed = float(stats.get("elapsed", 0.0) or 0.0)
     fallback_used = raster_pages > 0 or import_mode == "raster"
+    if import_mode == "raster":
+        fallback_reason = "forced_raster_mode"
+    elif raster_pages > 0:
+        fallback_reason = f"raster_fallback_{raster_pages}_page{'s' if raster_pages != 1 else ''}"
+    else:
+        fallback_reason = None
     report = build_import_report(
         host_app="blender",
         host_version=".".join(str(v) for v in bpy.app.version),
@@ -91,7 +97,7 @@ def write_import_report(
         layer_count=int(stats.get("collections", 0) or 0),
         elapsed_ms=elapsed * 1000.0,
         fallback_used=fallback_used,
-        fallback_reason="raster_fallback" if fallback_used else None,
+        fallback_reason=fallback_reason,
         pdf_engine_version=_pymupdf_version(),
         import_text=bool(config.get("import_text", True)),
         text_mode=str(config.get("text_mode") or "3d_text"),
