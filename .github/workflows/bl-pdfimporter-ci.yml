@@ -86,6 +86,11 @@ jobs:
       - name: Run unit tests
         run: python -m pytest tests/ -v
 
+      - name: Build and smoke shipped add-on ZIP
+        run: |
+          python build_release.py
+          python scripts/smoke_release_zip.py "dist/Blender-PDF-Importer_*.zip"
+
       - name: Preset matrix smoke test
         run: |
           python -c "

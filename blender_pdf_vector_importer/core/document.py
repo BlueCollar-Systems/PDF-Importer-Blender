@@ -13,6 +13,7 @@ except ImportError:
     import fitz  # Legacy fallback
 
 from pdf_vector_importer.pdfcadcore.document_profiler import profile as profile_page
+from pdf_vector_importer.pdfcadcore.fitz_loader import safe_open
 from pdf_vector_importer.pdfcadcore.geometry_cleanup import circle_fit
 from pdf_vector_importer.pdfcadcore.primitive_extractor import extract_page
 from pdf_vector_importer.pdfcadcore.primitives import PageData
@@ -177,7 +178,7 @@ def extract_document(pdf_path: str, options: Optional[ExtractionOptions] = None)
     mode = _normalize_import_mode(opts.import_mode)
     extracted: list[ExtractedPage] = []
 
-    with fitz.open(pdf_path) as doc:
+    with safe_open(pdf_path) as doc:
         pages = parse_pages_spec(opts.pages, len(doc))
         for page_number in pages:
             page = doc.load_page(page_number - 1)

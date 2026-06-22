@@ -81,6 +81,8 @@ def write_import_report(
         fallback_reason = f"raster_fallback_{raster_pages}_page{'s' if raster_pages != 1 else ''}"
     else:
         fallback_reason = None
+    from .pdfcadcore.fitz_loader import sample_process_mb
+
     report = build_import_report(
         host_app="blender",
         host_version=".".join(str(v) for v in bpy.app.version),
@@ -96,6 +98,7 @@ def write_import_report(
         text_count=int(stats.get("text_items", 0) or 0),
         layer_count=int(stats.get("collections", 0) or 0),
         elapsed_ms=elapsed * 1000.0,
+        peak_mb=sample_process_mb(),
         fallback_used=fallback_used,
         fallback_reason=fallback_reason,
         pdf_engine_version=_pymupdf_version(),
@@ -958,7 +961,9 @@ def import_pdf(
 
         # 5. Open PDF
         _progress(0.05, "Opening PDF...")
-        doc = fitz.open(filepath)
+        from .pdfcadcore.fitz_loader import safe_open
+
+        doc = safe_open(filepath)
         total_pages = doc.page_count
 
         # 6. Determine pages to import

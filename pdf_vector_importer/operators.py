@@ -248,8 +248,13 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
                 context=context,
             )
         except Exception as exc:
+            from .pdfcadcore.fitz_loader import PdfOpenError
+
             _set_status(None)
-            self.report({"ERROR"}, f"PDF import failed: {exc}")
+            if isinstance(exc, PdfOpenError):
+                self.report({"ERROR"}, str(exc))
+            else:
+                self.report({"ERROR"}, f"PDF import failed: {exc}")
             return {"CANCELLED"}
 
         _set_status(None)
