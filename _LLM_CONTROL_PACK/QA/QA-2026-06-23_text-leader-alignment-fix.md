@@ -19,3 +19,11 @@ Blender text anchors were not part of the SketchUp leader/vector defect. During 
 ## Resolution
 
 No Blender label/3D Text anchor code change was required. Validation hardening is safe, improves CI determinism, and removes a false red gate while the SketchUp alignment fix proceeds to commit/push.
+
+## Release evidence
+
+- Fix commit: `2a0410a fix: harden Blender import report version detection`
+- Auto-release version bump: `v1.0.35`
+- Release asset: `Blender-PDF-Importer_v1.0.35.zip`
+- CI: `bl-pdfimporter-ci` passed on the `chore: bump version to 1.0.35` commit.
+- Website dispatch: BlueCollar website `product-release` workflow passed for the Blender release.
