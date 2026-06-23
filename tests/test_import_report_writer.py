@@ -57,6 +57,12 @@ class TestImportReportWriter(unittest.TestCase):
                 "text_items": 3,
                 "collections": 4,
                 "elapsed": 0.25,
+                "performance_phases": {
+                    "open_pdf_ms": 3.0,
+                    "pages_import_ms": 240.0,
+                },
+                "text_source_spans": 4,
+                "text_glyph_estimate": 22,
                 "curves": 5,
                 "meshes": 1,
                 "images": 0,
@@ -84,9 +90,14 @@ class TestImportReportWriter(unittest.TestCase):
             self.assertEqual(data["result"]["primitives"], 9)
             self.assertEqual(data["result"]["text_entities"], 3)
             self.assertEqual(data["result"]["layers"], 4)
+            self.assertEqual(data["performance"]["phases"]["open_pdf_ms"], 3.0)
+            self.assertEqual(data["performance"]["phases"]["pages_import_ms"], 240.0)
+            self.assertEqual(data["performance"]["phases"]["total_ms"], 250.0)
             self.assertEqual(data["extra"]["curves"], 5)
             self.assertEqual(data["extra"]["import_text"], True)
             self.assertEqual(data["extra"]["text_mode"], "glyphs")
+            self.assertEqual(data["extra"]["text_source_spans"], 4)
+            self.assertEqual(data["extra"]["text_glyph_estimate"], 22)
 
 
 if __name__ == "__main__":

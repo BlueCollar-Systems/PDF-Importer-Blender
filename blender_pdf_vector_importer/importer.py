@@ -1,10 +1,15 @@
 """Mode-driven import orchestration for Blender PDF importer (BCS-ARCH-001)."""
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, Optional
 
+from pdf_vector_importer import bl_info
+from pdf_vector_importer.pdfcadcore.import_bounds import compute_import_bounds
 from pdf_vector_importer.pdfcadcore.import_config import ImportConfig
+from pdf_vector_importer.pdfcadcore.import_report import build_import_report
 from .core.document import DocumentExtraction, ExtractionOptions, extract_document
 
 
@@ -12,6 +17,22 @@ from .core.document import DocumentExtraction, ExtractionOptions, extract_docume
 class ImportRun:
     extraction: DocumentExtraction
     config: ImportConfig
+    import_report_path: Optional[str] = None
+
+
+def _pymupdf_version() -> str:
+    try:
+        import pymupdf as fitz  # type: ignore
+    except ImportError:
+        import fitz  # type: ignore
+    return str(getattr(fitz, "__version__", "") or "")
+
+
+def _importer_version() -> str:
+    version = bl_info.get("version", "")
+    if isinstance(version, (tuple, list)):
+        return ".".join(str(part) for part in version)
+    return str(version or "")
 
 
 def _mode_config(mode: str) -> ImportConfig:
@@ -57,6 +78,65 @@ def run_import(pdf_path: str, mode: str = "auto",
 
     extraction = extract_document(pdf_path, opts)
     return ImportRun(extraction=extraction, config=cfg)
+
+
+def write_import_report(
+    run: ImportRun,
+    output_path: str,
+    *,
+    elapsed_ms: float = 0.0,
+    performance_phases: Optional[Dict[str, float]] = None,
+) -> str:
+    """Emit bcs.import_report/1.1 JSON for headless Blender import runs."""
+    extraction = run.extraction
+    pages = extraction.pages
+    page_data = [p.page_data for p in pages]
+    bounds = None
+    if page_data:
+        bounds_obj = compute_import_bounds(page_data)
+        if bounds_obj is not None:
+            bounds = [round(v, 1) for v in bounds_obj.as_tuple()]
+
+    text_items = [
+        txt
+        for page in pages
+        for txt in (page.page_data.text_items or [])
+    ]
+    phases = dict(performance_phases or {})
+    if elapsed_ms > 0 and "total_ms" not in phases:
+        phases["total_ms"] = float(elapsed_ms)
+
+    report = build_import_report(
+        host_app="blender",
+        host_version="headless",
+        runtime_lang="python",
+        runtime_version=f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        importer_version=_importer_version(),
+        pdf_path=extraction.pdf_path,
+        mode=run.config.import_mode,
+        pages=len(pages),
+        primitive_count=extraction.primitive_count,
+        text_count=extraction.text_count,
+        layer_count=sum(len(page.page_data.layers or []) for page in pages),
+        bbox=bounds,
+        elapsed_ms=elapsed_ms,
+        performance_phases=phases or None,
+        fallback_used=any((p.resolved_mode or "") == "raster" for p in pages),
+        fallback_reason=next(
+            (p.resolved_reason for p in pages if (p.resolved_mode or "") == "raster"),
+            None,
+        ),
+        pdf_engine_version=_pymupdf_version(),
+        import_text=bool(run.config.import_text),
+        text_mode=str(run.config.text_mode or "3d_text"),
+        text_source_spans=len(text_items),
+        text_glyph_estimate=sum(len(str(getattr(txt, "text", "") or "")) for txt in text_items),
+        extra={"auto_mode": extraction.summary().get("auto_mode")},
+    )
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    report.write_json(output_path)
+    run.import_report_path = output_path
+    return output_path
 
 
 def apply_uniform_scale(extraction: DocumentExtraction, factor: float) -> None:

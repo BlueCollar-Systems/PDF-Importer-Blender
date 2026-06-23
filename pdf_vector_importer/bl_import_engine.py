@@ -83,6 +83,12 @@ def write_import_report(
         fallback_reason = None
     from .pdfcadcore.fitz_loader import sample_process_mb
 
+    phases = dict(stats.get("performance_phases") or {})
+    if elapsed > 0 and "total_ms" not in phases:
+        phases["total_ms"] = elapsed * 1000.0
+    text_source_spans = int(stats.get("text_source_spans", stats.get("text_items", 0)) or 0)
+    text_glyph_estimate = int(stats.get("text_glyph_estimate", 0) or 0)
+
     report = build_import_report(
         host_app="blender",
         host_version=".".join(str(v) for v in bpy.app.version),
@@ -98,12 +104,15 @@ def write_import_report(
         text_count=int(stats.get("text_items", 0) or 0),
         layer_count=int(stats.get("collections", 0) or 0),
         elapsed_ms=elapsed * 1000.0,
+        performance_phases=phases or None,
         peak_mb=sample_process_mb(),
         fallback_used=fallback_used,
         fallback_reason=fallback_reason,
         pdf_engine_version=_pymupdf_version(),
         import_text=bool(config.get("import_text", True)),
         text_mode=str(config.get("text_mode") or "3d_text"),
+        text_source_spans=text_source_spans,
+        text_glyph_estimate=text_glyph_estimate,
         extra={
             "curves": int(stats.get("curves", 0) or 0),
             "meshes": int(stats.get("meshes", 0) or 0),
@@ -927,9 +936,11 @@ def import_pdf(
             pass
 
     t_start = time.perf_counter()
+    phase_timings_ms: Dict[str, float] = {}
 
     try:
         # 1. Verify PyMuPDF is available
+        t_phase = time.perf_counter()
         _progress(0.0, "Checking dependencies...")
         if not check_pymupdf():
             raise RuntimeError(
@@ -943,8 +954,10 @@ def import_pdf(
         from .dependency_manager import get_lib_dir
 
         import_fitz(prefer_lib_dir=str(get_lib_dir()))
+        phase_timings_ms["dependencies_ms"] = (time.perf_counter() - t_phase) * 1000.0
 
         # 2. Verify file exists
+        t_phase = time.perf_counter()
         if not os.path.isfile(filepath):
             raise FileNotFoundError(f"PDF file not found: {filepath}")
 
@@ -958,8 +971,10 @@ def import_pdf(
 
         # 4. Reset pdfcadcore ID counter
         reset_ids()
+        phase_timings_ms["setup_ms"] = (time.perf_counter() - t_phase) * 1000.0
 
         # 5. Open PDF
+        t_phase = time.perf_counter()
         _progress(0.05, "Opening PDF...")
         from .pdfcadcore.fitz_loader import safe_open
 
@@ -968,13 +983,16 @@ def import_pdf(
 
         # 6. Determine pages to import
         page_indices = _parse_pages(config.get("pages", "all"), total_pages)
+        phase_timings_ms["open_pdf_ms"] = (time.perf_counter() - t_phase) * 1000.0
         if not page_indices:
             doc.close()
             elapsed = time.perf_counter() - t_start
+            phase_timings_ms["total_ms"] = elapsed * 1000.0
             return {
                 "pages_imported": 0, "pages": 0, "primitives": 0,
                 "text_items": 0, "collections": 0, "elapsed": elapsed,
                 "curves": 0, "meshes": 0, "circles": 0, "arcs": 0, "images": 0,
+                "performance_phases": phase_timings_ms,
             }
 
         # 7. Create root collection
@@ -1000,6 +1018,8 @@ def import_pdf(
             "curves": 0, "meshes": 0, "circles": 0, "arcs": 0, "images": 0,
             "skipped_fill_only": 0,
             "hidden_startup_cube": hidden_startup_cube,
+            "text_source_spans": 0,
+            "text_glyph_estimate": 0,
         }
         raster_pages_imported = 0
         total_page_count = max(1, len(page_indices))
@@ -1010,6 +1030,11 @@ def import_pdf(
             span = 0.75 / total_page_count
             return min(0.95, base + span * stage_clamped)
 
+        def _add_phase_ms(name: str, started: float) -> None:
+            phase_timings_ms[name] = float(phase_timings_ms.get(name, 0.0) or 0.0) + (
+                (time.perf_counter() - started) * 1000.0
+            )
+
         # Multi-page stacking: shift each page downward by accumulated heights.
         _page_stack_offset_m = 0.0
         _page_arrangement = _normalize_page_arrangement(config.get("page_arrangement"))
@@ -1018,6 +1043,7 @@ def import_pdf(
         use_streaming = len(page_indices) > 1
         page_numbers = [idx + 1 for idx in page_indices]
         stream_cancelled = False
+        t_pages_phase = time.perf_counter()
 
         def _iter_pages_for_import():
             """Yield (loop_index, page_idx, page_num, page, page_data) per page."""
@@ -1068,6 +1094,7 @@ def import_pdf(
 
             # 9a. Auto-mode classification (before extraction)
             if import_mode == "auto":
+                t_phase = time.perf_counter()
                 raw_drawings = page.get_drawings()
                 text_blocks = page.get_text("blocks") or []
                 text_words = page.get_text("words") or []
@@ -1085,15 +1112,23 @@ def import_pdf(
                         f"Auto-mode: {classification['reason']} — favoring raster import for page {page_num}",
                     )
                     import_mode = "raster"
+                _add_phase_ms("classify_ms", t_phase)
 
             _progress(_page_progress(i, 0.35), f"Parsed page {page_num}: {len(page_data.primitives)} primitives")
+            total_stats["text_source_spans"] += len(page_data.text_items or [])
+            total_stats["text_glyph_estimate"] += sum(
+                len(str(getattr(item, "text", "") or ""))
+                for item in (page_data.text_items or [])
+            )
 
             # 9c. Geometry cleanup (remove micro-segments)
             if import_cfg.cleanup_level != "conservative" or import_cfg.min_seg_len > 0:
+                t_phase = time.perf_counter()
                 cleanup_stats = cleanup_primitives(
                     page_data.primitives,
                     cleanup_level=import_cfg.cleanup_level,
                 )
+                _add_phase_ms("cleanup_ms", t_phase)
                 if import_cfg.verbose and cleanup_stats.get("removed_micro", 0) > 0:
                     _progress(_page_progress(i, 0.45), f"Cleanup: removed "
                               f"{cleanup_stats['removed_micro']} micro-segments "
@@ -1127,11 +1162,13 @@ def import_pdf(
 
             # 9e. Optional recognition pass
             _progress(_page_progress(i, 0.55), f"Recognition pass on page {page_num}...")
+            t_phase = time.perf_counter()
             try:
                 recognition.run(page_data, mode="auto")
             except Exception:
                 # Recognition failure is non-fatal
                 pass
+            _add_phase_ms("recognition_ms", t_phase)
 
             # 9f. Create page collection
             page_col = bpy.data.collections.new(f"PDF_Page_{page_num}")
@@ -1142,6 +1179,7 @@ def import_pdf(
             page_stats = {"curves": 0, "meshes": 0, "circles": 0, "arcs": 0}
             if import_mode != "raster":
                 _progress(_page_progress(i, 0.72), f"Building geometry for page {page_num}...")
+                t_phase = time.perf_counter()
                 def _geom_progress(frac, _i=i, _pn=page_num):
                     frac = max(0.0, min(1.0, float(frac)))
                     _progress(
@@ -1154,11 +1192,13 @@ def import_pdf(
                     builder_config,
                     progress_callback=_geom_progress,
                 )
+                _add_phase_ms("geometry_ms", t_phase)
 
             # 9h. Build text objects
             text_count = 0
             if import_mode != "raster" and import_cfg.import_text and import_cfg.text_mode != "none":
                 _progress(_page_progress(i, 0.82), f"Building text for page {page_num}...")
+                t_phase = time.perf_counter()
                 def _text_progress(frac, _i=i, _pn=page_num):
                     frac = max(0.0, min(1.0, float(frac)))
                     _progress(
@@ -1175,11 +1215,13 @@ def import_pdf(
                     text_mode=import_cfg.text_mode,
                     progress_callback=_text_progress,
                 )
+                _add_phase_ms("text_ms", t_phase)
 
             # 9i. Build image/raster planes
             image_count = 0
             if not import_cfg.ignore_images:
                 _progress(_page_progress(i, 0.92), f"Building images for page {page_num}...")
+                t_phase = time.perf_counter()
                 placements = []
                 if import_mode == "raster":
                     rendered = _render_page_raster(page, page_num, import_cfg, image_dir)
@@ -1203,6 +1245,7 @@ def import_pdf(
                 for placement in placements:
                     if _create_image_plane(placement, page_col, z_offset_m=image_z_offset_m):
                         image_count += 1
+                _add_phase_ms("images_ms", t_phase)
             if import_mode == "raster" and image_count > 0:
                 raster_pages_imported += 1
 
@@ -1237,6 +1280,8 @@ def import_pdf(
                 f"({total_stats['primitives']} primitives, {total_stats['text_items']} text)",
             )
 
+        phase_timings_ms["pages_import_ms"] = (time.perf_counter() - t_pages_phase) * 1000.0
+        t_phase = time.perf_counter()
         doc.close()
 
         elapsed = time.perf_counter() - t_start
@@ -1260,7 +1305,10 @@ def import_pdf(
             )
         except Exception:
             total_stats["focused"] = 0
+        phase_timings_ms["finalize_ms"] = (time.perf_counter() - t_phase) * 1000.0
+        phase_timings_ms["total_ms"] = elapsed * 1000.0
         total_stats["elapsed"] = elapsed
+        total_stats["performance_phases"] = phase_timings_ms
         try:
             report_path = write_import_report(
                 filepath,

@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from pathlib import Path
 
-from .importer import apply_uniform_scale, run_import
+from .importer import apply_uniform_scale, run_import, write_import_report
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -41,6 +42,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-images", action="store_true",
                         help="Skip embedded image extraction")
     parser.add_argument("--json", help="Write summary JSON")
+    parser.add_argument("--import-report", help="Write bcs.import_report/1.1 JSON")
     parser.add_argument("--verbose", action="store_true",
                         help="Print verbose progress")
     return parser
@@ -61,13 +63,33 @@ def main() -> int:
     if args.no_images:
         overrides["ignore_images"] = True
 
+    t0 = time.perf_counter()
     run = run_import(args.pdf, mode=args.mode, overrides=overrides)
+    run_import_ms = (time.perf_counter() - t0) * 1000.0
     if args.reference_detected_mm and args.reference_real_mm:
         if args.reference_detected_mm <= 0:
             raise SystemExit("--reference-detected-mm must be > 0")
         scale_factor = args.reference_real_mm / args.reference_detected_mm
         apply_uniform_scale(run.extraction, scale_factor)
+    elapsed_ms = (time.perf_counter() - t0) * 1000.0
     summary = run.extraction.summary()
+    report_path = None
+    if args.import_report:
+        report_path = Path(args.import_report).expanduser().resolve()
+    elif args.json:
+        summary_path = Path(args.json).expanduser().resolve()
+        report_path = summary_path.with_name(f"{summary_path.stem}_import_report.json")
+    if report_path is not None:
+        write_import_report(
+            run,
+            str(report_path),
+            elapsed_ms=elapsed_ms,
+            performance_phases={
+                "run_import_ms": run_import_ms,
+                "total_ms": elapsed_ms,
+            },
+        )
+        summary["import_report_path"] = str(report_path)
 
     print(json.dumps(summary, indent=2))
 

@@ -115,6 +115,17 @@ python -m blender_pdf_vector_importer.batch_cli "C:\path\to\pdfs" --recursive --
 | PyMuPDF required | Release ZIPs bundle PyMuPDF; source/dev installs can use the preferences-panel installer |
 | Legacy hosts | Blender/Python combinations outside the listed compatibility matrix are expected-only until verified |
 
+## Import report / scale trust
+
+Imports emit `import_report.json` (`bcs.import_report/1.1`) with optional `extra.resolved_scale`.
+
+- Use `factor` only when `confidence >= 0.70` and `fallback_reason` is not `no_scale_detected`.
+- Otherwise treat scale as unknown.
+
+## Bad-PDF open gate
+
+Blender refuses bad PDFs at open time (**fail closed**). SketchUp may fail open on rare gate errors; messages are aligned, detection parity is not.
+
 ## License
 
 MIT -- Copyright (c) 2024-2026 BlueCollar Systems
