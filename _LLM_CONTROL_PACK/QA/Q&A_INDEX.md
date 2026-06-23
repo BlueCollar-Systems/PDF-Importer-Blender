@@ -1,10 +1,20 @@
 # Q&A Index
 
-Updated: 2026-06-23 (Round 3 — **CLOSED**)
+Updated: 2026-06-23 (Text/leader follow-up + Round 3 closed)
 
 ## Source Instructions
 
 - `Instructions 0607202613216.txt`
+
+---
+
+## Text & Leader Alignment Follow-up (2026-06-23) — **RESOLVED**
+
+SketchUp carried the actual label/3D Text alignment fix. Blender text anchors were reviewed and did not need a text-placement change, but validation found and fixed a headless import-report version stub issue.
+
+| File | Role |
+|------|------|
+| `QA-2026-06-23_text-leader-alignment-fix.md` | Blender-specific follow-up and validation evidence |
 
 ---
 

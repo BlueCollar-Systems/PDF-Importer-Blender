@@ -45,6 +45,16 @@ def _importer_version() -> str:
         return ""
 
 
+def _blender_host_version() -> str:
+    try:
+        version = getattr(getattr(bpy, "app", None), "version", "")
+        if isinstance(version, (tuple, list)):
+            return ".".join(str(part) for part in version)
+        return str(version or "")
+    except (AttributeError, TypeError):
+        return ""
+
+
 def _pymupdf_version() -> str:
     try:
         from .pdfcadcore.fitz_loader import import_fitz
@@ -91,7 +101,7 @@ def write_import_report(
 
     report = build_import_report(
         host_app="blender",
-        host_version=".".join(str(v) for v in bpy.app.version),
+        host_version=_blender_host_version(),
         runtime_lang="python",
         runtime_version=(
             f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"

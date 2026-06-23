@@ -10,10 +10,11 @@ from unittest.mock import patch
 
 
 if "bpy" not in sys.modules:
-    sys.modules["bpy"] = types.SimpleNamespace(
-        app=types.SimpleNamespace(version=(4, 1, 0)),
-        types=types.SimpleNamespace(),
-    )
+    sys.modules["bpy"] = types.SimpleNamespace()
+if not hasattr(sys.modules["bpy"], "app"):
+    sys.modules["bpy"].app = types.SimpleNamespace(version=(4, 1, 0))
+if not hasattr(sys.modules["bpy"], "types"):
+    sys.modules["bpy"].types = types.SimpleNamespace()
 if "bmesh" not in sys.modules:
     sys.modules["bmesh"] = types.SimpleNamespace()
 
