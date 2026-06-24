@@ -953,11 +953,14 @@ def import_pdf(
         t_phase = time.perf_counter()
         _progress(0.0, "Checking dependencies...")
         if not check_pymupdf():
-            raise RuntimeError(
-                "PyMuPDF is not installed. Open addon preferences "
-                "(Edit > Preferences > Add-ons > PDF Vector Importer) "
-                "and click 'Install PyMuPDF'."
-            )
+            from .dependency_manager import ensure_pymupdf_runtime
+
+            if not ensure_pymupdf_runtime(auto_install=True):
+                raise RuntimeError(
+                    "PyMuPDF is not installed for this Blender Python build. "
+                    "Open addon preferences (Edit > Preferences > Add-ons > "
+                    "PDF Vector Importer) and click 'Install PyMuPDF'."
+                )
 
         ensure_lib_path()
         from pdfcadcore.fitz_loader import import_fitz

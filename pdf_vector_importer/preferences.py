@@ -11,7 +11,13 @@ from __future__ import annotations
 import bpy
 from bpy.props import BoolProperty, EnumProperty, StringProperty
 
-from .dependency_manager import check_pymupdf, get_pymupdf_version, install_pymupdf
+from .dependency_manager import (
+    check_pymupdf,
+    ensure_pymupdf_runtime,
+    get_pymupdf_version,
+    install_pymupdf,
+    runtime_diagnostics,
+)
 
 
 class PDFVEC_OT_install_pymupdf(bpy.types.Operator):
@@ -83,9 +89,15 @@ class PDFVectorImporterPreferences(bpy.types.AddonPreferences):
             row = box.row()
             row.label(text="PyMuPDF: NOT installed", icon="ERROR")
             row = box.row()
+            row.label(text=runtime_diagnostics(), icon="BLANK1")
+            row = box.row()
             row.operator(PDFVEC_OT_install_pymupdf.bl_idname, icon="IMPORT")
             row = box.row()
-            row.label(text="PyMuPDF is required for PDF parsing.", icon="INFO")
+            row.label(
+                text="Blender 5.x needs PyMuPDF built for its bundled Python. "
+                     "Click Install if vendored binaries fail to load.",
+                icon="INFO",
+            )
 
         layout.separator()
         box = layout.box()

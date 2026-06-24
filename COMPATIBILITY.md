@@ -10,6 +10,7 @@ Every mode uses consolidated maximum-fidelity parameters (BCS-ARCH-001).
 | Blender | Bundled Python | PyMuPDF | Status |
 |---------|----------------|---------|--------|
 | 4.5 LTS | 3.11 | >=1.24,<2.0 | ⚠️ Expected |
+| **5.0–5.1** | **3.12+** | >=1.24,<2.0 | ⚠️ **Re-vendor or Preferences → Install PyMuPDF** (shipped cp311 wheels fail on cp312) |
 | 4.0–4.2 | 3.11 | >=1.24,<2.0 | ⚠️ Expected |
 | 3.6 LTS | 3.10 | >=1.24,<2.0 | ⚠️ Expected |
 | 3.0–3.5 | 3.10 | >=1.24,<2.0 | ⚠️ Expected |

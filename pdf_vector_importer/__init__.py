@@ -11,7 +11,7 @@ from __future__ import annotations
 bl_info = {
     "name": "PDF Vector Importer",
     "author": "BlueCollar Systems",
-    "version": (1, 0, 35),
+    "version": (1, 0, 36),
     "blender": (3, 0, 0),
     "location": "File > Import > PDF Vector (.pdf)",
     "description": "Import PDF vector drawings as native Blender geometry",
@@ -22,6 +22,7 @@ bl_info = {
 def register():
     """Register all addon classes and add menu entry."""
     from . import operators, preferences  # noqa: F811
+    from .dependency_manager import ensure_pymupdf_runtime, print_diagnostics
 
     import bpy
 
@@ -31,6 +32,13 @@ def register():
     bpy.utils.register_class(preferences.PDFVectorImporterPreferences)
     bpy.utils.register_class(operators.IMPORT_OT_pdf_vector)
     bpy.types.TOPBAR_MT_file_import.append(operators.menu_func_import)
+
+    print_diagnostics()
+    if not ensure_pymupdf_runtime(auto_install=False):
+        print(
+            "[PDF Vector Importer] PyMuPDF unavailable at register time. "
+            "Open addon preferences and click Install PyMuPDF before importing."
+        )
 
 
 def unregister():
