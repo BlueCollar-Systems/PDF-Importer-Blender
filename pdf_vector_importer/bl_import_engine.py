@@ -66,6 +66,52 @@ def _pymupdf_version() -> str:
         return ""
 
 
+def _merge_scale_into_stats(stats: Dict, page_data) -> None:
+    """Accumulate resolved_scale telemetry for import_report cross-check."""
+
+    rs = getattr(page_data, "resolved_scale", None)
+    if not rs:
+        return
+    try:
+        confidence = float(getattr(rs, "confidence", 0) or 0)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    factor = getattr(rs, "factor", None)
+    if confidence <= 0 and not factor:
+        return
+
+    payload = {
+        "factor": factor,
+        "notation": getattr(rs, "notation", None),
+        "source": getattr(rs, "source", None),
+        "confidence": confidence,
+        "fallback_reason": getattr(rs, "fallback_reason", None),
+    }
+    current = stats.get("resolved_scale")
+    if not current or confidence > float(current.get("confidence", 0) or 0):
+        stats["resolved_scale"] = payload
+
+    hints = stats.setdefault(
+        "scale_hints",
+        {
+            "title_block_detected": False,
+            "dimension_count": 0,
+            "alternate_scale_factors": [],
+        },
+    )
+    if factor and confidence > 0:
+        try:
+            alt = float(factor)
+            alts = list(hints.get("alternate_scale_factors") or [])
+            if alt not in alts:
+                alts.append(alt)
+                hints["alternate_scale_factors"] = sorted(alts)
+        except (TypeError, ValueError):
+            pass
+    if str(getattr(rs, "source", "") or "") == "titleblock":
+        hints["title_block_detected"] = True
+
+
 def write_import_report(
     filepath: str,
     config: Dict,
@@ -127,6 +173,8 @@ def write_import_report(
             "curves": int(stats.get("curves", 0) or 0),
             "meshes": int(stats.get("meshes", 0) or 0),
             "images": int(stats.get("images", 0) or 0),
+            "resolved_scale": stats.get("resolved_scale"),
+            "scale_hints": stats.get("scale_hints"),
         },
     )
     report.write_json(path)
@@ -1128,6 +1176,7 @@ def import_pdf(
                 _add_phase_ms("classify_ms", t_phase)
 
             _progress(_page_progress(i, 0.35), f"Parsed page {page_num}: {len(page_data.primitives)} primitives")
+            _merge_scale_into_stats(total_stats, page_data)
             total_stats["text_source_spans"] += len(page_data.text_items or [])
             total_stats["text_glyph_estimate"] += sum(
                 len(str(getattr(item, "text", "") or ""))
