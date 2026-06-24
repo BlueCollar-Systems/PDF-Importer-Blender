@@ -963,7 +963,7 @@ def import_pdf(
                 )
 
         ensure_lib_path()
-        from pdfcadcore.fitz_loader import import_fitz
+        from .pdfcadcore.fitz_loader import import_fitz
         from .dependency_manager import get_lib_dir
 
         import_fitz(prefer_lib_dir=str(get_lib_dir()))

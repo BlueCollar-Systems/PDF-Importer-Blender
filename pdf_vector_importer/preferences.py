@@ -13,7 +13,6 @@ from bpy.props import BoolProperty, EnumProperty, StringProperty
 
 from .dependency_manager import (
     check_pymupdf,
-    ensure_pymupdf_runtime,
     get_pymupdf_version,
     install_pymupdf,
     runtime_diagnostics,

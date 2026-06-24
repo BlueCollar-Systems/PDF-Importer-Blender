@@ -22,8 +22,11 @@ def get_lib_dir() -> Path:
 
 
 def ensure_lib_path() -> None:
-    """Add the addon's lib/ directory to sys.path if not already present."""
+    """Add bundled runtime paths to sys.path if not already present."""
     repair_vendored_pymupdf()
+    addon_dir = str(Path(__file__).resolve().parent)
+    if addon_dir not in sys.path:
+        sys.path.insert(0, addon_dir)
     lib_dir = str(get_lib_dir())
     if lib_dir not in sys.path:
         sys.path.insert(0, lib_dir)
@@ -68,7 +71,7 @@ def _import_error_detail() -> str:
     lib_dir = get_lib_dir()
     ensure_lib_path()
     try:
-        from pdfcadcore.fitz_loader import import_fitz
+        from .pdfcadcore.fitz_loader import import_fitz
 
         import_fitz(prefer_lib_dir=str(lib_dir))
         return ""
@@ -173,7 +176,7 @@ def get_pymupdf_version() -> str:
     """Return the installed PyMuPDF version string, or empty string."""
     ensure_lib_path()
     try:
-        from pdfcadcore.fitz_loader import import_fitz
+        from .pdfcadcore.fitz_loader import import_fitz
 
         fitz = import_fitz(prefer_lib_dir=str(get_lib_dir()))
         version = getattr(fitz, "__version__", None)

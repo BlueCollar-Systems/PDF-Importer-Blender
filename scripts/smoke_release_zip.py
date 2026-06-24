@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import glob
 import importlib
+import subprocess
 import sys
 import tempfile
 import zipfile
@@ -16,7 +17,13 @@ REQUIRED_MEMBERS = {
     "pdf_vector_importer/bl_import_engine.py",
     "pdf_vector_importer/operators.py",
     "pdf_vector_importer/pdfcadcore/fitz_loader.py",
+    "pdf_vector_importer/_vendored_pymupdf_extra.py",
     "pdf_vector_importer/lib/pymupdf/__init__.py",
+    "pdf_vector_importer/lib/pymupdf/extra.py",
+    "pdf_vector_importer/lib/pymupdf/mupdf.py",
+    "pdf_vector_importer/lib/pymupdf/_extra.pyd",
+    "pdf_vector_importer/lib/pymupdf/_mupdf.pyd",
+    "pdf_vector_importer/lib/pymupdf/mupdfcpp64.dll",
 }
 
 
@@ -50,6 +57,21 @@ def main() -> int:
                 raise SystemExit("pdf_vector_importer.bl_info version is invalid")
             if not callable(getattr(addon, "register", None)):
                 raise SystemExit("pdf_vector_importer.register is missing")
+            if sys.platform == "win32":
+                lib_dir = str(Path(tmp) / "pdf_vector_importer" / "lib")
+                code = (
+                    "import sys; "
+                    f"sys.path.insert(0, r'{tmp}'); "
+                    "from pdf_vector_importer.pdfcadcore.fitz_loader import import_fitz; "
+                    f"fitz = import_fitz(prefer_lib_dir=r'{lib_dir}'); "
+                    "assert callable(getattr(fitz, 'open', None))"
+                )
+                proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+                if proc.returncode != 0:
+                    raise SystemExit(
+                        "Vendored PyMuPDF import failed from release ZIP: "
+                        + (proc.stderr.strip() or proc.stdout.strip())
+                    )
 
     print(f"Release ZIP smoke passed: {zip_path.name}")
     return 0

@@ -33,9 +33,11 @@ _EXCLUDE_SUFFIXES = {".pyc", ".pyo"}
 _VENDORED_LIB = PKG / "lib"
 _REQUIRED_RUNTIME_FILES = (
     _VENDORED_LIB / "pymupdf" / "__init__.py",
+    _VENDORED_LIB / "pymupdf" / "extra.py",
     _VENDORED_LIB / "pymupdf" / "_extra.pyd",
     _VENDORED_LIB / "pymupdf" / "_mupdf.pyd",
     _VENDORED_LIB / "pymupdf" / "mupdfcpp64.dll",
+    PKG / "_vendored_pymupdf_extra.py",
 )
 
 
