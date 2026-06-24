@@ -99,6 +99,44 @@ class TestImportReportWriter(unittest.TestCase):
             self.assertEqual(data["extra"]["text_mode"], "glyphs")
             self.assertEqual(data["extra"]["text_source_spans"], 4)
             self.assertEqual(data["extra"]["text_glyph_estimate"], 22)
+            diagnostics = data["extra"]["diagnostics"]
+            self.assertEqual(diagnostics["quality_level"], "low")
+            self.assertIn("text_mode_glyphs", diagnostics["signals"])
+            self.assertTrue(diagnostics["recommended_actions"])
+
+    def test_import_report_diagnostics_for_fallback_and_dense_text(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="bl_import_report_") as tmp:
+            report_path = Path(tmp) / "import_report.json"
+            stats = {
+                "pages_imported": 1,
+                "primitives": 0,
+                "text_items": 0,
+                "collections": 0,
+                "elapsed": 0.2,
+                "text_source_spans": 14,
+                "text_glyph_estimate": 1200,
+            }
+            with patch(
+                "pdf_vector_importer.bl_import_engine._pymupdf_version",
+                return_value="",
+            ):
+                write_import_report(
+                    str(Path(tmp) / "scan.pdf"),
+                    {"import_text": True, "text_mode": "glyphs"},
+                    stats,
+                    import_mode="auto",
+                    raster_pages=1,
+                    output_path=str(report_path),
+                )
+            data = json.loads(report_path.read_text(encoding="utf-8"))
+            diagnostics = data["extra"]["diagnostics"]
+            self.assertEqual(diagnostics["quality_level"], "empty")
+            self.assertIn("fallback_used", diagnostics["signals"])
+            self.assertIn("source_text_seen_but_no_text_entities_created", diagnostics["signals"])
+            self.assertIn("dense_text_glyph_workload", diagnostics["signals"])
+            self.assertTrue(
+                any("Vector or Hybrid" in action for action in diagnostics["recommended_actions"])
+            )
 
 
 if __name__ == "__main__":
