@@ -155,15 +155,10 @@ jobs:
           TITLE="v${{ steps.version.outputs.version }} — PDF Vector Importer for Blender"
 
           git fetch --tags --force
-          if ! git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
-            git tag "${TAG}"
-            git push origin "${TAG}"
-          fi
-
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/*.zip --clobber
           else
-            gh release create "$TAG" --title "$TITLE" --generate-notes --latest dist/*.zip
+            gh release create "$TAG" --target "$(git rev-parse HEAD)" --title "$TITLE" --generate-notes --latest dist/*.zip
           fi
 
       - name: Check website dispatch token secret
