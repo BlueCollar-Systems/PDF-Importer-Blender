@@ -132,8 +132,19 @@ jobs:
             fi
           fi
 
+      - name: Run release gate tests
+        run: |
+          set -e
+          python -m pip install --upgrade pip
+          python -m pip install "PyMuPDF>=1.24,<2.0" pytest
+          python pdfcadcore_sync_check.py --skip-cross-repo
+          python -m pytest tests/ -q --basetemp "$RUNNER_TEMP/pytest-blender"
+
       - name: Build release
         run: python build_release.py
+
+      - name: Smoke shipped add-on ZIP
+        run: python scripts/smoke_release_zip.py "dist/Blender-PDF-Importer_*.zip"
 
       - name: Create or update release
         env:
@@ -197,4 +208,3 @@ jobs:
         run: |
           echo "::warning::Skipping website dispatch because no valid dispatch token secret is configured."
           echo "Set WEBSITE_DISPATCH_TOKEN (or BLUECOLLAR_WEBSITE_DISPATCH_TOKEN / REPO_DISPATCH_TOKEN) to enable cross-repo dispatch."
-
