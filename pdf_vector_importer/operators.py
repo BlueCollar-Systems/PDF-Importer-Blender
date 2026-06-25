@@ -34,7 +34,7 @@ _MODE_ITEMS = [
 _TEXT_MODE_ITEMS = [
     ("labels",   "Labels",   "Import text as Blender text objects"),
     ("3d_text",  "3D Text",  "Extruded geometric text"),
-    ("glyphs",   "Glyphs",   "Text rendered as per-character vector glyphs"),
+    ("glyphs",   "Glyphs",   "Convert text runs to non-editable outline meshes"),
     ("geometry", "Geometry", "Convert text fully to non-editable geometry"),
 ]
 

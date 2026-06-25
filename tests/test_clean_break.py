@@ -171,6 +171,18 @@ class TestTextDefaults(unittest.TestCase):
         self.assertIn('if mode in {"glyphs", "geometry"}:', source)
         self.assertIn("def _meshify_text_object(", source)
 
+    def test_glyph_mode_copy_matches_current_builder_contract(self) -> None:
+        operator_source = OPERATORS_PY.read_text(encoding="utf-8")
+        legacy_source = LEGACY_ADDON_INIT_PY.read_text(encoding="utf-8")
+        compat_source = (REPO_ROOT / "COMPATIBILITY.md").read_text(encoding="utf-8")
+
+        for source in (operator_source, legacy_source, compat_source):
+            self.assertNotIn("per-character vector glyphs", source)
+            self.assertNotIn("Per-character vector curves", source)
+        self.assertIn("Convert text runs to non-editable outline meshes", operator_source)
+        self.assertIn("Convert text runs to non-editable outline meshes", legacy_source)
+        self.assertIn("do **not** create one separate object per character", compat_source)
+
     def test_legacy_addon_entrypoint_has_text_mode_not_arc_dial(self) -> None:
         source = LEGACY_ADDON_INIT_PY.read_text(encoding="utf-8")
         self.assertIn('name="Text Mode"', source)

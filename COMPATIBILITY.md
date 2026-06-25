@@ -41,7 +41,7 @@ No system Python or pip required when release ZIP vendored wheel loads.
 
 - **Glyphs/Geometry** text → high curve/mesh counts; use **Labels** on **&lt; 8 GB RAM** PCs.
 - Headless import validated; interactive UI still needs human confirmation (T-01).
-- See open thread T-06: doc vs builder gap for per-char glyph semantics.
+- T-06 resolved: Blender Glyphs mode produces non-editable outline meshes from extracted text runs.
 
 ## Preflight command
 
@@ -83,7 +83,7 @@ blender --background --python-expr "import addon_utils; addon_utils.enable('pdf_
 |--------|----------------|
 | **Labels** | Font curve objects |
 | **3D Text** | Extruded text where supported |
-| **Glyphs** | Per-character vector curves |
+| **Glyphs** | Text-run outline meshes; they do **not** create one separate object per character |
 | **Geometry** | Mesh/curve outlines |
 
 ## CI coverage

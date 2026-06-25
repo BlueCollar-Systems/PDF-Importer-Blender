@@ -59,7 +59,7 @@ try:  # pragma: no cover - Blender runtime only
                 ("labels", "Labels", "Import text as Blender text objects"),
                 ("3d_text", "3D Text", "Extruded geometric text"),
                 ("geometry", "Geometry", "Convert text fully to non-editable geometry"),
-                ("glyphs", "Glyphs", "Text rendered as per-character vector glyphs"),
+                ("glyphs", "Glyphs", "Convert text runs to non-editable outline meshes"),
             ],
             default="3d_text",
         )
