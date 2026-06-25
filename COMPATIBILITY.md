@@ -1,57 +1,91 @@
-# Host Compatibility — PDF Vector Importer (Blender)
+# Compatibility — PDF Vector Importer (Blender)
 
+**Canonical path:** `C:\1PDF-Importer-Blender`  
 Modes are extraction **strategy** (Auto / Vector / Raster / Hybrid), not quality tiers.
-Every mode uses consolidated maximum-fidelity parameters (BCS-ARCH-001).
 
-**GUI:** Single **professional import** flow — **Auto** per page by default. Expand **Advanced Options** to override strategy. CLI/batch retain `--mode` for scripting.
+---
 
-## Blender
+## Minimum host version
 
-| Blender | Bundled Python | PyMuPDF | Status |
-|---------|----------------|---------|--------|
-| 4.5 LTS | 3.11 | >=1.24,<2.0 | ✅ Expected (vendored cp311 wheel) |
-| **5.0–5.1** | **3.12–3.13** | >=1.24,<2.0 | ✅ **v1.0.42+** — cp310-abi3 vendored wheel **or** Preferences → **Install PyMuPDF** |
-| 4.0–4.2 | 3.11 | >=1.24,<2.0 | ✅ Expected |
-| 3.6 LTS | 3.10 | >=1.24,<2.0 | ✅ Expected |
-| 3.0–3.5 | 3.10 | >=1.24,<2.0 | ⚠️ Expected after manual install |
-| 2.83–2.93 | 3.9 | legacy pin | ⚠️ Expected after legacy testing |
-| 2.79 and earlier | | | ❌ Not supported |
+**Blender 3.0** (`bl_info["blender"]` minimum). **Recommended: Blender 3.6 LTS or 5.x**.
 
-`bl_info["blender"]` declares **(3, 0, 0)** minimum in both add-on entrypoints (`pdf_vector_importer` and `blender_pdf_vector_importer`). Blender **3.6 LTS** is the recommended baseline for bundled-Python/PyMuPDF support; 3.0–3.5 are **Expected** after manual install of dependencies.
+## Oldest tested
 
-### Blender 5.x PyMuPDF bootstrap (v1.0.42+)
+| Host | Status |
+|------|--------|
+| Blender 5.0–5.1 | ✅ Smoke-tested (v1.0.42+ cp310-abi3 wheel) |
+| Blender 4.5 LTS / 4.0–4.2 | ⚠️ Expected |
+| Blender 3.6 LTS | ⚠️ Expected |
+| Blender 3.0–3.5 | ⚠️ Expected after manual PyMuPDF install |
+| Blender 2.83–2.93 | ⚠️ Legacy testing only |
+| Blender 2.79 and earlier | ❌ Not supported |
 
-Blender **5.0–5.1** ships Python **3.12+**. Older cp311-only vendored wheels fail to import. The add-on handles this in three layers:
+## Ruby / Python ABI
 
-1. **Vendored cp310-abi3 wheel** under `pdf_vector_importer/lib/` (works on Python 3.10–3.13).
-2. **Self-heal** — `dependency_manager.repair_vendored_pymupdf()` restores missing `pymupdf/extra.py` from `_vendored_pymupdf_extra.py`.
-3. **Preferences → Install PyMuPDF** — pip installs into `pdf_vector_importer/lib/` using Blender's bundled Python (`dependency_manager.install_pymupdf()`).
+| Runtime | Notes |
+|---------|-------|
+| **Blender bundled Python** | 3.10 (3.6 LTS) through 3.13 (5.x) |
+| cp310-abi3 PyMuPDF wheel | v1.0.42+ for Blender 5.x |
+| Ruby | Not used |
 
-Paths (relative to add-on root `pdf_vector_importer/`):
+## Bundled dependencies
 
-| Path | Purpose |
-|------|---------|
-| `lib/pymupdf/` | Vendored or pip-installed PyMuPDF |
-| `lib/fitz/` | Legacy fitz shim (if present) |
-| `_vendored_pymupdf_extra.py` | Backup pure-Python helper for partial installs |
+| Dependency | Release ZIP | Fallback |
+|------------|-------------|----------|
+| PyMuPDF (>=1.24, &lt;2.0) | ✅ Vendored under `pdf_vector_importer/lib/` | Preferences → **Install PyMuPDF** |
+| pdfcadcore | ✅ In add-on | Same |
 
-Run diagnostics from a terminal:
+No system Python or pip required when release ZIP vendored wheel loads.
+
+## Legacy hardware notes
+
+- **Glyphs/Geometry** text → high curve/mesh counts; use **Labels** on **&lt; 8 GB RAM** PCs.
+- Headless import validated; interactive UI still needs human confirmation (T-01).
+- See open thread T-06: doc vs builder gap for per-char glyph semantics.
+
+## Preflight command
+
+```powershell
+cd C:\1PDF-Importer-Blender
+python preflight_check.py
+python preflight_check.py --diagnostics
+```
+
+In Blender: enable add-on → Preferences → **Install PyMuPDF** if import fails on 5.x.
+
+Headless diagnostics:
 
 ```powershell
 blender --background --python-expr "import addon_utils; addon_utils.enable('pdf_vector_importer'); from pdf_vector_importer.dependency_manager import print_diagnostics; print_diagnostics()"
 ```
 
-Or use `python preflight_check.py` from the add-on repo root (no Blender GUI required).
+---
 
-### Text rendering (3D-capable host)
+## Blender version matrix
+
+| Blender | Bundled Python | PyMuPDF | Status |
+|---------|----------------|---------|--------|
+| 5.0–5.1 | 3.12–3.13 | >=1.24,<2.0 | ✅ v1.0.42+ cp310-abi3 |
+| 4.5 LTS | 3.11 | >=1.24,<2.0 | ⚠️ Expected |
+| 4.0–4.2 | 3.11 | >=1.24,<2.0 | ⚠️ Expected |
+| 3.6 LTS | 3.10 | >=1.24,<2.0 | ⚠️ Expected |
+| 3.0–3.5 | 3.10 | >=1.24,<2.0 | ⚠️ Expected after manual install |
+
+### Blender 5.x PyMuPDF bootstrap (v1.0.42+)
+
+1. Vendored **cp310-abi3** wheel under `pdf_vector_importer/lib/`
+2. Self-heal for missing `pymupdf/extra.py`
+3. Preferences → **Install PyMuPDF**
+
+### Text rendering
 
 | Option | Blender result |
 |--------|----------------|
-| **Labels** | Font curve objects (editable text) |
-| **3D Text** | Extruded / geometric text where supported |
+| **Labels** | Font curve objects |
+| **3D Text** | Extruded text where supported |
 | **Glyphs** | Per-character vector curves |
-| **Geometry** | Text as mesh/curve outlines |
+| **Geometry** | Mesh/curve outlines |
 
 ## CI coverage
 
-GitHub Actions: Python **3.9, 3.10, 3.11, 3.12**, `pdfcadcore_sync_check.py`, pytest, BCS-ARCH mode smoke on synthetic PDFs.
+GitHub Actions: Python **3.9–3.12**, `pdfcadcore_sync_check.py`, pytest, BCS-ARCH mode smoke.
