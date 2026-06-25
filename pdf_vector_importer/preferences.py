@@ -93,8 +93,8 @@ class PDFVectorImporterPreferences(bpy.types.AddonPreferences):
             row.operator(PDFVEC_OT_install_pymupdf.bl_idname, icon="IMPORT")
             row = box.row()
             row.label(
-                text="Blender 5.x needs PyMuPDF built for its bundled Python. "
-                     "Click Install if vendored binaries fail to load.",
+                text="Blender 5.x (Python 3.12+): use vendored cp310-abi3 wheel or click Install. "
+                     "See COMPATIBILITY.md and pdf_vector_importer/lib/.",
                 icon="INFO",
             )
 

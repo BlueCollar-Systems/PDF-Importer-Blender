@@ -116,6 +116,30 @@ class TestCorePipeline(unittest.TestCase):
         self.assertEqual(summary["text_items"], 0)
         self.assertGreaterEqual(summary["images"], 1)
 
+    def test_auto_mode_text_only_page_preserves_text(self) -> None:
+        text_only_pdf = self.tmp_path / "text_only.pdf"
+        doc = fitz.open()
+        page = doc.new_page(width=600, height=400)
+        page.insert_text((72, 100), "W12x26 COLUMN", fontsize=14)
+        page.insert_text((72, 130), "15/16 FIELD BOLT", fontsize=12)
+        doc.save(str(text_only_pdf))
+        doc.close()
+
+        extraction = extract_document(
+            str(text_only_pdf),
+            ExtractionOptions(
+                pages="1",
+                import_mode="auto",
+                import_text=True,
+                import_images=True,
+            ),
+        )
+        summary = extraction.summary()
+        self.assertEqual(summary["pages"], 1)
+        self.assertEqual(summary["auto_mode"]["per_page"][0]["resolved"], "vector")
+        self.assertGreaterEqual(summary["text_items"], 2)
+        self.assertEqual(summary["images"], 0)
+
     def test_reference_scale_transform(self) -> None:
         run = run_import(str(self.pdf_path), mode="auto", overrides={"pages": "1"})
         page = run.extraction.pages[0].page_data
