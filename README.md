@@ -36,6 +36,12 @@ so users do not need system Python, pip, or operating-system packages. The
 preferences-panel **Install PyMuPDF** button remains for source/dev installs and
 repairing a manually modified add-on folder.
 
+**Offline install:** Release ZIPs from GitHub work without internet after download.
+
+## Upgrading / skipping versions
+
+Install the latest release ZIP via Preferences → Add-ons (disable old version first if Blender keeps both). Skipping versions is supported — run `--preflight` or import one Tier-1 PDF after a major jump.
+
 ### Manual Install
 
 Copy the `pdf_vector_importer/` directory into your Blender addons path:
