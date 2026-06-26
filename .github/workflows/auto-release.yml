@@ -49,18 +49,16 @@ jobs:
           python pdfcadcore_sync_check.py --skip-cross-repo
           python -m pytest tests/ -q --basetemp "$RUNNER_TEMP/pytest-blender"
 
-      - name: Read and bump version
+      - name: Read committed version
         id: version
         run: |
           python - <<'PY'
           import os
           import pathlib
           import re
-          import subprocess
 
           init_file = pathlib.Path("pdf_vector_importer/__init__.py")
           pyproject = pathlib.Path("pyproject.toml")
-          readme = pathlib.Path("README.md")
 
           init_text = init_file.read_text(encoding="utf-8")
           match = re.search(r'("version":\s*\()(\d+),\s*(\d+),\s*(\d+)(\))', init_text)
@@ -68,87 +66,31 @@ jobs:
               raise SystemExit('Could not parse version tuple from pdf_vector_importer/__init__.py')
 
           major, minor, patch = map(int, match.groups()[1:4])
-          old_version = f"{major}.{minor}.{patch}"
-
-          tags = set(
-              t.strip()
-              for t in subprocess.check_output(
-                  ["git", "tag", "--list"],
-                  text=True,
-              ).splitlines()
-              if t.strip()
-          )
-          next_patch = patch + 1
-          while f"v{major}.{minor}.{next_patch}" in tags:
-              next_patch += 1
-          new_version = f"{major}.{minor}.{next_patch}"
-
-          init_text = re.sub(
-              r'("version":\s*\()(\d+),\s*(\d+),\s*(\d+)(\))',
-              rf'\g<1>{major}, {minor}, {next_patch}\5',
-              init_text,
-              count=1,
-          )
-          init_file.write_text(init_text, encoding="utf-8")
+          version = f"{major}.{minor}.{patch}"
 
           pyproject_text = pyproject.read_text(encoding="utf-8")
-          pyproject_text = re.sub(
-              r'(^version\s*=\s*")(\d+\.\d+\.\d+)(")',
-              rf'\g<1>{new_version}\3',
-              pyproject_text,
-              count=1,
-              flags=re.MULTILINE,
-          )
-          pyproject.write_text(pyproject_text, encoding="utf-8")
+          pyproject_match = re.search(r'^version\s*=\s*"(\d+\.\d+\.\d+)"', pyproject_text, re.MULTILINE)
+          if not pyproject_match or pyproject_match.group(1) != version:
+              got = pyproject_match.group(1) if pyproject_match else "missing"
+              raise SystemExit(f"Version mismatch: core={version} pyproject={got}")
 
           legacy_init = pathlib.Path("blender_pdf_vector_importer/__init__.py")
           if legacy_init.exists():
               legacy_text = legacy_init.read_text(encoding="utf-8")
-              legacy_text = re.sub(
-                  r'("version":\s*\()(\d+),\s*(\d+),\s*(\d+)(\))',
-                  rf'\g<1>{major}, {minor}, {next_patch}\5',
-                  legacy_text,
-                  count=1,
-              )
-              legacy_init.write_text(legacy_text, encoding="utf-8")
-
-          readme_text = readme.read_text(encoding="utf-8")
-          readme_text = re.sub(
-              r"(Version-)(\d+\.\d+\.\d+)(-(green|blue)\.svg)",
-              rf"\g<1>{new_version}\3",
-              readme_text,
-              count=1,
-          )
-          readme.write_text(readme_text, encoding="utf-8")
+              legacy_match = re.search(r'("version":\s*\()(\d+),\s*(\d+),\s*(\d+)(\))', legacy_text)
+              if not legacy_match:
+                  raise SystemExit("Could not parse version tuple from blender_pdf_vector_importer/__init__.py")
+              legacy_version = ".".join(legacy_match.groups()[1:4])
+              if legacy_version != version:
+                  raise SystemExit(f"Version mismatch: core={version} legacy={legacy_version}")
 
           out = pathlib.Path(os.environ["GITHUB_OUTPUT"])
-          out.write_text(
-              f"old_version={old_version}\nversion={new_version}\n",
-              encoding="utf-8",
-          )
+          out.write_text(f"version={version}\n", encoding="utf-8")
           PY
 
-      - name: Commit and push version bump
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-          GH_TOKEN: ${{ secrets.RELEASE_BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+      - name: Set release target
         run: |
-          set -e
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git add pdf_vector_importer/__init__.py blender_pdf_vector_importer/__init__.py pyproject.toml README.md
-          if git diff --cached --quiet; then
-            echo "No version bump changes to commit."
-            echo "RELEASE_TARGET=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-          else
-            git commit -m "chore: bump version to ${VERSION}"
-            if ! git push origin "HEAD:${GITHUB_REF_NAME}"; then
-              echo "::error::Could not push version bump to '${GITHUB_REF_NAME}'. Refusing to publish a release whose tag does not match committed version files."
-              exit 1
-            fi
-            echo "RELEASE_TARGET=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-          fi
+          echo "RELEASE_TARGET=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - name: Build release
         run: python build_release.py

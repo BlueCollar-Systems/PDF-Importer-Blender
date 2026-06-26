@@ -1,5 +1,7 @@
 # PDF Vector Importer for Blender
 
+[![Version](https://img.shields.io/badge/Version-1.0.51-blue.svg)]()
+
 **BUILT. NOT BOUGHT.** -- BlueCollar Systems
 
 Import PDF vector drawings as native Blender geometry (Curves, Collections, Materials).
