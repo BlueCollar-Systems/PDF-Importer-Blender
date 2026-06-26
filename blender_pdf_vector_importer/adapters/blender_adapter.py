@@ -11,6 +11,7 @@ from ..importer import run_import
 from ..view_focus import focus_view_on_collection
 
 MM_TO_M = 0.001
+_TEXT_MODES = {"labels", "3d_text", "glyphs", "geometry"}
 
 
 @dataclass
@@ -80,7 +81,12 @@ def import_into_blender(pdf_path: str, mode: str = "auto",
 
         if opts.import_text:
             for text in page.page_data.text_items:
-                _create_text_object(text, page_collection)
+                _create_text_object(
+                    text,
+                    page_collection,
+                    opts.text_mode,
+                    page.page_data.page_number,
+                )
 
         if opts.import_images:
             for placement in page.images:
@@ -172,22 +178,92 @@ def _sanitize_text_for_blender(text: str) -> str:
     return "".join(cleaned)
 
 
-def _create_text_object(text_item, collection):
+def _normalize_text_mode(text_mode: str) -> str:
+    mode = (text_mode or "3d_text").strip().lower()
+    if mode in _TEXT_MODES:
+        return mode
+    return "3d_text"
+
+
+def _text_extrusion_depth(font_size: float) -> float:
+    return max(font_size * 0.12, 0.00025)
+
+
+def _create_text_object(text_item, collection, text_mode="3d_text", page_number=0):
     import bpy
 
-    curve = bpy.data.curves.new(name=f"Text_{text_item.id}", type="FONT")
-    curve.body = _sanitize_text_for_blender(text_item.text)
-    curve.size = max(text_item.font_size * MM_TO_M, 0.001)
+    mode = _normalize_text_mode(text_mode)
+    body = _sanitize_text_for_blender(str(getattr(text_item, "text", "") or ""))
+    if not body.strip():
+        return None
 
-    obj = bpy.data.objects.new(f"PDF_Text_{text_item.id}", curve)
+    text_id = int(getattr(text_item, "id", 0) or 0)
+    curve = bpy.data.curves.new(name=f"P{page_number}_text_{mode}_{text_id}", type="FONT")
+    curve.body = body
+    curve.size = max(float(getattr(text_item, "font_size", 1.0) or 1.0) * MM_TO_M, 0.001)
+    curve.align_x = "LEFT"
+    try:
+        curve.align_y = "BOTTOM_BASELINE"
+    except Exception:
+        curve.align_y = "BOTTOM"
+    if mode == "3d_text":
+        curve.extrude = _text_extrusion_depth(curve.size)
+    else:
+        curve.extrude = 0.0
+    if mode in {"glyphs", "geometry"}:
+        try:
+            curve.resolution_u = max(int(getattr(curve, "resolution_u", 12) or 12), 24)
+        except Exception:
+            pass
+
+    obj = bpy.data.objects.new(f"PDF_Text_{mode}_{text_id}", curve)
+    insertion = getattr(text_item, "insertion", (0.0, 0.0)) or (0.0, 0.0)
     obj.location = (
-        text_item.insertion[0] * MM_TO_M,
-        text_item.insertion[1] * MM_TO_M,
+        float(insertion[0]) * MM_TO_M,
+        float(insertion[1]) * MM_TO_M,
         0.0,
     )
-    obj.rotation_euler = (0.0, 0.0, math.radians(text_item.rotation or 0.0))
-    obj["pdf_text_id"] = int(text_item.id)
+    obj.rotation_euler = (
+        0.0,
+        0.0,
+        math.radians(float(getattr(text_item, "rotation", 0.0) or 0.0)),
+    )
+    obj["pdf_text_id"] = text_id
+    obj["pdf_text_mode"] = mode
     collection.objects.link(obj)
+    if mode in {"glyphs", "geometry"}:
+        obj = _meshify_text_object(obj, collection, mode)
+    return obj
+
+
+def _meshify_text_object(obj, collection, mode: str):
+    """Convert text curves to mesh geometry when Blender can evaluate them."""
+    import bpy
+
+    try:
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        evaluated = obj.evaluated_get(depsgraph)
+        mesh = bpy.data.meshes.new_from_object(evaluated, depsgraph=depsgraph)
+        mesh.name = f"{obj.name}_mesh"
+        mesh_obj = bpy.data.objects.new(obj.name, mesh)
+        mesh_obj.matrix_world = obj.matrix_world.copy()
+        mesh_obj.color = obj.color
+        for mat in getattr(obj.data, "materials", []):
+            mesh.materials.append(mat)
+        mesh_obj["pdf_text_mode"] = mode
+        mesh_obj["pdf_text_source"] = getattr(obj.data, "body", "")
+        collection.objects.link(mesh_obj)
+        try:
+            collection.objects.unlink(obj)
+        except Exception:
+            pass
+        try:
+            bpy.data.objects.remove(obj, do_unlink=True)
+        except Exception:
+            pass
+        return mesh_obj
+    except Exception:
+        return obj
 
 
 def _create_image_plane(placement, collection):
