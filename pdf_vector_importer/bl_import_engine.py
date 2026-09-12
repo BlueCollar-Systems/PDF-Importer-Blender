@@ -2726,6 +2726,45 @@ def _world_xy_close(actual, expected):
     return True
 
 
+class _ObjectNameLookup:
+    """Answer ``bpy.data.objects.get(name)`` from one pass over the registry.
+
+    ``bpy.data.objects.get`` walks the whole ID list per call: binding the
+    4,182 delivered text entities of the 1011 page on its 8,837-object scene
+    cost 1.3 s of an 8 s import.  Object names are unique, so a snapshot taken
+    before the loop gives the same answer as ``get`` for every name, and the
+    snapshot is dropped whenever a cleanup removes objects.  A registry that
+    cannot be iterated (host-test doubles) keeps answering through ``get``.
+    """
+
+    _UNAVAILABLE = object()
+
+    def __init__(self, registry) -> None:
+        self._registry = registry
+        self._get = getattr(registry, "get", None)
+        self._snapshot: Any = None
+
+    def _build(self) -> None:
+        snapshot: dict[str, Any] = {}
+        try:
+            for obj in self._registry:
+                snapshot.setdefault(str(obj.name), obj)
+        except (AttributeError, ReferenceError, RuntimeError, TypeError):
+            self._snapshot = self._UNAVAILABLE
+            return
+        self._snapshot = snapshot
+
+    def get(self, name: str):
+        if self._snapshot is None:
+            self._build()
+        if self._snapshot is self._UNAVAILABLE:
+            return self._get(name) if callable(self._get) else None
+        return self._snapshot.get(name)
+
+    def invalidate(self) -> None:
+        self._snapshot = None
+
+
 def _reverify_text_delivery_after_stack(
     delivery_records,
     *,
@@ -2748,7 +2787,8 @@ def _reverify_text_delivery_after_stack(
     except (AttributeError, ReferenceError, RuntimeError):
         pass
     registry = getattr(getattr(bpy, "data", None), "objects", None)
-    getter = getattr(registry, "get", None)
+    lookup = _ObjectNameLookup(registry)
+    getter = lookup.get
     for record in tuple(delivery_records or ()):
         if (
             int(record.get("page", 0) or 0) != int(page_number)
@@ -2832,6 +2872,8 @@ def _reverify_text_delivery_after_stack(
                     }
                 if cleanup.get("status") == "complete" and isinstance(outcomes, dict):
                     outcomes.pop(item_id, None)
+                # Objects may have been removed; later names must not resolve to them.
+                lookup.invalidate()
             final_proof["cleanup"] = cleanup
             failure = {
                 "item_id": item_id,
