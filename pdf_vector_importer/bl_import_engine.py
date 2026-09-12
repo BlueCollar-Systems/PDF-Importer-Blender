@@ -1897,6 +1897,42 @@ def _pixmap_is_fully_transparent(pix, samples: bytes) -> bool:
     return True
 
 
+class _PageDisplayListRenderer:
+    """Render every item-scoped raster clip of one page from one display list.
+
+    ``Page.get_pixmap`` builds a fresh display list (every path on the page)
+    on each call and discards it.  On a 452k-path submittal sheet, 135 text
+    items delivered as raster clips rebuilt that list 135 times: 77 s of a
+    140 s import.  ``Page.get_pixmap`` itself is ``get_displaylist(annots=True)``
+    followed by ``DisplayList.get_pixmap(matrix, csRGB, alpha, clip)``, so
+    rendering the clips from one retained list is the same MuPDF path and the
+    same pixels.  A page that cannot provide a display list (host-test doubles,
+    a MuPDF failure) renders through ``page.get_pixmap`` exactly as before.
+    """
+
+    def __init__(self, page) -> None:
+        self._page = page
+        self._display_list = None
+        self._unavailable = False
+
+    def get_pixmap(self, *, matrix, clip, alpha):
+        if not self._unavailable and self._display_list is None:
+            builder = getattr(self._page, "get_displaylist", None)
+            if callable(builder):
+                try:
+                    self._display_list = builder(annots=True)
+                except (RuntimeError, TypeError, ValueError):
+                    self._display_list = None
+            if self._display_list is None:
+                self._unavailable = True
+        if self._unavailable:
+            return self._page.get_pixmap(matrix=matrix, clip=clip, alpha=alpha)
+        return self._display_list.get_pixmap(matrix=matrix, alpha=alpha, clip=clip)
+
+    def release(self) -> None:
+        self._display_list = None
+
+
 def _render_text_item_raster(
     page,
     text_item,
@@ -1909,6 +1945,7 @@ def _render_text_item_raster(
     z_offset_m: float = 0.0,
     image_cache: Optional[_ImportImageCache] = None,
     style_identity: tuple[Any, ...] = ("source", "base-color-alpha", "hashed"),
+    renderer: Optional[_PageDisplayListRenderer] = None,
 ) -> Optional[bpy.types.Object]:
     """Render and verify one text span as the terminal item-scoped fallback."""
     source_bbox = getattr(text_item, "source_bbox_pdf", None)
@@ -1964,7 +2001,8 @@ def _render_text_item_raster(
         return None
     image_path = os.path.join(image_dir, f"{safe_id}_{dpi}dpi.png")
     try:
-        pix = page.get_pixmap(matrix=matrix, clip=clip, alpha=True)
+        source = renderer if renderer is not None else page
+        pix = source.get_pixmap(matrix=matrix, clip=clip, alpha=True)
         if int(getattr(pix, "width", 0) or 0) <= 0 or int(getattr(pix, "height", 0) or 0) <= 0:
             return None
         samples = bytes(getattr(pix, "samples", b"") or b"")
@@ -3396,7 +3434,8 @@ def import_pdf(
                         provenance_opts=import_cfg,
                         terminal_raster_callback=(
                         lambda text_item, collection, callback_page_number, item_id,
-                        _page=page, _cfg=import_cfg, _dir=image_dir, _z=text_z_offset_m:
+                        _page=page, _cfg=import_cfg, _dir=image_dir, _z=text_z_offset_m,
+                        _renderer=_PageDisplayListRenderer(page):
                         _render_text_item_raster(
                             _page,
                             text_item,
@@ -3407,6 +3446,7 @@ def import_pdf(
                             image_dir=_dir,
                             z_offset_m=_z,
                             image_cache=image_cache,
+                            renderer=_renderer,
                             style_identity=(
                                 visual_style,
                                 "base-color-alpha",
