@@ -1,6 +1,7 @@
 """Deterministic distributable and runtime package identity."""
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 import os
@@ -110,7 +111,7 @@ def create_release_identity(
 
 def _package_entries(package_root: Path) -> list[tuple[str, bytes]]:
     parent = package_root.parent
-    entries = []
+    paths = []
     for path in package_root.rglob("*"):
         if not path.is_file():
             continue
@@ -119,8 +120,19 @@ def _package_entries(package_root: Path) -> list[tuple[str, bytes]]:
         # else defers to the shared packaging rule so the two can never drift.
         if path.name == IDENTITY_FILENAME or is_excluded_package_member(relative):
             continue
-        entries.append((path.relative_to(parent).as_posix(), path.read_bytes()))
-    return entries
+        paths.append(path)
+    # Every import re-reads the ~420 package files to prove the installed
+    # bytes still match the release identity.  On Windows the cost is the
+    # per-file open latency (about 5 ms each, 2 s per import), not the bytes,
+    # so the reads are overlapped; the entries, their order and the hash they
+    # feed are unchanged.
+    if not paths:
+        return []
+    with ThreadPoolExecutor(max_workers=min(8, len(paths))) as pool:
+        contents = list(pool.map(Path.read_bytes, paths))
+    return [
+        (path.relative_to(parent).as_posix(), data) for path, data in zip(paths, contents)
+    ]
 
 
 def _development_source_commit(package_root: Path) -> str:
