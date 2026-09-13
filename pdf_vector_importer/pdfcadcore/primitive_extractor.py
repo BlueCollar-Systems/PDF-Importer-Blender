@@ -7,6 +7,7 @@ Rule 1: Parser modules must not know about domain-specific logic.
 """
 from __future__ import annotations
 import math
+from collections import deque
 import re
 from typing import List, NamedTuple, Optional, Tuple
 
@@ -276,8 +277,14 @@ def extract_page(
     arc_fit_tol_mm: float = 0.05,
     min_arc_angle_deg: float = 5.0,
     arc_min_pts: int = 5,
+    drawings: Optional[list] = None,
 ) -> PageData:
-    """Extract normalized primitives from a PyMuPDF page."""
+    """Extract normalized primitives from a PyMuPDF page.
+
+    ``drawings`` may be a previously fetched ``page.get_drawings()`` result so
+    auto-mode classification can reuse the same path list instead of parsing
+    the page twice. Omit it to fetch drawings here.
+    """
     # ``page.rect`` is the authoritative visible CropBox + UserUnit + /Rotate
     # extent. PyMuPDF drawing/text coordinates remain crop-local source points;
     # apply the page rotation matrix once before the model Y flip.
@@ -298,7 +305,8 @@ def extract_page(
     page_h_mm = page_h_pts * MM_PER_PT * scale
 
     primitives = []
-    drawings = page.get_drawings()
+    if drawings is None:
+        drawings = page.get_drawings()
 
     for path_group in drawings:
         items = path_group.get("items", [])
@@ -479,6 +487,7 @@ def extract_page(
         primitives=primitives, text_items=text_items,
         layers=layers, xobject_names=[]
     )
+    page_data._source_drawings = drawings
     from .generic_classifier import classify_text
     from .resolved_scale import resolve_page_scale
 
@@ -626,7 +635,7 @@ def _trace_glyph_queues(page):
                     glyph_id = int(entry[1])
             except (IndexError, TypeError, ValueError):
                 continue
-            queues.setdefault((font, codepoint), []).append(glyph_id)
+            queues.setdefault((font, codepoint), deque()).append(glyph_id)
     return queues
 
 
@@ -637,7 +646,7 @@ def _pop_trace_glyph_id(queues, font: str, text: str):
     candidates = queues.get(key)
     if not candidates:
         return None
-    return candidates.pop(0)
+    return candidates.popleft() if isinstance(candidates, deque) else candidates.pop(0)
 
 
 def _span_text_and_chars(span: dict):

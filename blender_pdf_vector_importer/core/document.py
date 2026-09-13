@@ -15,6 +15,7 @@ except ImportError:
 from pdf_vector_importer.pdfcadcore.document_profiler import profile as profile_page
 from pdf_vector_importer.pdfcadcore.fitz_loader import safe_open
 from pdf_vector_importer.pdfcadcore.geometry_cleanup import circle_fit
+from pdf_vector_importer.pdfcadcore.auto_mode import drawings_need_text_counts
 from pdf_vector_importer.pdfcadcore.primitive_extractor import extract_page
 from pdf_vector_importer.pdfcadcore.primitives import PageData
 
@@ -184,11 +185,16 @@ def extract_document(pdf_path: str, options: Optional[ExtractionOptions] = None)
             page = doc.load_page(page_number - 1)
             effective_mode = mode
             resolved_reason = ""
+            drawings = None
 
             if mode == "auto":
                 drawings = page.get_drawings()
-                text_blocks = page.get_text("blocks") or []
-                text_words = page.get_text("words") or []
+                if drawings_need_text_counts(drawings):
+                    text_blocks = page.get_text("blocks") or []
+                    text_words = page.get_text("words") or []
+                else:
+                    text_blocks = []
+                    text_words = []
                 auto_decision = _classify_auto_page(
                     drawings,
                     text_blocks_count=len(text_blocks),
@@ -209,7 +215,13 @@ def extract_document(pdf_path: str, options: Optional[ExtractionOptions] = None)
             elif mode == "hybrid":
                 resolved_reason = "User forced hybrid mode"
 
-            page_data = extract_page(page, page_number, scale=opts.scale, flip_y=opts.flip_y)
+            page_data = extract_page(
+                page,
+                page_number,
+                scale=opts.scale,
+                flip_y=opts.flip_y,
+                drawings=drawings,
+            )
 
             include_vectors = effective_mode in {"vector", "hybrid"}
             if include_vectors:

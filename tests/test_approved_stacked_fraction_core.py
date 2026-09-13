@@ -13,11 +13,15 @@ sys.path.insert(0, str(REPO_ROOT / "pdf_vector_importer"))
 from pdfcadcore import primitive_extractor  # noqa: E402
 
 
+# September 12: drawing-list reuse and FIFO glyph queues were reviewed with
+# full-field equivalence on ten drawing pages plus fraction/layout regressions.
+# No fraction predicate, scale, source-character proof, or renderer changed.
+# Previous reviewed hash: ab6d03e38066c42214e6272f503a0aef5bf53d50fbd0c8aafa91cc0c8b3e6538.
 # This is the reviewed integration output: current main plus the fraction-core
 # port. It deliberately does not claim that these combined bytes were approved
 # independently before the merge review.
 REVIEWED_COMBINED_SUCCESSOR_SHA256 = (
-    "ab6d03e38066c42214e6272f503a0aef5bf53d50fbd0c8aafa91cc0c8b3e6538"
+    "7f75b794e4ea41b655e04adcfe03def846fce8f28b52e2ade2bcefa9672fea07"
 )
 
 

@@ -27,7 +27,8 @@ from .dependency_manager import check_pymupdf, ensure_lib_path
 from .packed_assets import pack_and_verify_bytes
 from .pdfcadcore import (
     ImportConfig, extract_page, iter_pages, recognition, reset_ids,
-    classify_page_content, tag_hatch_primitives, cleanup_primitives,
+    classify_page_content, drawings_need_text_counts, tag_hatch_primitives,
+    cleanup_primitives,
 )
 from .bl_geometry_builder import build_page
 from .bl_text_builder import build_all_text, cleanup_delivery_outcome, text_stage_timings
@@ -3236,9 +3237,15 @@ def import_pdf(
             # 9a. Auto-mode classification (before extraction)
             if import_mode == "auto":
                 t_phase = time.perf_counter()
-                raw_drawings = page.get_drawings()
-                text_blocks = page.get_text("blocks") or []
-                text_words = page.get_text("words") or []
+                raw_drawings = getattr(page_data, "_source_drawings", None)
+                if raw_drawings is None:
+                    raw_drawings = page.get_drawings()
+                if drawings_need_text_counts(raw_drawings):
+                    text_blocks = page.get_text("blocks") or []
+                    text_words = page.get_text("words") or []
+                else:
+                    text_blocks = []
+                    text_words = []
                 mbox = page.mediabox
                 page_area = float(mbox.width) * float(mbox.height)
                 classification = classify_page_content(
