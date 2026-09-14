@@ -908,6 +908,41 @@ def _write_metric_placement_properties(
     ]
 
 
+# An affine carrier is a helper EMPTY that holds the shear-free parent half of a
+# factored glyph transform (see _factor_affine_matrix_values).  Blender draws
+# every EMPTY with its default PLAIN_AXES gizmo at empty_display_size = 1 m
+# unless told otherwise: one 2 m vertical line through every positioned glyph
+# of a 1.2 m x 0.9 m sheet.  The carrier is sized from the glyph it carries --
+# a fixed fraction of the target quad's vertical edge (model millimetres,
+# converted to metres) and clamped so it is never visible at sheet scale yet
+# never collapses to a zero-size gizmo.  The gizmo's Z axis is unaffected by the
+# carrier's 2-D linear part, so the clamp bounds are world extents.
+_CARRIER_DISPLAY_FRACTION = 0.05
+_CARRIER_DISPLAY_MIN_M = 0.02 * MM_TO_M
+_CARRIER_DISPLAY_MAX_M = 0.5 * MM_TO_M
+
+
+def _carrier_display_size_m(target_quad) -> float:
+    """Display size (m) for an affine-carrier EMPTY, derived from its glyph."""
+    try:
+        ul, _ur, _lr, ll = tuple(
+            (float(point[0]), float(point[1])) for point in target_quad
+        )
+        glyph_height_mm = math.hypot(ul[0] - ll[0], ul[1] - ll[1])
+    except (IndexError, TypeError, ValueError):
+        return _CARRIER_DISPLAY_MIN_M
+    if not math.isfinite(glyph_height_mm) or glyph_height_mm <= 0.0:
+        return _CARRIER_DISPLAY_MIN_M
+    size_m = glyph_height_mm * _CARRIER_DISPLAY_FRACTION * MM_TO_M
+    return min(_CARRIER_DISPLAY_MAX_M, max(_CARRIER_DISPLAY_MIN_M, size_m))
+
+
+def _configure_affine_carrier_display(carrier, target_quad) -> None:
+    """Make a helper EMPTY visually inert without changing what it carries."""
+    carrier.empty_display_type = "PLAIN_AXES"
+    carrier.empty_display_size = _carrier_display_size_m(target_quad)
+
+
 def _apply_target_quad_affine(
     obj,
     text_item,
@@ -964,6 +999,7 @@ def _apply_target_quad_affine(
             if target_collection is None:
                 raise RuntimeError("affine carrier target collection is unavailable")
             carrier = bpy.data.objects.new(f"{obj.name}_AffineCarrier", None)
+            _configure_affine_carrier_display(carrier, target_quad)
             target_collection.objects.link(carrier)
             carrier.matrix_world = Matrix(parent_values)
             obj.parent = carrier
