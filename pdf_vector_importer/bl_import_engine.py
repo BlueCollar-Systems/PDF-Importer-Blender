@@ -1061,14 +1061,35 @@ def _looks_like_text_cloud_page(primitives_count: int, text_items) -> bool:
     text_to_vector_ratio = total / float(max(primitives_count, 1))
     alpha_ratio = alpha / float(max(total, 1))
 
+    # Rasterizing discards every vector the page carries, so it is only right
+    # when the vectors are not the content: both rules below require the text
+    # to outnumber the primitives 2.5 to 1. They differ in how narrative the
+    # text itself has to look.
+
     # Typical CAD drawings have lots of short tokens (fractions, IDs).
     # Narrative map/plan pages tend to have many longer, multi-word runs.
     if long_ratio >= 0.28 and alpha_ratio >= 0.55 and text_to_vector_ratio >= 2.5:
         return True
 
-    # Heavy pages with extreme primitive counts can hang; prefer raster when
-    # they are also text-heavy.
-    if primitives_count >= 12000 and total >= 300 and long_ratio >= 0.20:
+    # Heavy text-dominated pages whose labels are less purely alphabetic than
+    # rule A demands (numeric map annotation, schedules).
+    #
+    # This rule used to fire on primitive count and text count alone, on the
+    # premise that "heavy pages can hang". That premise was measured false and
+    # the rule was costing real drawings: a 48 x 36 in foundation sheet with a
+    # concrete hatch (30,270 primitives, 324 labels, text-to-vector ratio
+    # 0.0098 -- the vectors ARE the content) was replaced by a single
+    # 14400 x 10800 raster plane, a 622 MB texture that made the viewport
+    # unusable, while building the same page as vectors took 11.8 s end to end.
+    # Heavy-page cost is bounded where it belongs: the geometry builder batches
+    # open curves, and the complexity tier and cancel heartbeat already cover
+    # long builds.
+    if (
+        primitives_count >= 12000
+        and total >= 300
+        and long_ratio >= 0.20
+        and text_to_vector_ratio >= 2.5
+    ):
         return True
 
     return False
