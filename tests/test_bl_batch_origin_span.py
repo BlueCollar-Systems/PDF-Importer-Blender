@@ -12,6 +12,7 @@ from __future__ import annotations
 import importlib
 import sys
 import types
+from pathlib import Path
 
 import pytest
 
@@ -46,6 +47,8 @@ class _Points32(list):
             raise ValueError(attr)
         values = list(data)
         for index, point in enumerate(self):
+            if index == 0:
+                continue
             base = index * 4
             point._co[:] = [float(values[base + axis]) for axis in range(4)]
 
@@ -79,6 +82,7 @@ class _Curve32:
     def __init__(self, name: str) -> None:
         self.name = name
         self.dimensions = "3D"
+        self.fill_mode = "HALF"
         self.resolution_u = 12
         self.bevel_depth = 0.0
         self.materials: list = []
@@ -277,3 +281,69 @@ def test_world_bounds_use_curve_spline_points_when_bound_box_is_collapsed():
     assert max_v.y - min_v.y == pytest.approx(590.0 * MM_TO_M, abs=1e-9)
     assert abs(min_v.x) > 0.001
     assert abs(min_v.y) > 0.001
+
+
+def test_paper_space_curves_are_2d_without_tubes():
+    builder = _reload_builder()
+    collection = _Collection32()
+    obj = builder._create_poly_curve(
+        "P1_line_2d",
+        [(250.0, 400.0), (250.0, 500.0)],
+        False,
+        collection,
+        0.25,
+        object(),
+        z_offset_m=0.0,
+        use_tubes=False,
+    )
+    assert obj.data.dimensions == "2D"
+    assert obj.data.fill_mode == "NONE"
+    assert obj.data.bevel_depth == 0.0
+
+
+def test_orthogonal_z_leak_points_land_on_sheet_xy():
+    builder = _reload_builder()
+    collection = _Collection32()
+    obj = builder._create_multi_poly_curve(
+        "P1_fence",
+        [[(12.0, 0.0, 12.0), (12.0, 0.0, 600.0)], [(880.0, 0.0, 12.0), (880.0, 0.0, 600.0)]],
+        collection,
+        0.25,
+        object(),
+    )
+    coords = _spline_coords(obj)
+    ys = [c[1] for c in coords]
+    assert min(ys) == pytest.approx(12.0 * MM_TO_M)
+    assert max(ys) == pytest.approx(600.0 * MM_TO_M)
+
+
+def test_sheet_view_radius_ignores_z_fence():
+    _reload_builder()
+    engine = importlib.import_module("pdf_vector_importer.bl_import_engine")
+    engine = importlib.reload(engine)
+
+    class _V:
+        def __init__(self, x, y, z) -> None:
+            self.x = float(x)
+            self.y = float(y)
+            self.z = float(z)
+
+    radius = engine._sheet_view_radius(_V(0.0, 0.0, 0.0), _V(1.22, 0.91, 80.0))
+    assert radius == pytest.approx(1.22)
+
+
+def test_focus_path_does_not_call_view_selected_when_spline_bounds_exist():
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "pdf_vector_importer"
+        / "bl_import_engine.py"
+    ).read_text(encoding="utf-8")
+    assert "if min_v is None or max_v is None:" in source
+    assert "bpy.ops.view3d.view_selected" in source
+    assert "for start in range(0, len(runs), max_runs)" in (
+        Path(__file__).resolve().parents[1]
+        / "pdf_vector_importer"
+        / "bl_geometry_builder.py"
+    ).read_text(encoding="utf-8")
+    builder = _reload_builder()
+    assert builder._MAX_OPEN_CURVE_RUNS_PER_OBJECT == 400

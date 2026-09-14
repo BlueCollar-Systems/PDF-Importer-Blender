@@ -1623,7 +1623,7 @@ def test_positioned_glyph_metrics_use_blender_font_bbox_normalization():
     # the font's GLOBAL bounding-box height (head.yMax - head.yMin), not the
     # hhea ascender-descender line box. The disproved assumption
     # (local_unit_scale = size / (ascender - descender)) rendered every
-    # positioned character at (asc-desc)/bbox_extent of its true size —
+    # positioned character at (asc-desc)/bbox_extent of its true size â€”
     # measured 2288/2794 = 0.819 with the drawing's embedded Arial subset,
     # hot cells 379 -> 497 on the visual-parity harness.
     child = bl_text_builder._character_text_item(_item(), _character_layout()[0])
@@ -3024,3 +3024,37 @@ def test_missing_delivered_identity_retains_owned_refs_for_cleanup():
     assert len(cleanup_calls) == 1
     assert cleanup_calls[0].owned_objects == (owned_object,)
     assert cleanup_calls[0].owned_datablocks == (owned_data,)
+
+
+def test_metric_transform_does_not_round_translated_endpoint_twice(monkeypatch):
+    import struct
+
+    def f32(value):
+        return struct.unpack("f", struct.pack("f", value))[0]
+
+    class FloatMatrix(list):
+        def __init__(self, rows):
+            super().__init__([[f32(v) for v in row] for row in rows])
+
+        def __matmul__(self, vector):
+            return [f32(sum(row[i] * f32(vector[i]) for i in range(3)) + row[3])
+                    for row in self[:3]]
+
+    monkeypatch.setitem(sys.modules, "mathutils", types.SimpleNamespace(
+        Matrix=FloatMatrix, Vector=lambda values: [f32(v) for v in values]))
+    x, advance, height = 1.008171967909071, 0.0033, 0.004
+    obj = {"pdf_affine_matrix": [1, 0, 0, x, 0, 1, 0, 0.5,
+                                 0, 0, 1, 0, 0, 0, 0, 1],
+           "pdf_metric_local_advance": advance,
+           "pdf_metric_local_line_height": height}
+    item = types.SimpleNamespace(
+        insertion=(x * 1000, 500),
+        target_quad_model=((x * 1000, 504), ((x + advance) * 1000, 504),
+                           ((x + advance) * 1000, 500), (x * 1000, 500)))
+    failures, _ = bl_text_builder._verify_metric_character_transform(obj, item)
+    assert failures == []
+    # Real placement errors still fail at the unchanged 1e-7-metre tolerance.
+    obj["pdf_affine_matrix"][3] += 0.000001
+    failures, _ = bl_text_builder._verify_metric_character_transform(obj, item)
+    assert "evaluated_baseline_anchor_mismatch" in failures
+    assert "evaluated_font_advance_axis_mismatch" in failures

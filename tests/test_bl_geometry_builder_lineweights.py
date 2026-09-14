@@ -33,7 +33,7 @@ class TestBlenderGeometryBuilderLineweights(unittest.TestCase):
         self.assertIn("def _use_paper_space_tubes", source)
         self.assertIn("use_line_tubes = _use_paper_space_tubes(config)", source)
 
-    def test_flat_sheet_default_disables_curve_tubes(self) -> None:
+    def test_default_preserves_visible_source_width_strokes(self) -> None:
         # Import helpers without bpy by exec'ing just the pure functions.
         source = GEOMETRY_BUILDER.read_text(encoding="utf-8")
         # Pull the two pure helpers via AST exec of a minimal stub.
@@ -58,8 +58,10 @@ class TestBlenderGeometryBuilderLineweights(unittest.TestCase):
                 keep.append(_ast.get_source_segment(source, node))
         ns = {}
         exec(stub + "\n\n".join(keep), ns, ns)
-        self.assertFalse(ns["_use_paper_space_tubes"]({}))
-        self.assertFalse(ns["_use_paper_space_tubes"]({"model3d_mode": "extrude"}))
+        self.assertTrue(ns["_use_paper_space_tubes"]({}))
+        self.assertTrue(ns["_use_paper_space_tubes"]({"model3d_mode": "extrude"}))
+        self.assertFalse(ns["_use_paper_space_tubes"]({"paper_space_tubes": False}))
+        self.assertFalse(ns["_use_paper_space_tubes"]({"line_bevel": False}))
         self.assertTrue(ns["_use_paper_space_tubes"]({"paper_space_tubes": True}))
         self.assertEqual(ns["_curve_bevel_depth"](1.0, False), 0.0)
         self.assertGreater(ns["_curve_bevel_depth"](1.0, True), 0.0)

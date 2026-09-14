@@ -19,6 +19,7 @@ from typing import Dict, Optional, Tuple
 import bpy
 import bmesh
 
+from .pdfcadcore.import_bounds import sheet_xy
 from .pdfcadcore.primitives import PageData, Primitive
 
 # mm -> m conversion (Blender world units are meters by default)
@@ -35,6 +36,9 @@ MM_PER_PT = 25.4 / 72.0
 _LINEWIDTH_SCALE = MM_TO_M * 0.5
 _MIN_BEVEL_DEPTH = 0.0000125  # 0.0125 mm radius -> ~0.025 mm visible hairline
 _DEFAULT_HAIRLINE_BEVEL_DEPTH = 0.000025  # PDF zero-width strokes render as ~0.05 mm
+# Dense E-size sheets batch tens of thousands of strokes onto one Curve.
+# SketchUp-style chunks keep bound_box / viewport updates usable.
+_MAX_OPEN_CURVE_RUNS_PER_OBJECT = 400
 
 # Number of sample points for arc approximation
 _ARC_SAMPLE_COUNT = 32
@@ -55,22 +59,16 @@ def _line_bevel_depth(line_width: Optional[float]) -> float:
 
 
 def _use_paper_space_tubes(config: Optional[dict]) -> bool:
-    """Return True only when the user wants stroked curves as 3D tubes.
+    """Preserve visible source-width strokes by default.
 
-    Default sheet imports stay flat (bevel_depth=0). Curve bevel in 3D
-    dimensions turns every stroke into a tube, which on dense E-size
-    sheets looks like vertical posts when orbiting and tanks the viewport.
-    Opt in with ``paper_space_tubes`` / ``line_bevel`` in the page config.
+    A curve with zero bevel has no drawable surface in solid/material views.
+    Keep the PDF's thin stroke radius; affine-carrier axes are hidden separately.
+    Explicit zero-bevel configuration remains available for wire-only workflows.
     """
-    if not config:
-        return False
     for key in ("paper_space_tubes", "line_bevel"):
-        try:
-            if bool(config.get(key)):
-                return True
-        except Exception:
-            continue
-    return False
+        if config and key in config:
+            return bool(config[key])
+    return True
 
 
 def _curve_bevel_depth(line_width: Optional[float], use_tubes: bool) -> float:
@@ -78,6 +76,30 @@ def _curve_bevel_depth(line_width: Optional[float], use_tubes: bool) -> float:
     if not use_tubes:
         return 0.0
     return _line_bevel_depth(line_width)
+
+
+def _configure_sheet_curve(curve_data, use_tubes: bool) -> None:
+    """Keep paper-space strokes on the XY sheet unless tubes are opted in."""
+    curve_data.resolution_u = 12
+    if use_tubes:
+        curve_data.dimensions = "3D"
+        return
+    curve_data.dimensions = "2D"
+    try:
+        curve_data.fill_mode = "NONE"
+    except (AttributeError, TypeError):
+        pass
+
+
+def _points_m_from_mm(points) -> list:
+    """Convert source mm points onto the sheet plane, then to Blender meters."""
+    out = []
+    for pt in points or ():
+        xy = sheet_xy(pt)
+        if xy is None:
+            continue
+        out.append((xy[0] * MM_TO_M, xy[1] * MM_TO_M))
+    return out
 
 
 # ── Material cache ───────────────────────────────────────────────────
@@ -216,7 +238,13 @@ def _write_spline_points(spline, points_m, z_offset_m: float = 0.0) -> None:
     Orthographic at the grid becomes a starburst instead of the sheet.
     ``foreach_set("co", ...)`` writes the runtime array on 3.2 through 5.2.
     """
-    count = len(points_m)
+    xy_m = []
+    for pt in points_m or ():
+        xy = sheet_xy(pt)
+        if xy is None:
+            continue
+        xy_m.append(xy)
+    count = len(xy_m)
     if count < 1:
         return
     existing = len(spline.points)
@@ -224,13 +252,15 @@ def _write_spline_points(spline, points_m, z_offset_m: float = 0.0) -> None:
         spline.points.add(count - existing)
     flat = []
     z_value = float(z_offset_m)
-    for x_m, y_m in points_m:
+    for x_m, y_m in xy_m:
         flat.extend((float(x_m), float(y_m), z_value, 1.0))
     writer = getattr(spline.points, "foreach_set", None)
     if callable(writer):
         writer("co", flat)
-        return
-    for index, (x_m, y_m) in enumerate(points_m):
+    # Blender 3.2 can leave the default first point at the origin even after
+    # foreach_set. Pin every vertex by component so origin-starburst cannot
+    # survive a partial write.
+    for index, (x_m, y_m) in enumerate(xy_m):
         co = spline.points[index].co
         try:
             co[0] = float(x_m)
@@ -252,11 +282,12 @@ def _create_poly_curve(
     use_tubes: bool = False,
 ) -> bpy.types.Object:
     """Create a Curve object with a POLY spline from a list of 2D points."""
-    points_m = [(x * MM_TO_M, y * MM_TO_M) for x, y in points]
+    points_m = _points_m_from_mm(points)
+    if len(points_m) < 2:
+        return None
 
     curve_data = bpy.data.curves.new(name=name, type="CURVE")
-    curve_data.dimensions = "3D"
-    curve_data.resolution_u = 12
+    _configure_sheet_curve(curve_data, use_tubes)
 
     curve_data.bevel_depth = _curve_bevel_depth(line_width, use_tubes)
 
@@ -290,13 +321,14 @@ def _create_multi_poly_curve(
         return None
 
     curve_data = bpy.data.curves.new(name=name, type="CURVE")
-    curve_data.dimensions = "3D"
-    curve_data.resolution_u = 12
+    _configure_sheet_curve(curve_data, use_tubes)
 
     curve_data.bevel_depth = _curve_bevel_depth(line_width, use_tubes)
 
     for run in valid_runs:
-        pts_m = [(x * MM_TO_M, y * MM_TO_M) for x, y in run]
+        pts_m = _points_m_from_mm(run)
+        if len(pts_m) < 2:
+            continue
         spline = curve_data.splines.new("POLY")
         _write_spline_points(spline, pts_m, z_offset_m=z_offset_m)
         spline.use_cyclic_u = False
@@ -575,7 +607,7 @@ def _create_nurbs_circle(
 ) -> bpy.types.Object:
     """Create a NURBS circle curve object."""
     curve_data = bpy.data.curves.new(name=name, type="CURVE")
-    curve_data.dimensions = "3D"
+    _configure_sheet_curve(curve_data, use_tubes)
 
     curve_data.bevel_depth = _curve_bevel_depth(line_width, use_tubes)
 
@@ -922,19 +954,25 @@ def build_page(
 
     def _flush_open_curve_batches() -> int:
         created = 0
-        for index, batch in enumerate(open_curve_batches.values(), start=1):
-            obj_name = f"P{page_data.page_number}_batch_{index:03d}"
-            obj = _create_multi_poly_curve(
-                obj_name,
-                batch["runs"],
-                batch["collection"],
-                batch["line_width"],
-                batch["material"],
-                z_offset_m=line_z_offset_m,
-                use_tubes=use_line_tubes,
-            )
-            if obj is not None:
-                created += 1
+        index = 0
+        max_runs = max(1, int(_MAX_OPEN_CURVE_RUNS_PER_OBJECT))
+        for batch in open_curve_batches.values():
+            runs = batch["runs"]
+            for start in range(0, len(runs), max_runs):
+                chunk = runs[start : start + max_runs]
+                index += 1
+                obj_name = f"P{page_data.page_number}_batch_{index:03d}"
+                obj = _create_multi_poly_curve(
+                    obj_name,
+                    chunk,
+                    batch["collection"],
+                    batch["line_width"],
+                    batch["material"],
+                    z_offset_m=line_z_offset_m,
+                    use_tubes=use_line_tubes,
+                )
+                if obj is not None:
+                    created += 1
         stats["batched_curve_objects"] = created
         stats["curves"] += created
         open_curve_batches.clear()

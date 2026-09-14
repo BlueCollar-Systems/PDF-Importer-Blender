@@ -103,7 +103,7 @@ _CHARACTER_VERIFICATION_KEEP = {
     "text_material",
     "text_material_owned",
 }
-# Import-session memo: resolved path → ((size, mtime_ns), sha256 hex)
+# Import-session memo: resolved path â†’ ((size, mtime_ns), sha256 hex)
 _DISK_FONT_SHA_MEMO: Dict[str, Tuple[Tuple[int, int], str]] = {}
 _TEXT_MODES = {"labels", "text", "3d_text", "glyphs", "geometry", "raster"}
 LOGGER = logging.getLogger(__name__)
@@ -610,7 +610,7 @@ def _blender_font_normalization_extent(asset) -> int:
     """Return the design-unit extent Blender maps one FONT data.size onto.
 
     Blender (via FreeType) normalizes an imported vector font by its GLOBAL
-    font bounding-box height — head.yMax - head.yMin for sfnt fonts — not by
+    font bounding-box height â€” head.yMax - head.yMin for sfnt fonts â€” not by
     units_per_em and not by hhea ascender-descender. Measured on Blender 5.2
     with the private regression fixture's embedded Arial subset: advance,
     ink width, and
@@ -682,7 +682,7 @@ def _converted_template_key(text_item, delivered):
 
 
 class _ConvertedGlyphTemplates:
-    """Page-scoped unique FONT→curve/mesh outlines for positioned glyphs/geometry."""
+    """Page-scoped unique FONTâ†’curve/mesh outlines for positioned glyphs/geometry."""
 
     def __init__(self):
         self._reserved = set()
@@ -965,6 +965,11 @@ def _apply_target_quad_affine(
                 raise RuntimeError("affine carrier target collection is unavailable")
             carrier = bpy.data.objects.new(f"{obj.name}_AffineCarrier", None)
             target_collection.objects.link(carrier)
+            # This Empty carries a shear transform; its metre-sized axis gizmo
+            # is not drawing ink and must never show through the PDF or frame it.
+            carrier["pdf_affine_carrier_helper"] = True
+            carrier.hide_set(True)
+            carrier.hide_select = True
             carrier.matrix_world = Matrix(parent_values)
             obj.parent = carrier
             obj.matrix_parent_inverse = Matrix.Identity(4)
@@ -1692,14 +1697,20 @@ def _verify_metric_character_transform(obj, text_item) -> tuple[list[str], Dict[
         local_advance = float(obj.get("pdf_metric_local_advance"))
         local_line_height = float(obj.get("pdf_metric_local_line_height"))
         local_baseline_y = float(obj.get("pdf_metric_local_baseline_y", 0.0) or 0.0)
-        actual_baseline_vec = matrix @ Vector((0.0, local_baseline_y, 0.0))
-        actual_advance_vec = matrix @ Vector((local_advance, local_baseline_y, 0.0))
-        actual_line_vec = matrix @ Vector(
-            (0.0, local_baseline_y + local_line_height, 0.0)
-        )
-        actual_baseline = (float(actual_baseline_vec[0]), float(actual_baseline_vec[1]))
-        actual_advance = (float(actual_advance_vec[0]), float(actual_advance_vec[1]))
-        actual_line = (float(actual_line_vec[0]), float(actual_line_vec[1]))
+        # Measure the stored float32 matrix with double-precision arithmetic.
+        # mathutils returns another float32 Vector: rounding the translated
+        # endpoint again falsely rejects small glyphs around metre coordinates.
+        # Keep the same matrix precision and absolute geometric tolerance.
+        def measured_xy(x: float, y: float) -> tuple[float, float]:
+            return tuple(
+                math.fsum((float(matrix[row][0]) * x,
+                           float(matrix[row][1]) * y, float(matrix[row][3])))
+                for row in (0, 1)
+            )
+
+        actual_baseline = measured_xy(0.0, local_baseline_y)
+        actual_advance = measured_xy(local_advance, local_baseline_y)
+        actual_line = measured_xy(0.0, local_baseline_y + local_line_height)
 
         target_quad = tuple(
             (float(point[0]) * MM_TO_M, float(point[1]) * MM_TO_M)
@@ -3467,7 +3478,7 @@ def _unevaluated_collection(collection):
 
     ``objects.new`` + ``collection.objects.link`` on an evaluated collection is
     the dense-page hot loop: each FONT source, instance, and affine carrier
-    dirties the depsgraph. Unique FONT→curve/mesh conversion still evaluates
+    dirties the depsgraph. Unique FONTâ†’curve/mesh conversion still evaluates
     after one page update; reused outlines stay linked with the collection
     excluded. Affines, linked datablocks, and inventory stay the same; the
     caller updates once after restore.
