@@ -1723,6 +1723,19 @@ def _create_font_candidate(
         )
 
 
+def _apply_recorded_affine(values, x: float, y: float) -> tuple[float, float]:
+    """Map a local (x, y) through a recorded row-major 4x4 affine, in doubles."""
+    return (
+        values[0] * x + values[1] * y + values[3],
+        values[4] * x + values[5] * y + values[7],
+    )
+
+
+def _host_single_precision(value: float) -> float:
+    """The value Blender holds once this double is stored in a float32 matrix."""
+    return struct.unpack("f", struct.pack("f", float(value)))[0]
+
+
 def _verify_metric_character_transform(obj, text_item) -> tuple[list[str], Dict[str, Any]]:
     failures: list[str] = []
     evidence: Dict[str, Any] = {
@@ -1730,33 +1743,31 @@ def _verify_metric_character_transform(obj, text_item) -> tuple[list[str], Dict[
         "metric_affine_applied": True,
     }
     try:
-        from mathutils import Matrix, Vector
-
         # Prefer the exact matrix written at placement time. Reading
         # obj.matrix_world without a depsgraph update is wrong for parented
         # affine carriers and previously forced one full scene update per span.
+        #
+        # The recorded matrix is double precision and so is this check.
+        # mathutils.Matrix stores and multiplies in single precision, whose
+        # spacing at [1, 2) m is 1.19e-7 m: evaluating the same matrix through
+        # it drifted by up to 1.13e-7 m for characters right of x = 1.0 m on a
+        # 1.22 m wide sheet (measured: 15 of 324 spans rejected at the 1e-7 m
+        # tolerance while the double-precision delta was exactly 0.0 for all
+        # 3,404 characters). The host's float32 storage is reported as the
+        # actual location; it is never the arbiter of the affine chain.
         intended_values = [float(value) for value in obj.get("pdf_affine_matrix", [])]
         if len(intended_values) != 16:
             raise ValueError("metric affine matrix was not recorded on the FONT object")
-        matrix = Matrix(
-            (
-                intended_values[0:4],
-                intended_values[4:8],
-                intended_values[8:12],
-                intended_values[12:16],
-            )
-        )
         local_advance = float(obj.get("pdf_metric_local_advance"))
         local_line_height = float(obj.get("pdf_metric_local_line_height"))
         local_baseline_y = float(obj.get("pdf_metric_local_baseline_y", 0.0) or 0.0)
-        actual_baseline_vec = matrix @ Vector((0.0, local_baseline_y, 0.0))
-        actual_advance_vec = matrix @ Vector((local_advance, local_baseline_y, 0.0))
-        actual_line_vec = matrix @ Vector(
-            (0.0, local_baseline_y + local_line_height, 0.0)
+        actual_baseline = _apply_recorded_affine(intended_values, 0.0, local_baseline_y)
+        actual_advance = _apply_recorded_affine(
+            intended_values, local_advance, local_baseline_y
         )
-        actual_baseline = (float(actual_baseline_vec[0]), float(actual_baseline_vec[1]))
-        actual_advance = (float(actual_advance_vec[0]), float(actual_advance_vec[1]))
-        actual_line = (float(actual_line_vec[0]), float(actual_line_vec[1]))
+        actual_line = _apply_recorded_affine(
+            intended_values, 0.0, local_baseline_y + local_line_height
+        )
 
         target_quad = tuple(
             (float(point[0]) * MM_TO_M, float(point[1]) * MM_TO_M)
@@ -1796,13 +1807,19 @@ def _verify_metric_character_transform(obj, text_item) -> tuple[list[str], Dict[
         )
         evidence.update(
             expected_location_m=list(target_origin),
-            actual_location_m=[float(matrix[0][3]), float(matrix[1][3])],
+            actual_location_m=[
+                _host_single_precision(intended_values[3]),
+                _host_single_precision(intended_values[7]),
+            ],
             evaluated_bounds_verified=True,
             metric_affine_applied=True,
             full_affine_applied=True,
         )
         if not all(math.isfinite(value) for value in finite_values):
             failures.append("nonfinite_metric_character_transform")
+        # 1e-7 m (0.1 um) against a double-precision evaluation: 400x finer
+        # than the 42.3 um quantum of a 600-dpi export and far above the
+        # ~1e-16 m relative residue of the affine chain itself.
         tolerance = 1e-7
         for actual, expected, reason in (
             (actual_baseline, target_origin, "evaluated_baseline_anchor_mismatch"),
@@ -1820,7 +1837,7 @@ def _verify_metric_character_transform(obj, text_item) -> tuple[list[str], Dict[
             or str(getattr(obj.parent, "name", "") or "") != carrier_name
         ):
             failures.append("affine_carrier_identity_mismatch")
-    except (AttributeError, ImportError, IndexError, TypeError, ValueError):
+    except (AttributeError, IndexError, TypeError, ValueError):
         failures.append("evaluated_metric_character_transform_unverifiable")
     return failures, evidence
 
