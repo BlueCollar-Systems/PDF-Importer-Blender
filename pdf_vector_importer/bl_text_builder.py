@@ -908,34 +908,60 @@ def _write_metric_placement_properties(
     ]
 
 
-# Blender's default empty display is PLAIN_AXES at 1.0 m. An affine carrier is a pure
-# transform holder that is never meant to be looked at, and one is created PER GLYPH, so
-# the defaults put a 2 m axis-cross on every character: a 1011 text import produced 4182
-# carriers on a 0.887 x 0.591 m sheet, and the viewport showed a solid black starburst
-# with the drawing buried inside it. Empties do not render, so camera-render checks (and
-# the visual oracle, which skips EMPTY objects entirely) could never see this -- it was
-# reported from the GUI by the owner.
+# Blender draws every EMPTY with its default PLAIN_AXES gizmo at
+# empty_display_size = 1 m unless told otherwise, and an affine carrier -- a
+# helper EMPTY holding the shear-free parent half of a factored glyph transform
+# (see _factor_affine_matrix_values) -- is created PER GLYPH.  The defaults put
+# a 2 m axis-cross on every character: a 1011 text import produced 4,182
+# carriers on a 0.887 x 0.591 m sheet and the viewport became a solid black
+# starburst with the drawing buried inside it.
 #
-# Size the cross to the glyph it carries so it stays selectable for debugging without
-# obscuring anything.
-_CARRIER_DISPLAY_MIN_M = 0.0002
-_CARRIER_DISPLAY_MAX_M = 0.01
+# Empties do not render, so camera-render checks could never see this (the
+# visual oracle skips obj.type == "EMPTY" entirely) -- it was reported from the
+# GUI by the owner, twice: first as the starburst, then on the S-505 foundation
+# sheet as vertical lines standing off the page when the view was tilted.
+#
+# The carrier is sized from the glyph it carries so it stays selectable for
+# debugging without obscuring anything: a fixed fraction of the target quad's
+# vertical edge, converted from model millimetres to metres, clamped so it is
+# never visible at sheet scale yet never collapses to a zero-size gizmo.  The
+# earlier fix scaled the quad extent without that conversion, so every glyph
+# hit the 10 mm ceiling and drew a 20 mm cross.  The gizmo's Z axis is
+# unaffected by the carrier's 2-D linear part, so the clamp bounds are world
+# extents.
+# An affine carrier is a helper EMPTY that holds the shear-free parent half of a
+# factored glyph transform (see _factor_affine_matrix_values).  Blender draws
+# every EMPTY with its default PLAIN_AXES gizmo at empty_display_size = 1 m
+# unless told otherwise: one 2 m vertical line through every positioned glyph
+# of a 1.2 m x 0.9 m sheet.  The carrier is sized from the glyph it carries --
+# a fixed fraction of the target quad's vertical edge (model millimetres,
+# converted to metres) and clamped so it is never visible at sheet scale yet
+# never collapses to a zero-size gizmo.  The gizmo's Z axis is unaffected by the
+# carrier's 2-D linear part, so the clamp bounds are world extents.
+_CARRIER_DISPLAY_FRACTION = 0.05
+_CARRIER_DISPLAY_MIN_M = 0.02 * MM_TO_M
+_CARRIER_DISPLAY_MAX_M = 0.5 * MM_TO_M
 
 
-def _carrier_display_size(target_quad) -> float:
-    """A glyph-scaled display size for an affine carrier empty."""
+def _carrier_display_size_m(target_quad) -> float:
+    """Display size (m) for an affine-carrier EMPTY, derived from its glyph."""
     try:
-        pts = [(float(p[0]), float(p[1])) for p in (target_quad or ())]
-        if len(pts) >= 2:
-            xs = [p[0] for p in pts]
-            ys = [p[1] for p in pts]
-            extent = max(max(xs) - min(xs), max(ys) - min(ys))
-            if extent > 0.0:
-                return min(_CARRIER_DISPLAY_MAX_M,
-                           max(_CARRIER_DISPLAY_MIN_M, extent * 0.5))
-    except (TypeError, ValueError, IndexError):
-        pass
-    return _CARRIER_DISPLAY_MIN_M
+        ul, _ur, _lr, ll = tuple(
+            (float(point[0]), float(point[1])) for point in target_quad
+        )
+        glyph_height_mm = math.hypot(ul[0] - ll[0], ul[1] - ll[1])
+    except (IndexError, TypeError, ValueError):
+        return _CARRIER_DISPLAY_MIN_M
+    if not math.isfinite(glyph_height_mm) or glyph_height_mm <= 0.0:
+        return _CARRIER_DISPLAY_MIN_M
+    size_m = glyph_height_mm * _CARRIER_DISPLAY_FRACTION * MM_TO_M
+    return min(_CARRIER_DISPLAY_MAX_M, max(_CARRIER_DISPLAY_MIN_M, size_m))
+
+
+def _configure_affine_carrier_display(carrier, target_quad) -> None:
+    """Make a helper EMPTY visually inert without changing what it carries."""
+    carrier.empty_display_type = "PLAIN_AXES"
+    carrier.empty_display_size = _carrier_display_size_m(target_quad)
 
 
 def _apply_target_quad_affine(
@@ -994,10 +1020,7 @@ def _apply_target_quad_affine(
             if target_collection is None:
                 raise RuntimeError("affine carrier target collection is unavailable")
             carrier = bpy.data.objects.new(f"{obj.name}_AffineCarrier", None)
-            # Without these the empty draws a 1 m axis-cross per glyph and buries the
-            # drawing in the viewport (see _carrier_display_size).
-            carrier.empty_display_type = "PLAIN_AXES"
-            carrier.empty_display_size = _carrier_display_size(target_quad)
+            _configure_affine_carrier_display(carrier, target_quad)
             target_collection.objects.link(carrier)
             carrier.matrix_world = Matrix(parent_values)
             obj.parent = carrier
