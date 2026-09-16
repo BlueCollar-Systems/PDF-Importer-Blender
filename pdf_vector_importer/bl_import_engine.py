@@ -924,6 +924,17 @@ def _curve_spline_local_points(curve_data):
                     continue
 
 
+def _sheet_view_radius(min_v, max_v) -> float:
+    """Frame from sheet XY. A Z fence must not send the camera to infinity."""
+    span_x = abs(float(max_v.x) - float(min_v.x))
+    span_y = abs(float(max_v.y) - float(min_v.y))
+    span_z = abs(float(max_v.z) - float(min_v.z))
+    planar = max(span_x, span_y, 0.25)
+    if span_z > planar * 2.0 and max(span_x, span_y) <= 0.25:
+        return max(span_z, 0.25)
+    return planar
+
+
 def _world_bounds_for_objects(objects):
     try:
         from mathutils import Vector
@@ -1049,6 +1060,18 @@ def _text_item_profile(text_items) -> Dict[str, int]:
     return {"total": total, "longish": longish, "alpha": alpha}
 
 
+def _should_rasterize_auto_page(classification: dict) -> bool:
+    """Only a page without vector content needs automatic page rasterization.
+
+    Dense fills include hatches and thin filled strokes in technical drawings.
+    Complexity heuristics are not proof that their vector geometry is unusable.
+    """
+    return (
+        classification.get("type") == "raster_candidate"
+        and classification.get("drawing_count") == 0
+    )
+
+
 def _looks_like_text_cloud_page(primitives_count: int, text_items) -> bool:
     profile = _text_item_profile(text_items)
     total = profile["total"]
@@ -1169,9 +1192,24 @@ def _focus_view_on_import(
     if not objects:
         return False
 
-    # Ensure imported objects are visible before focusing.
+    # Transform carriers are support objects, not drawing content. Include
+    # older imports by following their owned FONT-to-carrier references too.
+    carrier_names = {
+        str(obj.get("pdf_affine_carrier", "") or "")
+        for obj in objects
+        if bool(obj.get("pdf_affine_carrier_owned", False))
+    }
+    # Ensure drawing objects are visible before focusing, without exposing the
+    # Empty axis gizmos or including their display size in view_selected.
     visible_objects = []
     for obj in objects:
+        if getattr(obj, "type", None) == "EMPTY" and (
+            bool(obj.get("pdf_affine_carrier_helper", False))
+            or str(obj.name) in carrier_names
+        ):
+            obj.hide_set(True)
+            obj.hide_select = True
+            continue
         try:
             obj.hide_set(False)
         except Exception:
@@ -1247,10 +1285,7 @@ def _focus_view_on_import(
                             bpy.ops.view3d.localview(frame_selected=False)
                         # Expand clip range so large drawings cannot disappear.
                         if min_v is not None and max_v is not None:
-                            span_x = abs(max_v.x - min_v.x)
-                            span_y = abs(max_v.y - min_v.y)
-                            span_z = abs(max_v.z - min_v.z)
-                            radius = max(span_x, span_y, span_z, 0.25)
+                            radius = _sheet_view_radius(min_v, max_v)
                             space.clip_start = max(1.0e-5, min(float(space.clip_start), radius / 10000.0))
                             space.clip_end = max(float(space.clip_end), radius * 200.0, 1000.0)
                     except Exception:
@@ -1267,10 +1302,7 @@ def _focus_view_on_import(
                             rv3d.view_perspective = "ORTHO"
                             if min_v is not None and max_v is not None:
                                 center = (min_v + max_v) * 0.5
-                                span_x = abs(max_v.x - min_v.x)
-                                span_y = abs(max_v.y - min_v.y)
-                                span_z = abs(max_v.z - min_v.z)
-                                radius = max(span_x, span_y, span_z, 0.25)
+                                radius = _sheet_view_radius(min_v, max_v)
                                 rv3d.view_location = center
                                 rv3d.view_distance = max(radius * 1.35, 0.4)
                         if prefer_material_preview:
@@ -1282,11 +1314,14 @@ def _focus_view_on_import(
                                 pass
                     except Exception:
                         pass
-                    # Re-frame after switching orientation.
-                    try:
-                        bpy.ops.view3d.view_selected(use_all_regions=False)
-                    except Exception:
-                        pass
+                    # bound_box is often collapsed on batched curves. Spline-aware
+                    # view_location/distance already framed the sheet; view_selected
+                    # would undo that using the stale box and zoom to infinity.
+                    if min_v is None or max_v is None:
+                        try:
+                            bpy.ops.view3d.view_selected(use_all_regions=False)
+                        except Exception:
+                            pass
                 focused = True
             except Exception:
                 continue
@@ -1326,10 +1361,7 @@ def _focus_view_on_import(
                                 rv3d.view_perspective = "ORTHO"
                                 if min_v is not None and max_v is not None:
                                     center = (min_v + max_v) * 0.5
-                                    span_x = abs(max_v.x - min_v.x)
-                                    span_y = abs(max_v.y - min_v.y)
-                                    span_z = abs(max_v.z - min_v.z)
-                                    radius = max(span_x, span_y, span_z, 0.25)
+                                    radius = _sheet_view_radius(min_v, max_v)
                                     rv3d.view_location = center
                                     rv3d.view_distance = max(radius * 1.35, 0.4)
                             if prefer_material_preview:
@@ -1341,10 +1373,11 @@ def _focus_view_on_import(
                                     pass
                         except Exception:
                             pass
-                        try:
-                            bpy.ops.view3d.view_all(center=False)
-                        except Exception:
-                            pass
+                        if min_v is None or max_v is None:
+                            try:
+                                bpy.ops.view3d.view_all(center=False)
+                            except Exception:
+                                pass
                     focused = True
                 except Exception:
                     continue
@@ -3347,7 +3380,7 @@ def import_pdf(
                     text_words_count=len(text_words),
                     page_area=page_area,
                 )
-                if classification["type"] in ("glyph_flood", "fill_art", "raster_candidate"):
+                if _should_rasterize_auto_page(classification):
                     _progress(
                         _page_progress(i, 0.15),
                         f"Auto-mode: {classification['reason']} — favoring raster import for page {page_num}",

@@ -19,6 +19,7 @@ from typing import Dict, Optional, Tuple
 import bpy
 import bmesh
 
+from .pdfcadcore.import_bounds import sheet_xy
 from .pdfcadcore.primitives import PageData, Primitive
 
 # mm -> m conversion (Blender world units are meters by default)
@@ -35,6 +36,9 @@ MM_PER_PT = 25.4 / 72.0
 _LINEWIDTH_SCALE = MM_TO_M * 0.5
 _MIN_BEVEL_DEPTH = 0.0000125  # 0.0125 mm radius -> ~0.025 mm visible hairline
 _DEFAULT_HAIRLINE_BEVEL_DEPTH = 0.000025  # PDF zero-width strokes render as ~0.05 mm
+# Dense E-size sheets batch tens of thousands of strokes onto one Curve.
+# SketchUp-style chunks keep bound_box / viewport updates usable.
+_MAX_OPEN_CURVE_RUNS_PER_OBJECT = 400
 
 # Number of sample points for arc approximation
 _ARC_SAMPLE_COUNT = 32
@@ -52,6 +56,50 @@ def _line_bevel_depth(line_width: Optional[float]) -> float:
     except (TypeError, ValueError):
         pass
     return _DEFAULT_HAIRLINE_BEVEL_DEPTH
+
+
+def _use_paper_space_tubes(config: Optional[dict]) -> bool:
+    """Preserve visible source-width strokes by default.
+
+    A curve with zero bevel has no drawable surface in solid/material views.
+    Keep the PDF's thin stroke radius; affine-carrier axes are hidden separately.
+    Explicit zero-bevel configuration remains available for wire-only workflows.
+    """
+    for key in ("paper_space_tubes", "line_bevel"):
+        if config and key in config:
+            return bool(config[key])
+    return True
+
+
+def _curve_bevel_depth(line_width: Optional[float], use_tubes: bool) -> float:
+    """Bevel radius for stroked curves; zero keeps paper-space sheets flat."""
+    if not use_tubes:
+        return 0.0
+    return _line_bevel_depth(line_width)
+
+
+def _configure_sheet_curve(curve_data, use_tubes: bool) -> None:
+    """Keep paper-space strokes on the XY sheet unless tubes are opted in."""
+    curve_data.resolution_u = 12
+    if use_tubes:
+        curve_data.dimensions = "3D"
+        return
+    curve_data.dimensions = "2D"
+    try:
+        curve_data.fill_mode = "NONE"
+    except (AttributeError, TypeError):
+        pass
+
+
+def _points_m_from_mm(points) -> list:
+    """Convert source mm points onto the sheet plane, then to Blender meters."""
+    out = []
+    for pt in points or ():
+        xy = sheet_xy(pt)
+        if xy is None:
+            continue
+        out.append((xy[0] * MM_TO_M, xy[1] * MM_TO_M))
+    return out
 
 
 # ── Material cache ───────────────────────────────────────────────────
@@ -190,7 +238,13 @@ def _write_spline_points(spline, points_m, z_offset_m: float = 0.0) -> None:
     Orthographic at the grid becomes a starburst instead of the sheet.
     ``foreach_set("co", ...)`` writes the runtime array on 3.2 through 5.2.
     """
-    count = len(points_m)
+    xy_m = []
+    for pt in points_m or ():
+        xy = sheet_xy(pt)
+        if xy is None:
+            continue
+        xy_m.append(xy)
+    count = len(xy_m)
     if count < 1:
         return
     existing = len(spline.points)
@@ -198,13 +252,15 @@ def _write_spline_points(spline, points_m, z_offset_m: float = 0.0) -> None:
         spline.points.add(count - existing)
     flat = []
     z_value = float(z_offset_m)
-    for x_m, y_m in points_m:
+    for x_m, y_m in xy_m:
         flat.extend((float(x_m), float(y_m), z_value, 1.0))
     writer = getattr(spline.points, "foreach_set", None)
     if callable(writer):
         writer("co", flat)
-        return
-    for index, (x_m, y_m) in enumerate(points_m):
+    # Blender 3.2 can leave the default first point at the origin even after
+    # foreach_set. Pin every vertex by component so origin-starburst cannot
+    # survive a partial write.
+    for index, (x_m, y_m) in enumerate(xy_m):
         co = spline.points[index].co
         try:
             co[0] = float(x_m)
@@ -223,15 +279,17 @@ def _create_poly_curve(
     line_width: Optional[float],
     material: bpy.types.Material,
     z_offset_m: float = 0.0,
+    use_tubes: bool = False,
 ) -> bpy.types.Object:
     """Create a Curve object with a POLY spline from a list of 2D points."""
-    points_m = [(x * MM_TO_M, y * MM_TO_M) for x, y in points]
+    points_m = _points_m_from_mm(points)
+    if len(points_m) < 2:
+        return None
 
     curve_data = bpy.data.curves.new(name=name, type="CURVE")
-    curve_data.dimensions = "3D"
-    curve_data.resolution_u = 12
+    _configure_sheet_curve(curve_data, use_tubes)
 
-    curve_data.bevel_depth = _line_bevel_depth(line_width)
+    curve_data.bevel_depth = _curve_bevel_depth(line_width, use_tubes)
 
     spline = curve_data.splines.new("POLY")
     _write_spline_points(spline, points_m, z_offset_m=z_offset_m)
@@ -252,6 +310,7 @@ def _create_multi_poly_curve(
     line_width: Optional[float],
     material: bpy.types.Material,
     z_offset_m: float = 0.0,
+    use_tubes: bool = False,
 ) -> Optional[bpy.types.Object]:
     """
     Create one Curve object containing multiple POLY splines.
@@ -262,13 +321,14 @@ def _create_multi_poly_curve(
         return None
 
     curve_data = bpy.data.curves.new(name=name, type="CURVE")
-    curve_data.dimensions = "3D"
-    curve_data.resolution_u = 12
+    _configure_sheet_curve(curve_data, use_tubes)
 
-    curve_data.bevel_depth = _line_bevel_depth(line_width)
+    curve_data.bevel_depth = _curve_bevel_depth(line_width, use_tubes)
 
     for run in valid_runs:
-        pts_m = [(x * MM_TO_M, y * MM_TO_M) for x, y in run]
+        pts_m = _points_m_from_mm(run)
+        if len(pts_m) < 2:
+            continue
         spline = curve_data.splines.new("POLY")
         _write_spline_points(spline, pts_m, z_offset_m=z_offset_m)
         spline.use_cyclic_u = False
@@ -449,6 +509,7 @@ def _draw_stroked_polyline(
     dash_pattern=None,
     dash_phase: float = 0.0,
     z_offset_m: float = 0.0,
+    use_tubes: bool = False,
 ) -> int:
     """
     Draw a solid or dashed polyline and return number of curve objects created.
@@ -465,6 +526,7 @@ def _draw_stroked_polyline(
             line_width,
             material,
             z_offset_m=z_offset_m,
+            use_tubes=use_tubes,
         )
         return 1
 
@@ -483,6 +545,7 @@ def _draw_stroked_polyline(
             line_width,
             material,
             z_offset_m=z_offset_m,
+            use_tubes=use_tubes,
         )
         return 1
 
@@ -493,6 +556,7 @@ def _draw_stroked_polyline(
         line_width,
         material,
         z_offset_m=z_offset_m,
+        use_tubes=use_tubes,
     )
     return 1 if created is not None else 0
 
@@ -539,12 +603,13 @@ def _create_nurbs_circle(
     line_width: Optional[float],
     material: bpy.types.Material,
     z_offset_m: float = 0.0,
+    use_tubes: bool = False,
 ) -> bpy.types.Object:
     """Create a NURBS circle curve object."""
     curve_data = bpy.data.curves.new(name=name, type="CURVE")
-    curve_data.dimensions = "3D"
+    _configure_sheet_curve(curve_data, use_tubes)
 
-    curve_data.bevel_depth = _line_bevel_depth(line_width)
+    curve_data.bevel_depth = _curve_bevel_depth(line_width, use_tubes)
 
     # Blender NURBS circle: 8-point circle approximation
     spline = curve_data.splines.new("NURBS")
@@ -797,6 +862,8 @@ def build_page(
     # Points -> model mm for dash arrays; the engine passes MM_PER_PT *
     # user_scale (what the extractor used for coordinates and line_width).
     pt_to_model_mm = config.get("pt_to_model_mm", MM_PER_PT)
+    # Keep source-width strokes visible; explicit wire-only configuration is optional.
+    use_line_tubes = _use_paper_space_tubes(config)
 
     def _prim_dashes(prim: Primitive) -> Tuple[Optional[list], float]:
         """Dash array/phase for a primitive in model mm (None when unmapped)."""
@@ -856,6 +923,7 @@ def build_page(
                 dash_pattern=dash_pattern,
                 dash_phase=dash_phase,
                 z_offset_m=line_z_offset_m,
+                use_tubes=use_line_tubes,
             )
 
         runs = _dash_polyline(points, dash_pattern, dash_phase=dash_phase) if dash_pattern else [points]
@@ -886,18 +954,25 @@ def build_page(
 
     def _flush_open_curve_batches() -> int:
         created = 0
-        for index, batch in enumerate(open_curve_batches.values(), start=1):
-            obj_name = f"P{page_data.page_number}_batch_{index:03d}"
-            obj = _create_multi_poly_curve(
-                obj_name,
-                batch["runs"],
-                batch["collection"],
-                batch["line_width"],
-                batch["material"],
-                z_offset_m=line_z_offset_m,
-            )
-            if obj is not None:
-                created += 1
+        index = 0
+        max_runs = max(1, int(_MAX_OPEN_CURVE_RUNS_PER_OBJECT))
+        for batch in open_curve_batches.values():
+            runs = batch["runs"]
+            for start in range(0, len(runs), max_runs):
+                chunk = runs[start : start + max_runs]
+                index += 1
+                obj_name = f"P{page_data.page_number}_batch_{index:03d}"
+                obj = _create_multi_poly_curve(
+                    obj_name,
+                    chunk,
+                    batch["collection"],
+                    batch["line_width"],
+                    batch["material"],
+                    z_offset_m=line_z_offset_m,
+                    use_tubes=use_line_tubes,
+                )
+                if obj is not None:
+                    created += 1
         stats["batched_curve_objects"] = created
         stats["curves"] += created
         open_curve_batches.clear()
@@ -1030,6 +1105,7 @@ def build_page(
                         prim.line_width,
                         mat,
                         z_offset_m=line_z_offset_m,
+                        use_tubes=use_line_tubes,
                     )
                     stats["circles"] += 1
             elif prim.points and len(prim.points) >= 3:
@@ -1073,6 +1149,7 @@ def build_page(
                         prim.line_width,
                         mat,
                         z_offset_m=line_z_offset_m,
+                        use_tubes=use_line_tubes,
                     )
                     stats["curves"] += 1
 
@@ -1100,6 +1177,7 @@ def build_page(
                         obj_name + "_outline", prim.points, True, target_col,
                         prim.line_width, mat,
                         z_offset_m=line_z_offset_m,
+                        use_tubes=use_line_tubes,
                     )
                 _create_face_mesh(
                     obj_name + "_face", prim.points, target_col, face_mat, z_offset_m=face_z,
@@ -1123,6 +1201,7 @@ def build_page(
                     obj_name, prim.points, True, target_col,
                     prim.line_width, mat,
                     z_offset_m=line_z_offset_m,
+                        use_tubes=use_line_tubes,
                 )
                 stats["curves"] += 1
                 if _model3d_should_extrude(prim, page_area, has_fill, config, prim.points):
@@ -1160,6 +1239,7 @@ def build_page(
                     dash_pattern=dash_pattern_mm,
                     dash_phase=dash_phase_mm,
                     z_offset_m=line_z_offset_m,
+                        use_tubes=use_line_tubes,
                 )
                 stats["curves"] += created
                 if created > 0:

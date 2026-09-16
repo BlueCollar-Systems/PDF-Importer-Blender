@@ -1022,6 +1022,11 @@ def _apply_target_quad_affine(
             carrier = bpy.data.objects.new(f"{obj.name}_AffineCarrier", None)
             _configure_affine_carrier_display(carrier, target_quad)
             target_collection.objects.link(carrier)
+            # This Empty carries a shear transform; its metre-sized axis gizmo
+            # is not drawing ink and must never show through the PDF or frame it.
+            carrier["pdf_affine_carrier_helper"] = True
+            carrier.hide_set(True)
+            carrier.hide_select = True
             carrier.matrix_world = Matrix(parent_values)
             obj.parent = carrier
             obj.matrix_parent_inverse = Matrix.Identity(4)

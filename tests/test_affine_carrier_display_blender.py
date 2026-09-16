@@ -69,6 +69,11 @@ class _HostObject(dict):
         self.matrix_parent_inverse = None
         self.users_collection = ()
         self.bound_box = ()
+        self.hidden = False
+        self.hide_select = False
+
+    def hide_set(self, value):
+        self.hidden = bool(value)
 
 
 class _Objects:
@@ -159,6 +164,9 @@ def test_affine_carrier_empty_is_sized_from_the_glyph_it_carries(monkeypatch):
     assert carrier is not None
     assert carrier.data is None
     assert carrier.type == "EMPTY"
+    assert carrier.hidden is True
+    assert carrier.hide_select is True
+    assert carrier["pdf_affine_carrier_helper"] is True
     # Blender's default gizmo is 1 m; the carrier must have been re-sized.
     assert carrier.empty_display_type == "PLAIN_AXES"
     # 5 % of the quad's vertical edge: hypot(1 mm shear, 5 mm height) = 5.099 mm.
