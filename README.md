@@ -2,7 +2,7 @@
 
 [![Version](https://img.shields.io/badge/Version-1.0.98-blue.svg)]()
 
-**BUILT. NOT BOUGHT.** -- BlueCollar Systems
+**BUILT. NOT BOUGHT.** -- BlueCollar-Systems
 
 Import PDF vector drawings as native Blender geometry (Curves, Collections, Materials).
 Powered by the pdfcadcore shared extraction library and PyMuPDF.
@@ -209,7 +209,7 @@ Blender refuses bad PDFs at open time (**fail closed**). SketchUp may fail open 
 
 ## License
 
-MIT -- Copyright (c) 2024-2026 BlueCollar Systems
+MIT -- Copyright (c) 2024-2026 BlueCollar-Systems
 
 See [LICENSE](LICENSE) for full text.
 
