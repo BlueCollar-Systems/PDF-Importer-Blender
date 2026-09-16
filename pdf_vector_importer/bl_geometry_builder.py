@@ -862,7 +862,7 @@ def build_page(
     # Points -> model mm for dash arrays; the engine passes MM_PER_PT *
     # user_scale (what the extractor used for coordinates and line_width).
     pt_to_model_mm = config.get("pt_to_model_mm", MM_PER_PT)
-    # Flat paper-space curves by default; tubes are opt-in (see S-505 orbit posts).
+    # Keep source-width strokes visible; explicit wire-only configuration is optional.
     use_line_tubes = _use_paper_space_tubes(config)
 
     def _prim_dashes(prim: Primitive) -> Tuple[Optional[list], float]:
@@ -1201,7 +1201,7 @@ def build_page(
                     obj_name, prim.points, True, target_col,
                     prim.line_width, mat,
                     z_offset_m=line_z_offset_m,
-                        use_tubes=use_line_tubes,
+                    use_tubes=use_line_tubes,
                 )
                 stats["curves"] += 1
                 if _model3d_should_extrude(prim, page_area, has_fill, config, prim.points):
@@ -1239,7 +1239,7 @@ def build_page(
                     dash_pattern=dash_pattern_mm,
                     dash_phase=dash_phase_mm,
                     z_offset_m=line_z_offset_m,
-                        use_tubes=use_line_tubes,
+                    use_tubes=use_line_tubes,
                 )
                 stats["curves"] += created
                 if created > 0:

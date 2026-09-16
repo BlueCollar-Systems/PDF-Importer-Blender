@@ -103,7 +103,7 @@ _CHARACTER_VERIFICATION_KEEP = {
     "text_material",
     "text_material_owned",
 }
-# Import-session memo: resolved path â†’ ((size, mtime_ns), sha256 hex)
+# Import-session memo: resolved path → ((size, mtime_ns), sha256 hex)
 _DISK_FONT_SHA_MEMO: Dict[str, Tuple[Tuple[int, int], str]] = {}
 _TEXT_MODES = {"labels", "text", "3d_text", "glyphs", "geometry", "raster"}
 LOGGER = logging.getLogger(__name__)
@@ -610,7 +610,7 @@ def _blender_font_normalization_extent(asset) -> int:
     """Return the design-unit extent Blender maps one FONT data.size onto.
 
     Blender (via FreeType) normalizes an imported vector font by its GLOBAL
-    font bounding-box height â€” head.yMax - head.yMin for sfnt fonts â€” not by
+    font bounding-box height — head.yMax - head.yMin for sfnt fonts — not by
     units_per_em and not by hhea ascender-descender. Measured on Blender 5.2
     with the private regression fixture's embedded Arial subset: advance,
     ink width, and
@@ -682,7 +682,7 @@ def _converted_template_key(text_item, delivered):
 
 
 class _ConvertedGlyphTemplates:
-    """Page-scoped unique FONTâ†’curve/mesh outlines for positioned glyphs/geometry."""
+    """Page-scoped unique FONT→curve/mesh outlines for positioned glyphs/geometry."""
 
     def __init__(self):
         self._reserved = set()
@@ -908,6 +908,62 @@ def _write_metric_placement_properties(
     ]
 
 
+# Blender draws every EMPTY with its default PLAIN_AXES gizmo at
+# empty_display_size = 1 m unless told otherwise, and an affine carrier -- a
+# helper EMPTY holding the shear-free parent half of a factored glyph transform
+# (see _factor_affine_matrix_values) -- is created PER GLYPH.  The defaults put
+# a 2 m axis-cross on every character: a 1011 text import produced 4,182
+# carriers on a 0.887 x 0.591 m sheet and the viewport became a solid black
+# starburst with the drawing buried inside it.
+#
+# Empties do not render, so camera-render checks could never see this (the
+# visual oracle skips obj.type == "EMPTY" entirely) -- it was reported from the
+# GUI by the owner, twice: first as the starburst, then on the S-505 foundation
+# sheet as vertical lines standing off the page when the view was tilted.
+#
+# The carrier is sized from the glyph it carries so it stays selectable for
+# debugging without obscuring anything: a fixed fraction of the target quad's
+# vertical edge, converted from model millimetres to metres, clamped so it is
+# never visible at sheet scale yet never collapses to a zero-size gizmo.  The
+# earlier fix scaled the quad extent without that conversion, so every glyph
+# hit the 10 mm ceiling and drew a 20 mm cross.  The gizmo's Z axis is
+# unaffected by the carrier's 2-D linear part, so the clamp bounds are world
+# extents.
+# An affine carrier is a helper EMPTY that holds the shear-free parent half of a
+# factored glyph transform (see _factor_affine_matrix_values).  Blender draws
+# every EMPTY with its default PLAIN_AXES gizmo at empty_display_size = 1 m
+# unless told otherwise: one 2 m vertical line through every positioned glyph
+# of a 1.2 m x 0.9 m sheet.  The carrier is sized from the glyph it carries --
+# a fixed fraction of the target quad's vertical edge (model millimetres,
+# converted to metres) and clamped so it is never visible at sheet scale yet
+# never collapses to a zero-size gizmo.  The gizmo's Z axis is unaffected by the
+# carrier's 2-D linear part, so the clamp bounds are world extents.
+_CARRIER_DISPLAY_FRACTION = 0.05
+_CARRIER_DISPLAY_MIN_M = 0.02 * MM_TO_M
+_CARRIER_DISPLAY_MAX_M = 0.5 * MM_TO_M
+
+
+def _carrier_display_size_m(target_quad) -> float:
+    """Display size (m) for an affine-carrier EMPTY, derived from its glyph."""
+    try:
+        ul, _ur, _lr, ll = tuple(
+            (float(point[0]), float(point[1])) for point in target_quad
+        )
+        glyph_height_mm = math.hypot(ul[0] - ll[0], ul[1] - ll[1])
+    except (IndexError, TypeError, ValueError):
+        return _CARRIER_DISPLAY_MIN_M
+    if not math.isfinite(glyph_height_mm) or glyph_height_mm <= 0.0:
+        return _CARRIER_DISPLAY_MIN_M
+    size_m = glyph_height_mm * _CARRIER_DISPLAY_FRACTION * MM_TO_M
+    return min(_CARRIER_DISPLAY_MAX_M, max(_CARRIER_DISPLAY_MIN_M, size_m))
+
+
+def _configure_affine_carrier_display(carrier, target_quad) -> None:
+    """Make a helper EMPTY visually inert without changing what it carries."""
+    carrier.empty_display_type = "PLAIN_AXES"
+    carrier.empty_display_size = _carrier_display_size_m(target_quad)
+
+
 def _apply_target_quad_affine(
     obj,
     text_item,
@@ -964,6 +1020,7 @@ def _apply_target_quad_affine(
             if target_collection is None:
                 raise RuntimeError("affine carrier target collection is unavailable")
             carrier = bpy.data.objects.new(f"{obj.name}_AffineCarrier", None)
+            _configure_affine_carrier_display(carrier, target_quad)
             target_collection.objects.link(carrier)
             # This Empty carries a shear transform; its metre-sized axis gizmo
             # is not drawing ink and must never show through the PDF or frame it.
@@ -1671,6 +1728,19 @@ def _create_font_candidate(
         )
 
 
+def _apply_recorded_affine(values, x: float, y: float) -> tuple[float, float]:
+    """Map a local (x, y) through a recorded row-major 4x4 affine, in doubles."""
+    return (
+        values[0] * x + values[1] * y + values[3],
+        values[4] * x + values[5] * y + values[7],
+    )
+
+
+def _host_single_precision(value: float) -> float:
+    """The value Blender holds once this double is stored in a float32 matrix."""
+    return struct.unpack("f", struct.pack("f", float(value)))[0]
+
+
 def _verify_metric_character_transform(obj, text_item) -> tuple[list[str], Dict[str, Any]]:
     failures: list[str] = []
     evidence: Dict[str, Any] = {
@@ -1678,39 +1748,31 @@ def _verify_metric_character_transform(obj, text_item) -> tuple[list[str], Dict[
         "metric_affine_applied": True,
     }
     try:
-        from mathutils import Matrix, Vector
-
         # Prefer the exact matrix written at placement time. Reading
         # obj.matrix_world without a depsgraph update is wrong for parented
         # affine carriers and previously forced one full scene update per span.
+        #
+        # The recorded matrix is double precision and so is this check.
+        # mathutils.Matrix stores and multiplies in single precision, whose
+        # spacing at [1, 2) m is 1.19e-7 m: evaluating the same matrix through
+        # it drifted by up to 1.13e-7 m for characters right of x = 1.0 m on a
+        # 1.22 m wide sheet (measured: 15 of 324 spans rejected at the 1e-7 m
+        # tolerance while the double-precision delta was exactly 0.0 for all
+        # 3,404 characters). The host's float32 storage is reported as the
+        # actual location; it is never the arbiter of the affine chain.
         intended_values = [float(value) for value in obj.get("pdf_affine_matrix", [])]
         if len(intended_values) != 16:
             raise ValueError("metric affine matrix was not recorded on the FONT object")
-        matrix = Matrix(
-            (
-                intended_values[0:4],
-                intended_values[4:8],
-                intended_values[8:12],
-                intended_values[12:16],
-            )
-        )
         local_advance = float(obj.get("pdf_metric_local_advance"))
         local_line_height = float(obj.get("pdf_metric_local_line_height"))
         local_baseline_y = float(obj.get("pdf_metric_local_baseline_y", 0.0) or 0.0)
-        # Measure the stored float32 matrix with double-precision arithmetic.
-        # mathutils returns another float32 Vector: rounding the translated
-        # endpoint again falsely rejects small glyphs around metre coordinates.
-        # Keep the same matrix precision and absolute geometric tolerance.
-        def measured_xy(x: float, y: float) -> tuple[float, float]:
-            return tuple(
-                math.fsum((float(matrix[row][0]) * x,
-                           float(matrix[row][1]) * y, float(matrix[row][3])))
-                for row in (0, 1)
-            )
-
-        actual_baseline = measured_xy(0.0, local_baseline_y)
-        actual_advance = measured_xy(local_advance, local_baseline_y)
-        actual_line = measured_xy(0.0, local_baseline_y + local_line_height)
+        actual_baseline = _apply_recorded_affine(intended_values, 0.0, local_baseline_y)
+        actual_advance = _apply_recorded_affine(
+            intended_values, local_advance, local_baseline_y
+        )
+        actual_line = _apply_recorded_affine(
+            intended_values, 0.0, local_baseline_y + local_line_height
+        )
 
         target_quad = tuple(
             (float(point[0]) * MM_TO_M, float(point[1]) * MM_TO_M)
@@ -1750,13 +1812,19 @@ def _verify_metric_character_transform(obj, text_item) -> tuple[list[str], Dict[
         )
         evidence.update(
             expected_location_m=list(target_origin),
-            actual_location_m=[float(matrix[0][3]), float(matrix[1][3])],
+            actual_location_m=[
+                _host_single_precision(intended_values[3]),
+                _host_single_precision(intended_values[7]),
+            ],
             evaluated_bounds_verified=True,
             metric_affine_applied=True,
             full_affine_applied=True,
         )
         if not all(math.isfinite(value) for value in finite_values):
             failures.append("nonfinite_metric_character_transform")
+        # 1e-7 m (0.1 um) against a double-precision evaluation: 400x finer
+        # than the 42.3 um quantum of a 600-dpi export and far above the
+        # ~1e-16 m relative residue of the affine chain itself.
         tolerance = 1e-7
         for actual, expected, reason in (
             (actual_baseline, target_origin, "evaluated_baseline_anchor_mismatch"),
@@ -1774,7 +1842,7 @@ def _verify_metric_character_transform(obj, text_item) -> tuple[list[str], Dict[
             or str(getattr(obj.parent, "name", "") or "") != carrier_name
         ):
             failures.append("affine_carrier_identity_mismatch")
-    except (AttributeError, ImportError, IndexError, TypeError, ValueError):
+    except (AttributeError, IndexError, TypeError, ValueError):
         failures.append("evaluated_metric_character_transform_unverifiable")
     return failures, evidence
 
@@ -3478,7 +3546,7 @@ def _unevaluated_collection(collection):
 
     ``objects.new`` + ``collection.objects.link`` on an evaluated collection is
     the dense-page hot loop: each FONT source, instance, and affine carrier
-    dirties the depsgraph. Unique FONTâ†’curve/mesh conversion still evaluates
+    dirties the depsgraph. Unique FONT→curve/mesh conversion still evaluates
     after one page update; reused outlines stay linked with the collection
     excluded. Affines, linked datablocks, and inventory stay the same; the
     caller updates once after restore.

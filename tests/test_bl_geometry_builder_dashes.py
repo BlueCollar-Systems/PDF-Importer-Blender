@@ -76,7 +76,8 @@ def _build_dashed_line(
     )
     captured = {}
 
-    def fake_multi_poly(name, runs, collection, line_width, material, z_offset_m=0.0):
+    def fake_multi_poly(name, runs, collection, line_width, material, z_offset_m=0.0, use_tubes=True):
+        assert use_tubes is True  # Default imports preserve visible source-width strokes.
         captured["runs"] = [list(run) for run in runs]
         return object()
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # PDF Vector Importer for Blender — Addon registration
-# Copyright (c) 2024-2026 BlueCollar Systems — BUILT. NOT BOUGHT.
+# Copyright (c) 2024-2026 BlueCollar-Systems — BUILT. NOT BOUGHT.
 # License: MIT
 """
 Blender addon that imports PDF vector drawings as native geometry.
@@ -10,8 +10,8 @@ from __future__ import annotations
 
 bl_info = {
     "name": "PDF Vector Importer",
-    "author": "BlueCollar Systems",
-    "version": (1, 0, 94),
+    "author": "BlueCollar-Systems",
+    "version": (1, 0, 98),
     "blender": (3, 1, 0),
     "location": "File > Import > PDF Vector (.pdf)",
     "description": "Import PDF vector drawings as native Blender geometry",

@@ -908,22 +908,21 @@ def _unhide_collection_tree(root_collection: bpy.types.Collection) -> None:
 
 
 def _curve_spline_local_points(curve_data):
-    """Return stored POLY/NURBS/Bezier coordinates, ignoring stale bound_box."""
-    points = []
+    """Yield stored POLY/NURBS/Bezier bounds without materializing all points."""
     for spline in getattr(curve_data, "splines", None) or ():
         for point in getattr(spline, "points", None) or ():
             try:
                 co = point.co
-                points.append((float(co[0]), float(co[1]), float(co[2])))
+                yield (float(co[0]), float(co[1]), float(co[2]))
             except (AttributeError, IndexError, TypeError, ValueError):
                 continue
         for point in getattr(spline, "bezier_points", None) or ():
-            try:
-                co = point.co
-                points.append((float(co[0]), float(co[1]), float(co[2])))
-            except (AttributeError, IndexError, TypeError, ValueError):
-                continue
-    return points
+            for attr in ("co", "handle_left", "handle_right"):
+                try:
+                    co = getattr(point, attr)
+                    yield (float(co[0]), float(co[1]), float(co[2]))
+                except (AttributeError, IndexError, TypeError, ValueError):
+                    continue
 
 
 def _sheet_view_radius(min_v, max_v) -> float:
@@ -1086,9 +1085,35 @@ def _looks_like_text_cloud_page(primitives_count: int, text_items) -> bool:
     text_to_vector_ratio = total / float(max(primitives_count, 1))
     alpha_ratio = alpha / float(max(total, 1))
 
+    # Rasterizing discards every vector the page carries, so it is only right
+    # when the vectors are not the content: both rules below require the text
+    # to outnumber the primitives 2.5 to 1. They differ in how narrative the
+    # text itself has to look.
+
     # Typical CAD drawings have lots of short tokens (fractions, IDs).
     # Narrative map/plan pages tend to have many longer, multi-word runs.
     if long_ratio >= 0.28 and alpha_ratio >= 0.55 and text_to_vector_ratio >= 2.5:
+        return True
+
+    # Heavy text-dominated pages whose labels are less purely alphabetic than
+    # rule A demands (numeric map annotation, schedules).
+    #
+    # This rule used to fire on primitive count and text count alone, on the
+    # premise that "heavy pages can hang". That premise was measured false and
+    # the rule was costing real drawings: a 48 x 36 in foundation sheet with a
+    # concrete hatch (30,270 primitives, 324 labels, text-to-vector ratio
+    # 0.0098 -- the vectors ARE the content) was replaced by a single
+    # 14400 x 10800 raster plane, a 622 MB texture that made the viewport
+    # unusable, while building the same page as vectors took 11.8 s end to end.
+    # Heavy-page cost is bounded where it belongs: the geometry builder batches
+    # open curves, and the complexity tier and cancel heartbeat already cover
+    # long builds.
+    if (
+        primitives_count >= 12000
+        and total >= 300
+        and long_ratio >= 0.20
+        and text_to_vector_ratio >= 2.5
+    ):
         return True
 
     return False
@@ -1927,6 +1952,42 @@ def _pixmap_is_fully_transparent(pix, samples: bytes) -> bool:
     return True
 
 
+class _PageDisplayListRenderer:
+    """Render every item-scoped raster clip of one page from one display list.
+
+    ``Page.get_pixmap`` builds a fresh display list (every path on the page)
+    on each call and discards it.  On a 452k-path submittal sheet, 135 text
+    items delivered as raster clips rebuilt that list 135 times: 77 s of a
+    140 s import.  ``Page.get_pixmap`` itself is ``get_displaylist(annots=True)``
+    followed by ``DisplayList.get_pixmap(matrix, csRGB, alpha, clip)``, so
+    rendering the clips from one retained list is the same MuPDF path and the
+    same pixels.  A page that cannot provide a display list (host-test doubles,
+    a MuPDF failure) renders through ``page.get_pixmap`` exactly as before.
+    """
+
+    def __init__(self, page) -> None:
+        self._page = page
+        self._display_list = None
+        self._unavailable = False
+
+    def get_pixmap(self, *, matrix, clip, alpha):
+        if not self._unavailable and self._display_list is None:
+            builder = getattr(self._page, "get_displaylist", None)
+            if callable(builder):
+                try:
+                    self._display_list = builder(annots=True)
+                except (RuntimeError, TypeError, ValueError):
+                    self._display_list = None
+            if self._display_list is None:
+                self._unavailable = True
+        if self._unavailable:
+            return self._page.get_pixmap(matrix=matrix, clip=clip, alpha=alpha)
+        return self._display_list.get_pixmap(matrix=matrix, alpha=alpha, clip=clip)
+
+    def release(self) -> None:
+        self._display_list = None
+
+
 def _render_text_item_raster(
     page,
     text_item,
@@ -1939,6 +2000,7 @@ def _render_text_item_raster(
     z_offset_m: float = 0.0,
     image_cache: Optional[_ImportImageCache] = None,
     style_identity: tuple[Any, ...] = ("source", "base-color-alpha", "hashed"),
+    renderer: Optional[_PageDisplayListRenderer] = None,
 ) -> Optional[bpy.types.Object]:
     """Render and verify one text span as the terminal item-scoped fallback."""
     source_bbox = getattr(text_item, "source_bbox_pdf", None)
@@ -1994,7 +2056,8 @@ def _render_text_item_raster(
         return None
     image_path = os.path.join(image_dir, f"{safe_id}_{dpi}dpi.png")
     try:
-        pix = page.get_pixmap(matrix=matrix, clip=clip, alpha=True)
+        source = renderer if renderer is not None else page
+        pix = source.get_pixmap(matrix=matrix, clip=clip, alpha=True)
         if int(getattr(pix, "width", 0) or 0) <= 0 or int(getattr(pix, "height", 0) or 0) <= 0:
             return None
         samples = bytes(getattr(pix, "samples", b"") or b"")
@@ -2717,6 +2780,45 @@ def _world_xy_close(actual, expected):
     return True
 
 
+class _ObjectNameLookup:
+    """Answer ``bpy.data.objects.get(name)`` from one pass over the registry.
+
+    ``bpy.data.objects.get`` walks the whole ID list per call: binding the
+    4,182 delivered text entities of the 1011 page on its 8,837-object scene
+    cost 1.3 s of an 8 s import.  Object names are unique, so a snapshot taken
+    before the loop gives the same answer as ``get`` for every name, and the
+    snapshot is dropped whenever a cleanup removes objects.  A registry that
+    cannot be iterated (host-test doubles) keeps answering through ``get``.
+    """
+
+    _UNAVAILABLE = object()
+
+    def __init__(self, registry) -> None:
+        self._registry = registry
+        self._get = getattr(registry, "get", None)
+        self._snapshot: Any = None
+
+    def _build(self) -> None:
+        snapshot: dict[str, Any] = {}
+        try:
+            for obj in self._registry:
+                snapshot.setdefault(str(obj.name), obj)
+        except (AttributeError, ReferenceError, RuntimeError, TypeError):
+            self._snapshot = self._UNAVAILABLE
+            return
+        self._snapshot = snapshot
+
+    def get(self, name: str):
+        if self._snapshot is None:
+            self._build()
+        if self._snapshot is self._UNAVAILABLE:
+            return self._get(name) if callable(self._get) else None
+        return self._snapshot.get(name)
+
+    def invalidate(self) -> None:
+        self._snapshot = None
+
+
 def _reverify_text_delivery_after_stack(
     delivery_records,
     *,
@@ -2739,7 +2841,8 @@ def _reverify_text_delivery_after_stack(
     except (AttributeError, ReferenceError, RuntimeError):
         pass
     registry = getattr(getattr(bpy, "data", None), "objects", None)
-    getter = getattr(registry, "get", None)
+    lookup = _ObjectNameLookup(registry)
+    getter = lookup.get
     for record in tuple(delivery_records or ()):
         if (
             int(record.get("page", 0) or 0) != int(page_number)
@@ -2823,6 +2926,8 @@ def _reverify_text_delivery_after_stack(
                     }
                 if cleanup.get("status") == "complete" and isinstance(outcomes, dict):
                     outcomes.pop(item_id, None)
+                # Objects may have been removed; later names must not resolve to them.
+                lookup.invalidate()
             final_proof["cleanup"] = cleanup
             failure = {
                 "item_id": item_id,
@@ -3420,6 +3525,7 @@ def import_pdf(
                         f"Building text for page {_pn}... ({int(frac * 100)}%)",
                     )
                 try:
+                    page_raster_renderer = _PageDisplayListRenderer(page)
                     text_count = build_all_text(
                         page_data.text_items,
                         page_col,
@@ -3432,7 +3538,8 @@ def import_pdf(
                         provenance_opts=import_cfg,
                         terminal_raster_callback=(
                         lambda text_item, collection, callback_page_number, item_id,
-                        _page=page, _cfg=import_cfg, _dir=image_dir, _z=text_z_offset_m:
+                        _page=page, _cfg=import_cfg, _dir=image_dir, _z=text_z_offset_m,
+                        _renderer=page_raster_renderer:
                         _render_text_item_raster(
                             _page,
                             text_item,
@@ -3443,6 +3550,7 @@ def import_pdf(
                             image_dir=_dir,
                             z_offset_m=_z,
                             image_cache=image_cache,
+                            renderer=_renderer,
                             style_identity=(
                                 visual_style,
                                 "base-color-alpha",

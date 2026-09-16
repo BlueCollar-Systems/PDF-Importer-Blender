@@ -18,6 +18,40 @@ import pytest
 
 
 MM_TO_M = 0.001
+_MISSING = object()
+_ISOLATED_MODULES = (
+    "bpy",
+    "bmesh",
+    "mathutils",
+    "pdf_vector_importer.bl_geometry_builder",
+    "pdf_vector_importer.bl_import_engine",
+)
+
+
+@pytest.fixture(autouse=True)
+def _restore_replaced_modules():
+    previous = {name: sys.modules.get(name, _MISSING) for name in _ISOLATED_MODULES}
+    package = sys.modules.get("pdf_vector_importer")
+    previous_attrs = {
+        name: getattr(package, name, _MISSING)
+        for name in ("bl_geometry_builder", "bl_import_engine")
+        if package is not None
+    }
+    yield
+    for name, module in previous.items():
+        if module is _MISSING:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = module
+    if package is not None:
+        for name, value in previous_attrs.items():
+            if value is _MISSING:
+                try:
+                    delattr(package, name)
+                except AttributeError:
+                    pass
+            else:
+                setattr(package, name, value)
 
 
 class _Co32(list):
@@ -25,16 +59,18 @@ class _Co32(list):
 
 
 class _Point32:
-    def __init__(self) -> None:
+    def __init__(self, *, replacement_is_noop: bool = False) -> None:
         self._co = _Co32([0.0, 0.0, 0.0, 1.0])
+        self._replacement_is_noop = replacement_is_noop
 
     @property
     def co(self):
         return self._co
 
     @co.setter
-    def co(self, _value) -> None:
-        return
+    def co(self, value) -> None:
+        if not self._replacement_is_noop:
+            self._co[:] = [float(component) for component in value]
 
 
 class _Points32(list):
@@ -56,7 +92,7 @@ class _Points32(list):
 class _Spline32:
     def __init__(self, kind: str) -> None:
         self.type = kind
-        self.points = _Points32([_Point32()])
+        self.points = _Points32([_Point32(replacement_is_noop=True)])
         self.bezier_points = []
         self.use_cyclic_u = False
         self.order_u = 4
@@ -157,8 +193,7 @@ def _install_blender32_curve_host() -> types.SimpleNamespace:
 def _reload_builder():
     _install_blender32_curve_host()
     module_name = "pdf_vector_importer.bl_geometry_builder"
-    if module_name in sys.modules:
-        return importlib.reload(sys.modules[module_name])
+    sys.modules.pop(module_name, None)
     return importlib.import_module(module_name)
 
 
@@ -217,7 +252,7 @@ def test_batched_polylines_keep_page_span_when_tuple_co_assignment_is_noop():
 
 
 def test_no_spline_point_at_world_origin_when_source_paths_do_not():
-    """1011 page ink never passes through (0,0); a leftover default point draws the X."""
+    """Source-page ink avoids (0,0); a leftover default point draws the X."""
     builder = _reload_builder()
     collection = _Collection32()
     runs = [
@@ -226,7 +261,7 @@ def test_no_spline_point_at_world_origin_when_source_paths_do_not():
         [(400.0, 300.0), (410.0, 310.0), (420.0, 300.0)],
     ]
     obj = builder._create_multi_poly_curve(
-        "P1_batch_1011like",
+        "P1_batch_nonorigin",
         runs,
         collection,
         0.25,
@@ -261,10 +296,80 @@ def test_single_poly_curve_writes_the_source_start_not_the_default_origin():
     )
 
 
+def test_nurbs_circle_writes_all_points_without_a_default_origin() -> None:
+    builder = _reload_builder()
+    collection = _Collection32()
+    obj = builder._create_nurbs_circle(
+        "P1_circle_1",
+        (250.0, 400.0),
+        50.0,
+        collection,
+        0.25,
+        object(),
+        z_offset_m=0.0001,
+    )
+
+    spline = next(iter(obj.data.splines))
+    coords = _spline_coords(obj)
+    assert len(coords) == 8
+    assert coords[0] == pytest.approx((0.3, 0.4, 0.0001))
+    assert all(abs(x) > 1e-9 or abs(y) > 1e-9 for x, y, _z in coords)
+    assert spline.use_cyclic_u is True
+    assert spline.order_u == 3
+
+
+def test_curve_bound_points_are_streamed_instead_of_materialized() -> None:
+    _reload_builder()
+    engine_name = "pdf_vector_importer.bl_import_engine"
+    sys.modules.pop(engine_name, None)
+    engine = importlib.import_module(engine_name)
+    curve_data = types.SimpleNamespace(
+        splines=[
+            types.SimpleNamespace(
+                points=[types.SimpleNamespace(co=(1.0, 2.0, 3.0, 1.0))],
+                bezier_points=[],
+            )
+        ]
+    )
+
+    points = engine._curve_spline_local_points(curve_data)
+    assert iter(points) is points
+    assert list(points) == [(1.0, 2.0, 3.0)]
+
+
+def test_world_bounds_include_bezier_handles() -> None:
+    _reload_builder()
+    engine_name = "pdf_vector_importer.bl_import_engine"
+    sys.modules.pop(engine_name, None)
+    engine = importlib.import_module(engine_name)
+    bezier_points = [
+        types.SimpleNamespace(
+            co=(0.0, 0.0, 0.0),
+            handle_left=(-1.0, 10.0, 0.0),
+            handle_right=(1.0, 10.0, 0.0),
+        ),
+        types.SimpleNamespace(
+            co=(2.0, 0.0, 0.0),
+            handle_left=(1.0, 10.0, 0.0),
+            handle_right=(3.0, 10.0, 0.0),
+        ),
+    ]
+    curve_data = types.SimpleNamespace(
+        splines=[types.SimpleNamespace(points=[], bezier_points=bezier_points)]
+    )
+    obj = _Object32("Bezier", curve_data)
+
+    min_v, max_v = engine._world_bounds_for_objects([obj])
+    assert min_v is not None and max_v is not None
+    assert (min_v.x, min_v.y) == pytest.approx((-1.0, 0.0))
+    assert (max_v.x, max_v.y) == pytest.approx((3.0, 10.0))
+
+
 def test_world_bounds_use_curve_spline_points_when_bound_box_is_collapsed():
     builder = _reload_builder()
-    engine = importlib.import_module("pdf_vector_importer.bl_import_engine")
-    engine = importlib.reload(engine)
+    engine_name = "pdf_vector_importer.bl_import_engine"
+    sys.modules.pop(engine_name, None)
+    engine = importlib.import_module(engine_name)
     collection = _Collection32()
     obj = builder._create_multi_poly_curve(
         "P1_batch_002",
@@ -319,8 +424,8 @@ def test_orthogonal_z_leak_points_land_on_sheet_xy():
 
 def test_sheet_view_radius_ignores_z_fence():
     _reload_builder()
+    sys.modules.pop("pdf_vector_importer.bl_import_engine", None)
     engine = importlib.import_module("pdf_vector_importer.bl_import_engine")
-    engine = importlib.reload(engine)
 
     class _V:
         def __init__(self, x, y, z) -> None:
