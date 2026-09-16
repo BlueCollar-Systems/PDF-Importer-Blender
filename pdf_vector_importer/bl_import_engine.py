@@ -3518,6 +3518,7 @@ def import_pdf(
                         f"Building text for page {_pn}... ({int(frac * 100)}%)",
                     )
                 try:
+                    page_raster_renderer = _PageDisplayListRenderer(page)
                     text_count = build_all_text(
                         page_data.text_items,
                         page_col,
@@ -3531,7 +3532,7 @@ def import_pdf(
                         terminal_raster_callback=(
                         lambda text_item, collection, callback_page_number, item_id,
                         _page=page, _cfg=import_cfg, _dir=image_dir, _z=text_z_offset_m,
-                        _renderer=_PageDisplayListRenderer(page):
+                        _renderer=page_raster_renderer:
                         _render_text_item_raster(
                             _page,
                             text_item,

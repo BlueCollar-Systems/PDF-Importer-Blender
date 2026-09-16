@@ -130,8 +130,10 @@ def _package_entries(package_root: Path) -> list[tuple[str, bytes]]:
         return []
     with ThreadPoolExecutor(max_workers=min(8, len(paths))) as pool:
         contents = list(pool.map(Path.read_bytes, paths))
+    assert len(contents) == len(paths)
     return [
-        (path.relative_to(parent).as_posix(), data) for path, data in zip(paths, contents)
+        (path.relative_to(parent).as_posix(), contents[index])
+        for index, path in enumerate(paths)
     ]
 
 
