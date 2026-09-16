@@ -1201,7 +1201,7 @@ def build_page(
                     obj_name, prim.points, True, target_col,
                     prim.line_width, mat,
                     z_offset_m=line_z_offset_m,
-                        use_tubes=use_line_tubes,
+                    use_tubes=use_line_tubes,
                 )
                 stats["curves"] += 1
                 if _model3d_should_extrude(prim, page_area, has_fill, config, prim.points):
@@ -1239,7 +1239,7 @@ def build_page(
                     dash_pattern=dash_pattern_mm,
                     dash_phase=dash_phase_mm,
                     z_offset_m=line_z_offset_m,
-                        use_tubes=use_line_tubes,
+                    use_tubes=use_line_tubes,
                 )
                 stats["curves"] += created
                 if created > 0:
