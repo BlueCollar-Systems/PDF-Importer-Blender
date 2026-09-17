@@ -526,7 +526,8 @@ def test_item_terminal_raster_is_clipped_and_placed_at_the_item_target_bbox(
     )
 
     assert actual is expected
-    assert len(page.calls) == 1
+    assert len(page.calls) == 2
+    assert [call["alpha"] for call in page.calls] == [True, False]
     assert len(captured) == 1
     placement, used_collection, used_z = captured[0]
     assert used_collection is collection
@@ -574,6 +575,7 @@ def test_whitespace_terminal_raster_accepts_verified_exact_transparent_clip(
 
     assert actual is expected
     assert len(page.calls) == 1
+    assert page.calls[0]["alpha"] is True
     assert tuple(page.calls[0]["clip"]) == pytest.approx(source_bbox)
     assert captured[0]["source_bbox_pdf"] == list(source_bbox)
     assert captured[0]["source_render_clip_pdf"] == list(source_bbox)
@@ -802,7 +804,8 @@ def test_item_terminal_raster_transforms_unrotated_source_bbox_for_page_clip(
     )
 
     assert actual is expected
-    assert len(page.calls) == 1
+    assert len(page.calls) == 2
+    assert [call["alpha"] for call in page.calls] == [True, False]
     expected_clip = fitz.Rect(*source_bbox) * page.rotation_matrix
     actual_clip = page.calls[0]["clip"]
     assert tuple(actual_clip) == pytest.approx(tuple(expected_clip))
@@ -974,7 +977,7 @@ def test_image_plane_constructor_never_mutates_or_reuses_existing_resources(
             }.get(node_type, node_type)
             self.image = None
             self.outputs = {"Color": _Socket(self), "Alpha": _Socket(self), "BSDF": _Socket(self)}
-            self.inputs = {"Base Color": _Socket(self), "Alpha": _Socket(self), "Surface": _Socket(self)}
+            self.inputs = {name: _Socket(self) for name in ("Base Color", "Alpha", "Surface", "Roughness", "Specular IOR Level", "Emission Strength", "Emission Color")}
 
     class _Nodes(list):
         def clear(self):
@@ -1018,6 +1021,7 @@ def test_image_plane_constructor_never_mutates_or_reuses_existing_resources(
         def __init__(self, name, data):
             self.name = name
             self.packed_file = types.SimpleNamespace(data=data)
+            self.colorspace_settings = types.SimpleNamespace(name="sRGB")
             self.users = 0
 
         def pack(self):

@@ -2022,7 +2022,8 @@ def _render_text_item_raster(
 ) -> Optional[bpy.types.Object]:
     """Render and verify one text span as the terminal item-scoped fallback."""
     source_bbox = getattr(text_item, "source_bbox_pdf", None)
-    target_bbox = getattr(text_item, "bbox", None)
+    from .raster_geometry import source_bbox_to_model
+    target_bbox = source_bbox_to_model(text_item)
     if not image_dir or not source_bbox or not target_bbox:
         return None
     try:
@@ -2088,6 +2089,10 @@ def _render_text_item_raster(
         if source_expected_transparent:
             Path(image_path).write_bytes(_BLENDER_SAFE_TRANSPARENT_PNG)
         else:
+            # This crop already contains the final PDF paint stack. Preserve
+            # its white page composite, so overlapping crops cannot apply the
+            # same translucent PDF annotation more than once.
+            pix = source.get_pixmap(matrix=matrix, clip=clip, alpha=False)
             pix.save(image_path)
         if not os.path.isfile(image_path) or os.path.getsize(image_path) <= 0:
             return None
@@ -2096,6 +2101,17 @@ def _render_text_item_raster(
         _raise_for_incomplete_raster_cleanup(cleanup)
         return None
 
+    pixel_bbox = [sx0, sy0, sx1, sy1]
+    if hasattr(pix, "x") and hasattr(pix, "y"):
+        # MuPDF rounds the requested clip outwards to whole source pixels.
+        # Place that actual pixel rectangle, never stretch it into a font box.
+        pixel_rect = fitz.Rect(pix.x * 72 / dpi, pix.y * 72 / dpi,
+                               (pix.x + pix.width) * 72 / dpi,
+                               (pix.y + pix.height) * 72 / dpi)
+        if page_rotation:
+            pixel_rect = pixel_rect * page.derotation_matrix
+        pixel_bbox = list(pixel_rect)
+        tx0, ty0, tx1, ty1 = source_bbox_to_model(text_item, pixel_bbox)
     source_id = int(getattr(text_item, "id", 0) or 0)
     placement = {
         "path": image_path,
@@ -2107,6 +2123,7 @@ def _render_text_item_raster(
         "page_number": int(page_num),
         "source_bbox_pdf": [sx0, sy0, sx1, sy1],
         "source_render_clip_pdf": render_clip,
+        "source_pixel_bbox_pdf": pixel_bbox,
         "source_item_id": str(item_id),
         "source_expected_transparent": source_expected_transparent,
         "source_clip_fully_transparent": fully_transparent,
@@ -2132,6 +2149,8 @@ def _render_text_item_raster(
         obj["pdf_raster_render_clip_pdf"] = list(
             placement["source_render_clip_pdf"]
         )
+        obj["pdf_raster_pixel_bbox_pdf"] = list(pixel_bbox)
+        obj["pdf_raster_final_page_composite"] = not source_expected_transparent
         obj["pdf_raster_dpi"] = dpi
         obj["pdf_raster_expected_transparent"] = source_expected_transparent
         obj["pdf_raster_source_clip_fully_transparent"] = bool(
@@ -2373,7 +2392,12 @@ def _create_uncached_image_plane(
         if pack_and_verify_bytes(image, image_bytes) != image_sha256:
             raise RuntimeError("packed image digest changed after verification")
         tex.image = image
-        links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+        image.colorspace_settings.name = "Non-Color"
+        bsdf.inputs["Base Color"].default_value = (0, 0, 0, 1)
+        bsdf.inputs["Roughness"].default_value = 1
+        bsdf.inputs["Specular IOR Level"].default_value = 0
+        bsdf.inputs["Emission Strength"].default_value = 1
+        links.new(tex.outputs["Color"], bsdf.inputs["Emission Color"])
         links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
         links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
         material.blend_method = "HASHED"
@@ -2500,7 +2524,12 @@ def _create_image_plane(
             bsdf = nodes.new(type="ShaderNodeBsdfPrincipled")
             out = nodes.new(type="ShaderNodeOutputMaterial")
             tex.image = image
-            links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+            image.colorspace_settings.name = "Non-Color"
+            bsdf.inputs["Base Color"].default_value = (0, 0, 0, 1)
+            bsdf.inputs["Roughness"].default_value = 1
+            bsdf.inputs["Specular IOR Level"].default_value = 0
+            bsdf.inputs["Emission Strength"].default_value = 1
+            links.new(tex.outputs["Color"], bsdf.inputs["Emission Color"])
             links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
             links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
             created.blend_method = "HASHED"

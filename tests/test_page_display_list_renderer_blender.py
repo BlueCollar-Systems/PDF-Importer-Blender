@@ -135,30 +135,32 @@ def test_one_display_list_serves_every_clip_on_the_page(tmp_path, monkeypatch):
     assert all(result is not None for result in results)
     assert page.list_calls == [{"annots": True}]
     assert page.page_calls == []
-    assert len(page.display_list.calls) == 3
+    # One alpha coverage probe and one opaque final-PDF crop per item share
+    # the same display list; source parsing still happens just once.
+    assert len(page.display_list.calls) == 6
     for index, call in enumerate(page.display_list.calls):
-        assert call["alpha"] is True
+        assert call["alpha"] is (index % 2 == 0)
         assert tuple(call["matrix"]) == tuple(fitz.Matrix(4.0, 4.0))
-        assert tuple(call["clip"]) == (30.0 + index, 50.0, 140.0 + index, 68.0)
+        assert tuple(call["clip"]) == (30.0 + index // 2, 50.0, 140.0 + index // 2, 68.0)
 
 
 def test_without_a_renderer_the_page_renders_as_before(tmp_path, monkeypatch):
     page = _ListPage()
     _render_three(page, None, tmp_path, monkeypatch)
     assert page.list_calls == []
-    assert len(page.page_calls) == 3
+    assert len(page.page_calls) == 6
 
 
 def test_pages_without_a_display_list_fall_back_to_page_get_pixmap(tmp_path, monkeypatch):
     page = _PlainPage()
     renderer = bl_import_engine._PageDisplayListRenderer(page)
     _render_three(page, renderer, tmp_path, monkeypatch)
-    assert len(page.page_calls) == 3
+    assert len(page.page_calls) == 6
 
     broken = _BrokenListPage()
     renderer = bl_import_engine._PageDisplayListRenderer(broken)
     _render_three(broken, renderer, tmp_path, monkeypatch)
-    assert len(broken.page_calls) == 3
+    assert len(broken.page_calls) == 6
 
 
 def test_display_list_pixels_match_page_get_pixmap_exactly(tmp_path):

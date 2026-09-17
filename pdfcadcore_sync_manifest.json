@@ -35,5 +35,6 @@
   "visual_semantics.py": "d57393c2e6a2cdc932c9ba19e2f810d9bbbd46b6192699742c1036e35bf01344",
   "repo_context_builder_core.py": "f3c6d5abbfa8d422a2562c1a645548fee9330290307edf02c7f10deb38daceb4",
   "pdfcadcore_sync_check.py": "a05f681585a44f981e1a2adadc12a5c07dacbf1405a266f49ec75f8f60e70002",
-  "drawing_clips.py": "e2d341eaee276a7eefb23398b4d39cf80f933443ae0cc562d437784796cfa2d6"
+  "drawing_clips.py": "bb76824b59df47a551384e3acabc134b53065eabba70381c5553787247cae6a3",
+  "page_paint_bounds.py": "b53ac6bb3cf99510c0e6e871ba4fc3081d19c113a4ffc69ba8340616eaeada4d"
 }

@@ -2869,8 +2869,38 @@ def _attempt_raster_impl(
         failures.append("raster_material_image_binding_unverified")
     if not texture_to_shader or not shader_to_output:
         failures.append("raster_material_node_links_unverified")
+    if "pdf_raster_final_page_composite" in obj:
+        try:
+            shader = shader_nodes[0]
+            unlit = (
+                len(shader_nodes) == 1
+                and tuple(shader.inputs["Base Color"].default_value) == (0, 0, 0, 1)
+                and float(shader.inputs["Specular IOR Level"].default_value) == 0
+                and float(shader.inputs["Emission Strength"].default_value) == 1
+                and image.colorspace_settings.name == "Non-Color"
+                and any(link.from_node in texture_nodes and link.to_node is shader
+                        and link.to_socket == shader.inputs["Emission Color"]
+                        for link in links)
+            )
+        except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+            unlit = False
+        verification_evidence["raster_unlit_source_display_rgb"] = unlit
+        if not unlit:
+            failures.append("raster_source_display_material_unverified")
     try:
-        tx0, ty0, tx1, ty1 = (float(value) for value in text_item.bbox[:4])
+        from .raster_geometry import source_bbox_to_model
+        pixel_bbox = obj.get("pdf_raster_pixel_bbox_pdf")
+        if pixel_bbox is not None:
+            source_bbox = getattr(text_item, "source_bbox_pdf", None)
+            dpi = float(obj.get("pdf_raster_dpi", 0))
+            if not source_bbox or dpi <= 0 or len(pixel_bbox) != 4:
+                raise ValueError("Raster source pixel bounds are unavailable")
+            # Rounding can add at most one pixel on each edge; a crop cannot
+            # claim arbitrary source area to excuse incorrect host placement.
+            if any(abs(float(a)-float(b)) > 72/dpi + 1e-4
+                   for a,b in zip(pixel_bbox,source_bbox,strict=True)):
+                raise ValueError("Raster pixel bounds do not match the requested source crop")
+        tx0, ty0, tx1, ty1 = source_bbox_to_model(text_item, pixel_bbox)
         tx0, tx1 = sorted((tx0, tx1))
         ty0, ty1 = sorted((ty0, ty1))
         expected_location = (tx0 * MM_TO_M, ty0 * MM_TO_M)
