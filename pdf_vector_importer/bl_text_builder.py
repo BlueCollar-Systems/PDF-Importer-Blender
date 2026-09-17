@@ -2878,7 +2878,7 @@ def _attempt_raster_impl(
                 and float(shader.inputs["Specular IOR Level"].default_value) == 0
                 and float(shader.inputs["Emission Strength"].default_value) == 1
                 and image.colorspace_settings.name == "Non-Color"
-                and any(link.from_node in texture_nodes and link.to_node is shader
+                and any(link.from_node in texture_nodes and link.to_node == shader
                         and link.to_socket == shader.inputs["Emission Color"]
                         for link in links)
             )
