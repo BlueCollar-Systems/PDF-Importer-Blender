@@ -22,11 +22,13 @@ from pdfcadcore import primitive_extractor  # noqa: E402
 # crescents around exact masks. Text/fraction/source-character proofs are unchanged.
 # September 17: additive raw paint RGB/alpha/order survives beside unchanged
 # legacy composite colors; finite integer order validation rejects invented order.
+# September 17: preserve original MuPDF affine character quads; synthesized
+# recovered font-metric shear is rejected by anisotropic/sheared source tests.
 # This is the reviewed integration output: current main plus the fraction-core
 # port. It deliberately does not claim that these combined bytes were approved
 # independently before the merge review.
 REVIEWED_COMBINED_SUCCESSOR_SHA256 = (
-    "613548589e77aaa3ea6813b1bbcc028e5310359e891e89ba56a497e287a1c7b4"
+    "ff061f62ca608e90728f894d81f6a24cca288212c12a0b2a8555bed586089562"
 )
 
 
