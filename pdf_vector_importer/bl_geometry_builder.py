@@ -339,6 +339,39 @@ def _create_multi_poly_curve(
     return obj
 
 
+def _create_compound_clip_fill(name, contours, collection, material, even_odd):
+    """Fill the clip's contours together so native Curve tessellation keeps holes."""
+    runs = []
+    for contour in contours:
+        points = _points_m_from_mm(contour)
+        if len(points) > 1 and points[0] == points[-1]:
+            points = points[:-1]
+        if len(points) < 3 or len(points) != len(contour) - (contour[0] == contour[-1]):
+            raise ValueError("Clip fill contains a degenerate or non-finite contour")
+        runs.append(points)
+    if not runs:
+        raise ValueError("Clip fill contains no contours")
+    if not even_odd and len(runs) > 1:
+        raise ValueError("Compound nonzero clip fill requires a winding-aware intersection")
+
+    curve_data = bpy.data.curves.new(name=name, type="CURVE")
+    curve_data.dimensions = "2D"
+    curve_data.fill_mode = "BOTH"
+    curve_data.bevel_depth = 0.0
+    curve_data.extrude = 0.0
+    for points in runs:
+        spline = curve_data.splines.new("POLY")
+        _write_spline_points(spline, points)
+        spline.use_cyclic_u = True
+    curve_data.materials.append(material)
+    obj = bpy.data.objects.new(name, curve_data)
+    obj["bcs_compound_clip_fill"] = True
+    obj["bcs_clip_fill_even_odd"] = bool(even_odd)
+    obj["bcs_clip_fill_contour_count"] = len(runs)
+    collection.objects.link(obj)
+    return obj
+
+
 def _dash_pattern_to_model_mm(
     dash_pattern,
     dash_phase,
@@ -885,10 +918,17 @@ def build_page(
         "batched_curve_runs": 0,
         "batched_curve_objects": 0,
         "model3d_solids": 0,
+        "compound_clip_fills": 0,
+        "compound_clip_contours": 0,
         "geometry_delivery_issues": [],
     }
     page_area = max(float(page_data.width or 0.0) * float(page_data.height or 0.0), 1e-9)
     prims = page_data.primitives or []
+    clip_groups = {}
+    for primitive in prims:
+        if primitive.clip_fill_group_id:
+            clip_groups.setdefault(primitive.clip_fill_group_id, []).append(primitive)
+    built_clip_groups = set()
     total_prims = max(1, len(prims))
     from .import_session import cancel_heartbeat_interval
 
@@ -989,6 +1029,28 @@ def build_page(
                 from .import_session import ImportCancelledError
 
                 raise ImportCancelledError("PDF import cancelled during geometry building")
+        if prim.clip_fill_group_id:
+            group_id = prim.clip_fill_group_id
+            if group_id in built_clip_groups:
+                continue
+            built_clip_groups.add(group_id)
+            if not make_faces:
+                continue
+            members = clip_groups[group_id]
+            if any(p.fill_color != prim.fill_color or p.clip_fill_even_odd != prim.clip_fill_even_odd for p in members):
+                raise ValueError("Clip fill contours disagree about their source fill")
+            target_col = _resolve_collection(collection, prim, group_by_color, collection_cache=collection_cache)
+            material = _get_or_create_material(prim.fill_color, material_cache, style=visual_style)
+            obj = _create_compound_clip_fill(
+                f"P{page_data.page_number}_clip_fill_{prim.id}",
+                [p.points for p in members], target_col, material, prim.clip_fill_even_odd,
+            )
+            obj["bcs_clip_fill_group_id"] = group_id
+            stats["curves"] += 1
+            stats["compound_clip_fills"] += 1
+            stats["compound_clip_contours"] += len(members)
+            continue
+
         has_fill_any = prim.fill_color is not None
         has_stroke_any = prim.stroke_color is not None
         if (
