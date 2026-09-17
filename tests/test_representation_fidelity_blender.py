@@ -67,9 +67,23 @@ def test_persistent_affine_carrier_visibility_failure_is_not_suppressed(monkeypa
     monkeypatch.setattr(bl_text_builder, "bpy", types.SimpleNamespace(
         context=types.SimpleNamespace(view_layer=types.SimpleNamespace(
             update=lambda: events.append("update")))))
+    class UnhideableCarrier:
+        hide_viewport = property(lambda self: False)
+        def hide_set(self, hidden):
+            hide_set(hidden)
     with pytest.raises(RuntimeError, match="host visibility remains unavailable"):
-        bl_text_builder._hide_affine_carrier(types.SimpleNamespace(hide_set=hide_set))
-    assert events == [True, "update", True]
+        bl_text_builder._hide_affine_carrier(UnhideableCarrier())
+    assert events == [True, "update", True, True]
+
+
+def test_object_level_guard_preserves_carrier_when_layer_is_unavailable(monkeypatch):
+    def unavailable(_hidden):
+        raise RuntimeError("not in view layer")
+    monkeypatch.setattr(bl_text_builder, "bpy", types.SimpleNamespace(
+        context=types.SimpleNamespace(view_layer=types.SimpleNamespace(update=lambda: None))))
+    carrier = types.SimpleNamespace(hide_set=unavailable, hide_viewport=False)
+    bl_text_builder._hide_affine_carrier(carrier)
+    assert carrier.hide_viewport
 
 
 class _MaterialList(list):

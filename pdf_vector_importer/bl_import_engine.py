@@ -1208,7 +1208,17 @@ def _focus_view_on_import(
             bool(obj.get("pdf_affine_carrier_helper", False))
             or str(obj.name) in carrier_names
         ):
-            obj.hide_set(True)
+            # Same guard as the carrier build: an object outside the view
+            # layer cannot take hide_set, and the object-level toggle below
+            # hides it either way.
+            try:
+                obj.hide_set(True)
+            except Exception:
+                pass
+            try:
+                obj.hide_viewport = True
+            except Exception:
+                pass
             obj.hide_select = True
             continue
         try:
