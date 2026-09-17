@@ -2392,6 +2392,7 @@ def _create_uncached_image_plane(
         if pack_and_verify_bytes(image, image_bytes) != image_sha256:
             raise RuntimeError("packed image digest changed after verification")
         tex.image = image
+        tex.extension = "EXTEND"
         image.colorspace_settings.name = "Non-Color"
         bsdf.inputs["Base Color"].default_value = (0, 0, 0, 1)
         bsdf.inputs["Roughness"].default_value = 1
@@ -2524,6 +2525,7 @@ def _create_image_plane(
             bsdf = nodes.new(type="ShaderNodeBsdfPrincipled")
             out = nodes.new(type="ShaderNodeOutputMaterial")
             tex.image = image
+            tex.extension = "EXTEND"
             image.colorspace_settings.name = "Non-Color"
             bsdf.inputs["Base Color"].default_value = (0, 0, 0, 1)
             bsdf.inputs["Roughness"].default_value = 1
