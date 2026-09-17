@@ -30,6 +30,48 @@ from pdf_vector_importer.pdfcadcore.primitives import NormalizedText, TextCharLa
 from pdf_vector_importer.text_delivery import AttemptOutcome, deliver_item, fallback_ladder
 
 
+def test_affine_carrier_visibility_waits_for_view_layer_registration(monkeypatch):
+    events = []
+    registered = False
+
+    def update():
+        nonlocal registered
+        events.append("update")
+        registered = True
+
+    def hide_set(hidden):
+        events.append(("hide", hidden))
+        if not registered:
+            raise RuntimeError("Object cannot be hidden because it is not in View Layer")
+
+    monkeypatch.setattr(bl_text_builder, "bpy", types.SimpleNamespace(
+        context=types.SimpleNamespace(view_layer=types.SimpleNamespace(update=update))))
+    bl_text_builder._hide_affine_carrier(types.SimpleNamespace(hide_set=hide_set))
+    assert events == [("hide", True), "update", ("hide", True)]
+
+
+def test_registered_affine_carrier_does_not_force_view_layer_update(monkeypatch):
+    hidden = []
+    monkeypatch.setattr(bl_text_builder, "bpy", types.SimpleNamespace())
+    bl_text_builder._hide_affine_carrier(types.SimpleNamespace(hide_set=hidden.append))
+    assert hidden == [True]
+
+
+def test_persistent_affine_carrier_visibility_failure_is_not_suppressed(monkeypatch):
+    events = []
+
+    def hide_set(hidden):
+        events.append(hidden)
+        raise RuntimeError("host visibility remains unavailable")
+
+    monkeypatch.setattr(bl_text_builder, "bpy", types.SimpleNamespace(
+        context=types.SimpleNamespace(view_layer=types.SimpleNamespace(
+            update=lambda: events.append("update")))))
+    with pytest.raises(RuntimeError, match="host visibility remains unavailable"):
+        bl_text_builder._hide_affine_carrier(types.SimpleNamespace(hide_set=hide_set))
+    assert events == [True, "update", True]
+
+
 class _MaterialList(list):
     pass
 

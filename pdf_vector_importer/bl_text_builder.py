@@ -964,6 +964,18 @@ def _configure_affine_carrier_display(carrier, target_quad) -> None:
     carrier.empty_display_size = _carrier_display_size_m(target_quad)
 
 
+def _hide_affine_carrier(carrier) -> None:
+    """Hide linked helpers even when a reused glyph has not updated its layer."""
+    try:
+        carrier.hide_set(True)
+    except RuntimeError:
+        # Linking an instance does not immediately create its ViewLayer Base.
+        # Update only on that delayed API failure, then retry once. Persistent
+        # failures still propagate into the owned-artifact rollback path.
+        bpy.context.view_layer.update()
+        carrier.hide_set(True)
+
+
 def _apply_target_quad_affine(
     obj,
     text_item,
@@ -1025,7 +1037,7 @@ def _apply_target_quad_affine(
             # This Empty carries a shear transform; its metre-sized axis gizmo
             # is not drawing ink and must never show through the PDF or frame it.
             carrier["pdf_affine_carrier_helper"] = True
-            carrier.hide_set(True)
+            _hide_affine_carrier(carrier)
             carrier.hide_select = True
             carrier.matrix_world = Matrix(parent_values)
             obj.parent = carrier
