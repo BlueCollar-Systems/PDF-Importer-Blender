@@ -66,3 +66,14 @@ def test_exact_miter_ring_has_source_width_and_disjoint_paint_area():
     for i, a in enumerate(paints):
         for b in paints[i+1:]:
             assert min(a[2], b[2]) <= max(a[0], b[0]) or min(a[3], b[3]) <= max(a[1], b[1])
+
+
+def test_transparent_whitespace_cannot_excise_final_annotation_paint():
+    from pdf_vector_importer.late_paint import _has_final_page_pixels
+    visible = {"pdf_raster_source_item_id": "page:1:text:1",
+               "pdf_raster_final_page_composite": True,
+               "pdf_raster_expected_transparent": False}
+    assert _has_final_page_pixels(visible)
+    assert not _has_final_page_pixels({**visible, "pdf_raster_expected_transparent": True})
+    assert not _has_final_page_pixels({**visible, "pdf_raster_final_page_composite": False})
+    assert not _has_final_page_pixels({})

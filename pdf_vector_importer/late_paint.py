@@ -99,6 +99,36 @@ def paint_rectangles(bounds, width):
             (ox0, iy1, ox1, oy1), (ox0, iy0, ix0, iy1), (ix1, iy0, ox1, iy1)]
 
 
+def _has_final_page_pixels(obj):
+    # A whitespace delivery owns a verified transparent texture, so it cannot
+    # replace any annotation paint in its source bounding rectangle.
+    return bool(obj.get("pdf_raster_source_item_id")
+                and not obj.get("pdf_raster_expected_transparent", False)
+                and obj.get("pdf_raster_final_page_composite", False))
+
+
+def position_final_page_crops(collection):
+    """Keep final source pixels above earlier native paint without moving XY."""
+    crops = [obj for obj in collection.all_objects if _has_final_page_pixels(obj)]
+    if not crops:
+        return 0
+    import bpy
+    from mathutils import Vector
+
+    bpy.context.view_layer.update()
+    top = max((max((obj.matrix_world @ Vector(p)).z for p in obj.bound_box)
+               for obj in collection.all_objects
+               if obj.type in {"FONT", "CURVE", "MESH"} and not obj.hide_render), default=0)
+    for index, obj in enumerate(sorted(crops, key=lambda obj: obj.name)):
+        # Crop contents are already the complete PDF stack at these XYs.
+        # Separate coplanar overlapping patches without changing source data.
+        obj.location.z = top + .00005 + index * 1e-7
+        obj["pdf_final_crop_display_depth_m"] = obj.location.z
+        obj["pdf_source_geometry_z_m"] = 0.0
+    bpy.context.view_layer.update()
+    return len(crops)
+
+
 def apply_final_rectangles(page, page_data, collection, builder_config):
     records = final_rectangles(page, page_data)
     if not records:
@@ -114,9 +144,9 @@ def apply_final_rectangles(page, page_data, collection, builder_config):
     cutters = []
     top = 0.0
     for obj in collection.all_objects:
-        if obj.type in {"FONT", "CURVE", "MESH"}:
+        if obj.type in {"FONT", "CURVE", "MESH"} and not obj.hide_render:
             top = max(top, max((obj.matrix_world @ Vector(p)).z for p in obj.bound_box))
-        if not obj.get("pdf_raster_source_item_id"):
+        if not _has_final_page_pixels(obj):
             continue
         if (obj.type != "MESH" or len(obj.data.vertices) != 4
                 or not obj.get("pdf_image_sha256")

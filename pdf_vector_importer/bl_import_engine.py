@@ -3732,6 +3732,9 @@ def import_pdf(
                 raster_pages_imported += 1
                 total_stats["raster_pages_imported"] = raster_pages_imported
 
+            from .late_paint import position_final_page_crops
+
+            position_final_page_crops(page_col)
             if import_mode != "raster":
                 from .late_paint import apply_final_rectangles
 
