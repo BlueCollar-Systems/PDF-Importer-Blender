@@ -1208,10 +1208,12 @@ def _focus_view_on_import(
     # Empty axis gizmos or including their display size in view_selected.
     visible_objects = []
     for obj in objects:
-        if getattr(obj, "type", None) == "EMPTY" and (
+        is_carrier = getattr(obj, "type", None) == "EMPTY" and (
             bool(obj.get("pdf_affine_carrier_helper", False))
             or str(obj.name) in carrier_names
-        ):
+        )
+        is_replaced_stroke = bool(obj.get("pdf_display_replaced_by", ""))
+        if is_carrier or is_replaced_stroke:
             # Same guard as the carrier build: an object outside the view
             # layer cannot take hide_set, and the object-level toggle below
             # hides it either way.
@@ -1224,6 +1226,8 @@ def _focus_view_on_import(
             except Exception:
                 pass
             obj.hide_select = True
+            if is_replaced_stroke:
+                obj.hide_render = True
             continue
         try:
             obj.hide_set(False)

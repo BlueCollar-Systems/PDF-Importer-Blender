@@ -252,3 +252,23 @@ def test_carrier_display_bounds_are_invisible_at_sheet_scale():
     assert bl_text_builder._CARRIER_DISPLAY_MIN_M == pytest.approx(2e-5)
     assert bl_text_builder._CARRIER_DISPLAY_MAX_M == pytest.approx(5e-4)
     assert bl_text_builder._CARRIER_DISPLAY_MAX_M * 2.0 < 1.2192 * 1e-3
+
+
+def test_framing_keeps_replaced_pdf_stroke_hidden(monkeypatch):
+    from pdf_vector_importer import bl_import_engine as engine
+
+    source = _HostObject("source-centerline", types.SimpleNamespace())
+    source.type = "CURVE"
+    source["pdf_display_replaced_by"] = "exact-flat-paint"
+    source.hide_render = False
+    display = _HostObject("exact-flat-paint", types.SimpleNamespace())
+    display.type = "MESH"
+    seen = []
+    monkeypatch.setattr(engine, "_unhide_collection_tree", lambda root: None)
+    monkeypatch.setattr(engine, "_world_bounds_for_objects", lambda objects: (seen.extend(objects) or (None, None)))
+    monkeypatch.setattr(engine, "bpy", types.SimpleNamespace(context=types.SimpleNamespace(
+        view_layer=types.SimpleNamespace(objects=[source, display]))))
+    engine._focus_view_on_import(types.SimpleNamespace(all_objects=[source, display]))
+    assert seen == [display]
+    assert source.hidden and source.hide_viewport and source.hide_render and source.hide_select
+    assert not display.hidden and not display.hide_viewport and not display.hide_render
