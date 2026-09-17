@@ -45,6 +45,27 @@ _TEXT_STAGE_MS: Dict[str, float] = {}
 _TEXT_STAGE_COUNTS: Dict[str, int] = {}
 
 
+def _hide_helper_object(obj):
+    """Hide an importer helper without letting the attempt fail over it.
+
+    ``hide_set()`` writes *view layer* visibility and raises when the object is
+    not in the view layer, which happens whenever its collection is not linked
+    into the scene. A glyph carrier hit exactly that: the RuntimeError escaped
+    the glyph build, was classified ``glyph_curve_conversion_failed_not_
+    impossibility_proof``, and took 304 of 324 spans down with it on a 48x36
+    sheet. The object-level toggle always applies, so the gizmo still does not
+    draw, and failing to hide a helper is never a reason to lose the text.
+    """
+    try:
+        obj.hide_set(True)
+    except Exception:
+        pass
+    try:
+        obj.hide_viewport = True
+    except Exception:
+        pass
+
+
 @contextmanager
 def _text_stage(name: str) -> Iterator[None]:
     started = time.perf_counter()
@@ -1025,7 +1046,7 @@ def _apply_target_quad_affine(
             # This Empty carries a shear transform; its metre-sized axis gizmo
             # is not drawing ink and must never show through the PDF or frame it.
             carrier["pdf_affine_carrier_helper"] = True
-            carrier.hide_set(True)
+            _hide_helper_object(carrier)
             carrier.hide_select = True
             carrier.matrix_world = Matrix(parent_values)
             obj.parent = carrier
