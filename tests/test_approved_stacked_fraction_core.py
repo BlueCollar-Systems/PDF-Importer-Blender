@@ -18,12 +18,13 @@ from pdfcadcore import primitive_extractor  # noqa: E402
 # No fraction predicate, scale, source-character proof, or renderer changed.
 # Previous reviewed hash: ab6d03e38066c42214e6272f503a0aef5bf53d50fbd0c8aafa91cc0c8b3e6538.
 # September 16: extended vector clip fills retain grouped contour metadata.
-# Text extraction, fraction predicates and source-character proofs are unchanged.
+# Overlapping source strokes also keep their polygon vertices, avoiding circle-fit
+# crescents around exact masks. Text/fraction/source-character proofs are unchanged.
 # This is the reviewed integration output: current main plus the fraction-core
 # port. It deliberately does not claim that these combined bytes were approved
 # independently before the merge review.
 REVIEWED_COMBINED_SUCCESSOR_SHA256 = (
-    "f3bf788f136ca9a56365b77afd0f5825ba02cb151da3da1e5b255b767d288911"
+    "dcb6ca65da5924eaeae8c7ad4d4a660f0ca8fb0aabecc0f8068cb115090f4be1"
 )
 
 
