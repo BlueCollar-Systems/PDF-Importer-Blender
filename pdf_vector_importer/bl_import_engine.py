@@ -124,7 +124,10 @@ def _skip_semantic_recognition_for_speed(page_data) -> Optional[str]:
 
 def _default_import_report_path(filepath: str) -> str:
     base = os.path.splitext(os.path.basename(filepath))[0]
-    return os.path.join(tempfile.gettempdir(), f"{base}_import_report.json")
+    # Each run owns its report and sibling provenance/parts artifacts.
+    # Other hosts and simultaneous imports may use the same PDF basename.
+    run_dir = tempfile.mkdtemp(prefix="bcs-blender-import-")
+    return os.path.join(run_dir, f"{base}_import_report.json")
 
 
 def _sha256_path(path: str) -> str:
@@ -643,6 +646,7 @@ def write_import_report(
         "model_3d_intent": stats.get("model_3d_intent"),
         "model_3d": stats.get("model_3d"),
         "resolved_scale": stats.get("resolved_scale"),
+        "final_transparent_annotations": stats.get("final_transparent_annotations", []),
         "scale_hints": stats.get("scale_hints"),
         "fallback_attempted": bool(fallback_attempted),
         "result_status": (
@@ -3695,6 +3699,12 @@ def import_pdf(
                 raster_pages_imported += 1
                 total_stats["raster_pages_imported"] = raster_pages_imported
 
+            if import_mode != "raster":
+                from .late_paint import apply_final_rectangles
+
+                late_paints = apply_final_rectangles(page, page_data, page_col, page_builder_config)
+                total_stats.setdefault("final_transparent_annotations", []).extend(late_paints)
+
             # 9j. Multi-page stacking: shift this page's collection downward
             if len(requested_page_indices) > 1 and _page_stack_offset_m != 0.0:
                 _stack_page_objects(page_col.all_objects, _page_stack_offset_m)
@@ -3818,6 +3828,7 @@ def import_pdf(
                         keep_selected=keep_selection_after_focus,
                         prefer_material_preview=(
                             raster_pages_imported > 0 or item_raster_patches > 0
+                            or bool(total_stats.get("final_transparent_annotations"))
                         ),
                     )
                 )

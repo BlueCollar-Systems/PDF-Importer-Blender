@@ -19,6 +19,7 @@ from typing import Dict, Optional, Tuple
 import bpy
 import bmesh
 
+from .visual_style import preview_color
 from .pdfcadcore.import_bounds import sheet_xy
 from .pdfcadcore.primitives import PageData, Primitive
 
@@ -122,26 +123,9 @@ def _styled_color(
     color: Optional[Tuple[float, float, float]],
     style: str,
 ) -> Tuple[float, float, float]:
-    """Map source colors into a preview style while preserving readability."""
-    style_key = _normalize_style(style)
-    base = color if color else (0.0, 0.0, 0.0)
-    if style_key == "source":
-        return base
-
-    lum = (base[0] * 0.2126) + (base[1] * 0.7152) + (base[2] * 0.0722)
-    if style_key == "blueprint":
-        # Brighter blueprint palette for dark viewport readability.
-        cyan = (0.35, 0.72, 0.96)
-        strength = 0.72 + (0.20 * lum)
-        return (
-            min(1.0, (cyan[0] * strength) + 0.06),
-            min(1.0, (cyan[1] * strength) + 0.08),
-            min(1.0, (cyan[2] * strength) + 0.08),
-        )
-
-    # High contrast mode for dark viewport themes: near-white linework.
-    v = max(0.84, min(0.98, 0.98 - (lum * 0.10)))
-    return (v, v, v)
+    """Use the same palette for knockout fills, linework and native text."""
+    base = color if color is not None else (0.0, 0.0, 0.0)
+    return preview_color(base, _normalize_style(style))
 
 
 def _material_key(color: Optional[Tuple[float, float, float]], style: str) -> str:
@@ -1234,16 +1218,19 @@ def build_page(
                     material_cache,
                     style=visual_style,
                 )
+                outline_obj = None
                 if create_outline:
-                    _create_poly_curve(
+                    outline_obj = _create_poly_curve(
                         obj_name + "_outline", prim.points, True, target_col,
                         prim.line_width, mat,
                         z_offset_m=line_z_offset_m,
                         use_tubes=use_line_tubes,
                     )
-                _create_face_mesh(
+                face_obj = _create_face_mesh(
                     obj_name + "_face", prim.points, target_col, face_mat, z_offset_m=face_z,
                 )
+                if 0.0 < prim.fill_opacity < 1.0:
+                    config.setdefault("_source_paint_objects", {})[prim.id] = (face_obj, outline_obj)
                 if create_outline:
                     stats["curves"] += 1
                 stats["meshes"] += 1

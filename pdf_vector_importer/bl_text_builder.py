@@ -17,6 +17,7 @@ from typing import Any, Callable, Dict, Iterator, Optional, Tuple
 
 import bpy
 
+from .visual_style import preview_color
 from .packed_assets import PackedAssetError, pack_and_verify_bytes, verify_packed_sha256
 from .pdfcadcore.primitives import NormalizedText
 from .pdfcadcore.text_scale import calibrate_text_size_to_bbox
@@ -284,12 +285,8 @@ def _styled_text_color(
     style: str,
     source_color: Optional[Tuple[float, float, float]] = None,
 ) -> Tuple[float, float, float]:
-    style_key = _normalize_style(style)
-    if style_key == "blueprint":
-        return (0.36, 0.74, 0.98)
-    if style_key == "high_contrast":
-        return (0.95, 0.95, 0.95)
-    return source_color if source_color is not None else (0.06, 0.06, 0.06)
+    base = source_color if source_color is not None else (0.06, 0.06, 0.06)
+    return preview_color(base, _normalize_style(style))
 
 
 def _should_center_anchor(
@@ -321,11 +318,13 @@ def _get_or_create_text_material(
         nodes = material.node_tree.nodes
         links = material.node_tree.links
         nodes.clear()
-        shader = nodes.new(type="ShaderNodeBsdfPrincipled")
+        # PDF ink is unlit: host studio lighting must not gray black letters
+        # or add specular halos to their native extruded geometry.
+        shader = nodes.new(type="ShaderNodeEmission")
         output = nodes.new(type="ShaderNodeOutputMaterial")
-        shader.inputs["Base Color"].default_value = (r, g, b, 1.0)
-        shader.inputs["Alpha"].default_value = 1.0
-        links.new(shader.outputs["BSDF"], output.inputs["Surface"])
+        shader.inputs["Color"].default_value = (r, g, b, 1.0)
+        shader.inputs["Strength"].default_value = 1.0
+        links.new(shader.outputs["Emission"], output.inputs["Surface"])
     except Exception as exc:
         try:
             bpy.data.materials.remove(material)
@@ -1529,17 +1528,21 @@ def _verify_text_material(obj) -> tuple[list[str], Dict[str, Any]]:
         nodes = []
         links = []
     shaders = [
-        node for node in nodes if str(getattr(node, "type", "")) == "BSDF_PRINCIPLED"
+        node for node in nodes if str(getattr(node, "type", "")) == "EMISSION"
     ]
     outputs = [
         node for node in nodes if str(getattr(node, "type", "")) == "OUTPUT_MATERIAL"
     ]
     try:
         node_rgba = tuple(
-            float(value) for value in shaders[0].inputs["Base Color"].default_value
+            float(value) for value in shaders[0].inputs["Color"].default_value
         )
     except (AttributeError, IndexError, KeyError, TypeError, ValueError):
         node_rgba = ()
+    try:
+        strength = float(shaders[0].inputs["Strength"].default_value)
+    except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+        strength = float("nan")
     shader_linked = any(
         getattr(link, "from_node", None) in shaders
         and getattr(link, "to_node", None) in outputs
@@ -1552,6 +1555,8 @@ def _verify_text_material(obj) -> tuple[list[str], Dict[str, Any]]:
         actual_text_rgba=list(actual),
         actual_text_node_rgba=list(node_rgba),
         text_shader_to_output_linked=shader_linked,
+        text_shader_type="EMISSION",
+        text_emission_strength=strength,
     )
     if material is None or not material_owned:
         failures.append("text_material_assignment_unverified")
@@ -1573,7 +1578,8 @@ def _verify_text_material(obj) -> tuple[list[str], Dict[str, Any]]:
     if (
         material is None
         or not bool(getattr(material, "use_nodes", False))
-        or not shader_linked
+        or not shader_linked or len(shaders) != 1
+        or not math.isfinite(strength) or abs(strength - 1.0) > 1e-6
     ):
         failures.append("text_material_node_mode_unverified")
     _VERIFIED_TEXT_MATERIALS[cache_key] = (tuple(failures), dict(evidence))

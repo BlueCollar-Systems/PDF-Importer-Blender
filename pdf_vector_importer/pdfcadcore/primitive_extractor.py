@@ -66,6 +66,29 @@ def _norm_color(col) -> Optional[Tuple[float, float, float]]:
         return None
 
 
+def _source_paint_opacity(raw) -> float:
+    """Normalize PDF constant opacity, preserving opaque legacy defaults."""
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return 1.0
+    if not math.isfinite(value):
+        return 1.0
+    return max(0.0, min(1.0, value))
+
+
+def _source_draw_order(raw) -> Optional[int]:
+    if isinstance(raw, bool):
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if value < 0 or (not isinstance(raw, (int, str)) and raw != value):
+        return None
+    return value
+
+
 def _composite_alpha(color, alpha):
     """Composite a constant alpha (PDF /CA, /ca) into ``color`` against the white page.
 
@@ -318,11 +341,10 @@ def extract_page(
         if not items:
             continue
 
-        stroke = _composite_alpha(
-            _norm_color(path_group.get("color") or path_group.get("stroke")),
-            path_group.get("stroke_opacity"),
-        )
-        fill = _composite_alpha(_norm_color(path_group.get("fill")), path_group.get("fill_opacity"))
+        source_stroke = _norm_color(path_group.get("color") or path_group.get("stroke"))
+        source_fill = _norm_color(path_group.get("fill"))
+        stroke = _composite_alpha(source_stroke, path_group.get("stroke_opacity"))
+        fill = _composite_alpha(source_fill, path_group.get("fill_opacity"))
         width = path_group.get("width")
         try:
             width = float(width) * MM_PER_PT * scale if width is not None else None
@@ -469,6 +491,11 @@ def extract_page(
                 area=area, page_number=page_num,
                 clip_fill_group_id=clip_fill_group,
                 clip_fill_even_odd=bool(clip_fill_group and path_group.get("even_odd", False)),
+                source_stroke_color=source_stroke,
+                source_fill_color=source_fill,
+                stroke_opacity=_source_paint_opacity(path_group.get("stroke_opacity")),
+                fill_opacity=_source_paint_opacity(path_group.get("fill_opacity")),
+                source_draw_order=_source_draw_order(path_group.get("seqno")),
             ))
             if path_group.get("bcs_preserve_source_edges"):
                 preserve_edge_ids.add(primitives[-1].id)

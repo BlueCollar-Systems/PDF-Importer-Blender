@@ -74,7 +74,7 @@ _TEXT_MODE_ITEMS = [
 _VISUAL_STYLE_ITEMS = [
     ("source", "Source Accurate", "Preserve source PDF colors"),
     ("blueprint", "Blueprint Preview", "Crisp cyan linework for readability"),
-    ("high_contrast", "High Contrast", "Bright monochrome linework for dark viewports"),
+    ("high_contrast", "High Contrast", "Bright linework and dark knockouts for dark viewports"),
 ]
 
 _PAGE_ARRANGEMENT_ITEMS = [

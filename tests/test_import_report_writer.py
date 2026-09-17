@@ -29,6 +29,27 @@ from pdf_vector_importer.pdfcadcore.import_report import (  # noqa: E402
 
 
 class TestImportReportWriter(unittest.TestCase):
+    def test_default_reports_do_not_overwrite_other_hosts_or_prior_runs(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="bl_report_isolation_") as tmp:
+            legacy = Path(tmp) / "drawing_import_report.json"
+            legacy.write_text('{"host":"other-cad"}', encoding="utf-8")
+            with patch("pdf_vector_importer.bl_import_engine.tempfile.gettempdir", return_value=tmp), patch(
+                "pdf_vector_importer.bl_import_engine._pymupdf_version", return_value=""
+            ):
+                first = Path(write_import_report("drawing.pdf", {}, {"primitives": 9}))
+                first_bytes = first.read_bytes()
+                second = Path(write_import_report("drawing.pdf", {}, {"primitives": 12}))
+                explicit = Path(tmp) / "chosen-report.json"
+                chosen = write_import_report("drawing.pdf", {"import_report_path": str(explicit)}, {})
+            self.assertNotEqual(first.parent, second.parent)
+            self.assertTrue(first.parent.name.startswith("bcs-blender-import-"))
+            self.assertEqual(first.read_bytes(), first_bytes)
+            self.assertEqual(json.loads(first_bytes)["result"]["primitives"], 9)
+            self.assertEqual(json.loads(second.read_text(encoding="utf-8"))["result"]["primitives"], 12)
+            self.assertEqual(legacy.read_text(encoding="utf-8"), '{"host":"other-cad"}')
+            self.assertEqual(chosen, str(explicit))
+            self.assertTrue(explicit.is_file())
+
     def test_clean_scale_evaluation_is_explicit_and_contract_ready(self) -> None:
         report = build_import_report(
             host_app="blender",

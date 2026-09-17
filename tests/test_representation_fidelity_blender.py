@@ -173,12 +173,15 @@ class _Node:
     def __init__(self, node_type, *, image=None):
         self.type = {
             "ShaderNodeBsdfPrincipled": "BSDF_PRINCIPLED",
+            "ShaderNodeEmission": "EMISSION",
             "ShaderNodeOutputMaterial": "OUTPUT_MATERIAL",
             "ShaderNodeTexImage": "TEX_IMAGE",
         }.get(node_type, node_type)
         self.image = image
         self.inputs = {
             "Base Color": _Socket(self),
+            "Color": _Socket(self),
+            "Strength": _Socket(self),
             "Alpha": _Socket(self),
             "Surface": _Socket(self),
         }
@@ -186,6 +189,7 @@ class _Node:
             "Color": _Socket(self),
             "Alpha": _Socket(self),
             "BSDF": _Socket(self),
+            "Emission": _Socket(self),
         }
 
 
@@ -2073,8 +2077,8 @@ def test_text_material_color_is_part_of_visual_verification(monkeypatch):
         material = original(*args, **kwargs)
         material.diffuse_color = (1.0, 0.0, 1.0, 1.0)
         for node in material.node_tree.nodes:
-            if node.type == "BSDF_PRINCIPLED":
-                node.inputs["Base Color"].default_value = (1.0, 0.0, 1.0, 1.0)
+            if node.type == "EMISSION":
+                node.inputs["Color"].default_value = (1.0, 0.0, 1.0, 1.0)
         return material
 
     monkeypatch.setattr(bl_text_builder, "_get_or_create_text_material", _wrong_color)
@@ -2091,6 +2095,27 @@ def test_text_material_color_is_part_of_visual_verification(monkeypatch):
     assert obj is None
     attempt = opts._text_delivery_records[-1]["attempts"][0]
     assert "text_material_color_mismatch" in attempt["evidence"]["failures"]
+    assert attempt["cleanup"]["status"] == "complete"
+    assert fake.data.materials.removed
+
+
+@pytest.mark.parametrize("strength", [0.0, 2.0, float("nan")])
+def test_unlit_text_rejects_changed_emission_strength(monkeypatch, strength):
+    fake, collection = _install(monkeypatch)
+    original = bl_text_builder._get_or_create_text_material
+
+    def wrong_strength(*args, **kwargs):
+        material = original(*args, **kwargs)
+        for node in material.node_tree.nodes:
+            if node.type == "EMISSION":
+                node.inputs["Strength"].default_value = strength
+        return material
+
+    monkeypatch.setattr(bl_text_builder, "_get_or_create_text_material", wrong_strength)
+    opts = types.SimpleNamespace(import_mode="vector", text_mode="text")
+    assert bl_text_builder.build_text(_item(), collection, page_number=2, text_mode="text", provenance_opts=opts) is None
+    attempt = opts._text_delivery_records[-1]["attempts"][0]
+    assert "text_material_node_mode_unverified" in attempt["evidence"]["failures"]
     assert attempt["cleanup"]["status"] == "complete"
     assert fake.data.materials.removed
 

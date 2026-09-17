@@ -20,11 +20,13 @@ from pdfcadcore import primitive_extractor  # noqa: E402
 # September 16: extended vector clip fills retain grouped contour metadata.
 # Overlapping source strokes also keep their polygon vertices, avoiding circle-fit
 # crescents around exact masks. Text/fraction/source-character proofs are unchanged.
+# September 17: additive raw paint RGB/alpha/order survives beside unchanged
+# legacy composite colors; finite integer order validation rejects invented order.
 # This is the reviewed integration output: current main plus the fraction-core
 # port. It deliberately does not claim that these combined bytes were approved
 # independently before the merge review.
 REVIEWED_COMBINED_SUCCESSOR_SHA256 = (
-    "dcb6ca65da5924eaeae8c7ad4d4a660f0ca8fb0aabecc0f8068cb115090f4be1"
+    "613548589e77aaa3ea6813b1bbcc028e5310359e891e89ba56a497e287a1c7b4"
 )
 
 
