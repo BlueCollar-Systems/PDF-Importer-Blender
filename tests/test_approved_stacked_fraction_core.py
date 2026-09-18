@@ -30,7 +30,7 @@ from pdfcadcore import primitive_extractor  # noqa: E402
 # port. It deliberately does not claim that these combined bytes were approved
 # independently before the merge review.
 REVIEWED_COMBINED_SUCCESSOR_SHA256 = (
-    "19649d27cd5e860a243cbbe429a20dfe7d56aebb501335cc53d4482f427cd595"
+    "f14df4ec93e6e5d8a1d24b5ac86e2a906c6a51da72a0d185b0e321d8a44258f9"
 )
 
 

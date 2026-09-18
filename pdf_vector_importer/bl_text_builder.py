@@ -735,6 +735,41 @@ class _ConvertedGlyphTemplates:
         return self._payloads.get(key)
 
 
+def _source_character_font_height(layout) -> float:
+    """Read an original PDF em-height descriptor bound to this exact quad."""
+    try:
+        ascender = float(layout.source_font_ascender)
+        descender = float(layout.source_font_descender)
+        source_size = float(layout.source_font_size_pdf)
+        writing_mode = layout.source_writing_mode
+        quad = tuple(tuple(float(v) for v in p) for p in layout.source_quad_pdf)
+        origin = tuple(float(v) for v in layout.source_origin_pdf)
+        if len(quad) != 4 or len(origin) != 2 or any(len(p) != 2 for p in quad):
+            raise ValueError("malformed original font frame")
+        ul, ur, lr, ll = quad
+        values = (ascender, descender, source_size, *(v for p in quad for v in p), *origin)
+        if not all(math.isfinite(v) for v in values):
+            raise ValueError("non-finite source metric")
+        height = ascender - descender
+        if height <= 0.0 or source_size <= 0.0 or type(writing_mode) is not int or writing_mode != 0:
+            raise ValueError("unsupported original font metrics")
+        up = tuple((ul[i] - ll[i]) / height for i in range(2))
+        if math.hypot(*up) <= 1e-12:
+            raise ValueError("singular source em axis")
+        # MuPDF stores these corners/origins in float32. Bound the readback
+        # tolerance by source-coordinate magnitude, never by glyph ink bounds.
+        magnitude = max(abs(v) for p in quad for v in p)
+        tolerance = max(1e-7, 4.0 * math.ldexp(1.0, math.frexp(magnitude)[1] - 24))
+        if any(abs(ul[i] + lr[i] - ur[i] - ll[i]) > tolerance for i in range(2)):
+            raise ValueError("non-affine original font frame")
+        for corner, metric in ((ul, ascender), (ll, descender)):
+            if any(abs(origin[i] + up[i] * metric - corner[i]) > tolerance for i in range(2)):
+                raise ValueError("descriptor does not bind to source baseline/quad")
+        return height
+    except (AttributeError, TypeError, ValueError, OverflowError) as exc:
+        raise RuntimeError("original PDF character font metrics are unavailable or unbound") from exc
+
+
 def _positioned_font_axis_metrics(obj, text_item) -> Dict[str, Any]:
     asset = getattr(text_item, "font_asset", None)
     glyph_id = getattr(text_item, "source_glyph_id", None)
@@ -817,45 +852,38 @@ def _positioned_font_axis_metrics(obj, text_item) -> Dict[str, Any]:
     # from the host also folds in any hard-range clamp the host applied.
     font_normalization_units = _blender_font_normalization_extent(asset)
     rendered_unit_m = size / float(font_normalization_units)
-    # Vertical axis is NEUTRAL: the character quad's vertical edge supplies
-    # direction only. The quad edge length is not a reliable font line box
-    # (PyMuPDF quad heights measured 0.937 x em on the owner drawing where an
-    # ascender-descender box would be 1.117 x em), so scaling glyph ink to it
-    # under-delivers the requested size. With local_line_height equal to the
-    # quad edge length, the matrix's vertical column is a unit vector and the
-    # rendered vertical scale stays exactly the calibrated source em scale.
-    #
-    # A REUSED converted template is the exception: its local outline was
-    # converted at the FIRST span's host size (``pdf_font_data_size``), which
-    # ``size`` now holds, while this character wants its own calibrated em.
-    # The advance axis already follows the item because ``local_advance`` is
-    # measured in template units and mapped onto this quad's width; the
-    # vertical column must carry the same item/template ratio or every reused
-    # glyph keeps the first size seen (1011: mixed tall/tiny 'TOWER').
-    vertical_scale = 1.0
-    vertical_axis_scale = "neutral_source_em"
+    # The original PDF font descriptor and its original character quad define
+    # the em-height axis. RAWDICT's size is a geometric mean for anisotropic
+    # matrices; treating it as the Y size compresses a 12-by-20 em to 15.49.
+    # Font-file ascenders are also not a substitute for PDF descriptor metrics.
+    # The local outline can be a reused template at any host size: dividing
+    # the source quad edge by this template's descriptor-height preserves both
+    # its reuse ratio and the PDF's actual anisotropic/sheared Y magnitude.
+    layouts = tuple(getattr(text_item, "source_char_layout", ()) or ())
+    if len(layouts) != 1:
+        raise RuntimeError("original character font metrics are unavailable")
+    source_height = _source_character_font_height(layouts[0])
+    source_quad = layouts[0].source_quad_pdf
+    source_h = tuple(source_quad[1][i] - source_quad[0][i] for i in range(2))
+    source_up = tuple((source_quad[0][i] - source_quad[3][i]) / source_height for i in range(2))
+    source_size = float(layouts[0].source_font_size_pdf)
+    # char.size squared is the PDF text matrix determinant. The declared
+    # advance cell can differ from the font program's ink/advance: recover the
+    # source advance in em units, never stretch glyph ink to that cell.
+    source_advance_em = abs(source_h[0] * source_up[1] - source_h[1] * source_up[0]) / source_size**2
+    if not math.isfinite(source_advance_em) or source_advance_em <= 1e-12:
+        raise RuntimeError("original PDF character advance axis is singular")
+    local_advance = rendered_unit_m * units_per_em * source_advance_em
+    local_line_height = rendered_unit_m * units_per_em * source_height
     template_reused = bool(obj.get("pdf_converted_template_reused", False))
-    if template_reused:
-        item_size_m = float(_positioned_font_data_size_m(text_item))
-        if not math.isfinite(item_size_m) or item_size_m <= 0.0:
-            raise RuntimeError(
-                "calibrated host size is unavailable for reused glyph template"
-            )
-        vertical_scale = item_size_m / size
-        vertical_axis_scale = "template_size_ratio"
     target_quad = getattr(text_item, "target_quad_model", None)
     if target_quad is None or len(target_quad) != 4:
-        raise RuntimeError(
-            "positioned character target quad is unavailable for metric mapping"
-        )
-    ul, _ur, _lr, ll = tuple(
-        (float(point[0]), float(point[1])) for point in target_quad
-    )
+        raise RuntimeError("positioned character target quad is unavailable for metric mapping")
+    ul, _ur, _lr, ll = tuple((float(point[0]), float(point[1])) for point in target_quad)
     quad_vertical_m = math.hypot(ul[0] - ll[0], ul[1] - ll[1]) * MM_TO_M
     if not math.isfinite(quad_vertical_m) or quad_vertical_m <= 0.0:
-        raise RuntimeError(
-            "positioned character target quad has no vertical extent"
-        )
+        raise RuntimeError("positioned character target quad has no vertical extent")
+    vertical_scale = quad_vertical_m / local_line_height
     baseline_alignment = str(obj.get("pdf_baseline_alignment", "") or "")
     local_baseline_y = (
         -float(descender) * rendered_unit_m
@@ -871,13 +899,11 @@ def _positioned_font_axis_metrics(obj, text_item) -> Dict[str, Any]:
         "line_height_units": line_height_units,
         "font_normalization_units": font_normalization_units,
         "rendered_unit_m": rendered_unit_m,
-        "local_advance": float(advance_units) * rendered_unit_m,
-        # ``local_line_height`` is the local length that maps onto the quad's
-        # vertical edge: quad_vertical_m / vertical_scale makes the matrix's
-        # vertical column a unit vector times vertical_scale.
-        "local_line_height": quad_vertical_m / vertical_scale,
+        "local_advance": local_advance,
+        "source_advance_em": source_advance_em,
+        "local_line_height": local_line_height,
         "local_baseline_y": local_baseline_y,
-        "vertical_axis_scale": vertical_axis_scale,
+        "vertical_axis_scale": "original_pdf_font_descriptor",
         "vertical_scale": vertical_scale,
         "converted_template_reused": template_reused,
         "metric_source": "embedded_font_glyph_metrics",
@@ -3192,7 +3218,7 @@ def _character_text_item(text_item: NormalizedText, layout) -> NormalizedText:
         advance_width=float(layout.advance_width),
         glyph_height=float(layout.glyph_height),
         rotation=math.degrees(math.atan2(top_dy, top_dx)),
-        source_char_layout=(),
+        source_char_layout=(layout,),
         requires_individual_positioning=False,
         positioned_character=True,
         source_glyph_id=(int(layout.glyph_id) if layout.glyph_id is not None else None),

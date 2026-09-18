@@ -610,6 +610,8 @@ def _character_layout():
             target_quad=((12.0, 30.0), (18.0, 30.0), (18.0, 24.0), (12.0, 24.0)),
             advance_width=6.0,
             glyph_height=6.0,
+            source_font_size_pdf=12.0, source_font_ascender=10/12,
+            source_font_descender=-2/12, source_writing_mode=0,
         ),
         TextCharLayout(
             text="B",
@@ -621,6 +623,8 @@ def _character_layout():
             target_quad=((20.0, 30.0), (26.0, 30.0), (26.0, 24.0), (20.0, 24.0)),
             advance_width=6.0,
             glyph_height=6.0,
+            source_font_size_pdf=12.0, source_font_ascender=10/12,
+            source_font_descender=-2/12, source_writing_mode=0,
         ),
     )
 
@@ -639,6 +643,10 @@ def _character_layout_repeated_a():
             target_quad=second.target_quad,
             advance_width=second.advance_width,
             glyph_height=second.glyph_height,
+            source_font_size_pdf=second.source_font_size_pdf,
+            source_font_ascender=second.source_font_ascender,
+            source_font_descender=second.source_font_descender,
+            source_writing_mode=second.source_writing_mode,
         ),
     )
 
@@ -1701,14 +1709,10 @@ def test_positioned_glyph_metrics_use_blender_font_bbox_normalization():
     assert metrics["advance_units"] == 500
 
 
-def test_positioned_glyph_metrics_vertical_axis_is_neutral_quad_edge():
-    # The PyMuPDF character quad's vertical edge is NOT a reliable
-    # ascender-descender box (measured 0.937 x em on the owner drawing, an
-    # ascender-descender box would be 1.117 x em). Mapping the font line box
-    # onto it under-scales glyph ink. The quad's vertical edge supplies
-    # DIRECTION only: local_line_height must equal the quad edge length so the
-    # matrix's vertical column is a unit vector and the rendered vertical
-    # scale stays exactly the calibrated source em scale.
+def test_positioned_glyph_metrics_use_original_pdf_descriptor_height():
+    # This original PDF descriptor is exactly one em, unlike font-file metrics.
+    # Its6mm target quad maps a6mm template em at unit scale; anisotropic cases
+    # are tested separately from this original host font-normalization check.
     child = bl_text_builder._character_text_item(_item(), _character_layout()[0])
     data = _FontData("NeutralVertical")
     data.size = 0.0075
@@ -1726,7 +1730,7 @@ def test_positioned_glyph_metrics_vertical_axis_is_neutral_quad_edge():
         target_quad=child.target_quad_model,
         z=0.0,
     )
-    # vertical column must be a unit vector: rendered vertical scale 1.0
+    # This particular source/template pair has a unit vertical scale.
     assert math.hypot(matrix[0][1], matrix[1][1]) == pytest.approx(1.0)
 
 
@@ -1741,6 +1745,8 @@ def _large_a_layout():
         target_quad=((12.0, 36.0), (24.0, 36.0), (24.0, 24.0), (12.0, 24.0)),
         advance_width=12.0,
         glyph_height=12.0,
+        source_font_size_pdf=24.0, source_font_ascender=10/24,
+        source_font_descender=-14/24, source_writing_mode=0,
     )
 
 
