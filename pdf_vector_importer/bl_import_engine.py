@@ -1416,6 +1416,33 @@ def _focus_view_on_import(
     return focused
 
 
+def _image_paint_key(info, digest):
+    """Bind renderer image instances by pixels and transform, never text numbering.
+
+    MuPDF's image-info and structured-text devices count text blocks differently;
+    an annotation image can consequently have different ``number`` values.
+    """
+    return (
+        int(info.get("width", 0)), int(info.get("height", 0)),
+        tuple(float(value) for value in info.get("transform", ())), bytes(digest),
+    )
+
+
+def _image_block_bytes(block, fitz):
+    """Retain the original pixels and the separate PDF soft mask without resizing."""
+    image_bytes = bytes(block.get("image") or b"")
+    extension = re.sub(r"[^A-Za-z0-9]+", "", str(block.get("ext") or "png")).lower() or "png"
+    mask = bytes(block.get("mask") or b"")
+    if mask:
+        pix = fitz.Pixmap(image_bytes)
+        if pix.alpha:
+            pix = fitz.Pixmap(pix, 0)
+        pix = fitz.Pixmap(pix, fitz.Pixmap(mask))
+        image_bytes = pix.tobytes("png")
+        extension = "png"
+    return image_bytes, extension
+
+
 def _extract_image_placements(doc, page, page_num: int, import_cfg, image_dir: str) -> list[dict]:
     """Extract embedded image XObjects and map them into page coordinates (mm)."""
     placements: list[dict] = []
@@ -1455,6 +1482,11 @@ def _extract_image_placements(doc, page, page_num: int, import_cfg, image_dir: s
             if needs_rgb:
                 pix = fitz.Pixmap(fitz.csRGB, pix)
 
+            smask = int(img_info[1] or 0)
+            if smask:
+                if pix.alpha:
+                    pix = fitz.Pixmap(pix, 0)
+                pix = fitz.Pixmap(pix, fitz.Pixmap(doc, smask))
             image_path = os.path.join(image_dir, f"page_{page_num:03d}_xref_{xref}.png")
             pix.save(image_path)
         except (RuntimeError, OSError, ValueError, TypeError):
@@ -1521,11 +1553,10 @@ def _extract_image_placements(doc, page, page_num: int, import_cfg, image_dir: s
         image_inventory = page.get_image_info(hashes=True, xrefs=True)
     except (AttributeError, RuntimeError, TypeError, ValueError):
         image_inventory = []
-    inline_inventory = {
-        int(info.get("number", -1)): info
-        for info in image_inventory
-        if int(info.get("xref", 0) or 0) == 0
-    }
+    inline_inventory = {}
+    for info in image_inventory:
+        if int(info.get("xref", 0) or 0) == 0:
+            inline_inventory.setdefault(_image_paint_key(info, info.get("digest") or b""), []).append(info)
     if inline_inventory:
         try:
             image_blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_IMAGES).get(
@@ -1538,7 +1569,7 @@ def _extract_image_placements(doc, page, page_num: int, import_cfg, image_dir: s
             for block in image_blocks
             if int(block.get("type", 0) or 0) == 1
         ]
-        if len(inline_inventory) > _INLINE_IMAGE_COMPOSITE_THRESHOLD:
+        if sum(len(instances) for instances in inline_inventory.values()) > _INLINE_IMAGE_COMPOSITE_THRESHOLD:
             composite = _render_images_only_composite(
                 page,
                 page_num,
@@ -1551,17 +1582,17 @@ def _extract_image_placements(doc, page, page_num: int, import_cfg, image_dir: s
             if composite is not None:
                 return [composite]
         for block in image_blocks:
-            image_number = int(block.get("number", -1))
-            info = inline_inventory.get(image_number)
-            if info is None:
-                continue
             image_bytes = bytes(block.get("image") or b"")
             if not image_bytes:
                 continue
+            digest = fitz.Pixmap(image_bytes).digest
+            matches = inline_inventory.get(_image_paint_key(block, digest), [])
+            if not matches:
+                continue
+            info = matches.pop(0)
+            image_number = int(info.get("number", -1))
+            image_bytes, extension = _image_block_bytes(block, fitz)
             content_sha256 = hashlib.sha256(image_bytes).hexdigest()
-            extension = re.sub(
-                r"[^A-Za-z0-9]+", "", str(block.get("ext") or "png")
-            ).lower() or "png"
             image_path = os.path.join(
                 image_dir,
                 f"page_{page_num:03d}_inline_{content_sha256}.{extension}",
@@ -1652,7 +1683,7 @@ def _render_images_only_composite(
     manifest = hashlib.sha256()
     inline_count = 0
     for block in image_blocks:
-        image_bytes = bytes(block.get("image") or b"")
+        image_bytes, extension = _image_block_bytes(block, fitz)
         transform = block.get("transform")
         if not image_bytes or transform is None:
             return None
@@ -1661,9 +1692,6 @@ def _render_images_only_composite(
         if int(info.get("xref", 0) or 0) == 0:
             inline_count += 1
         content_sha256 = hashlib.sha256(image_bytes).hexdigest()
-        extension = re.sub(
-            r"[^A-Za-z0-9]+", "", str(block.get("ext") or "png")
-        ).lower() or "png"
         mime = "image/jpeg" if extension in {"jpg", "jpeg"} else f"image/{extension}"
         definition_id = f"img_{content_sha256}"
         if definition_id not in definitions:

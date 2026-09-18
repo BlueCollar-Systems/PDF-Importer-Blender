@@ -37,6 +37,20 @@ def _builder():
 MM_PER_PT = 25.4 / 72.0
 
 
+@pytest.mark.parametrize("start,end,expected_start,expected_end,mid", [
+    (0, 90, (12, 20), (10, 22), (10 + math.sqrt(2), 20 + math.sqrt(2))),
+    (270, 90, (10, 18), (10, 22), (12, 20)),
+    (180, 270, (8, 20), (10, 18), (10 - math.sqrt(2), 20 - math.sqrt(2))),
+])
+def test_core_arc_angles_are_degrees_not_radians(start, end, expected_start, expected_end, mid):
+    builder, _ = _builder()
+    points = builder._sample_arc_points((10, 20), 2, start, end, 8)
+    assert points[0] == pytest.approx(expected_start)
+    assert points[-1] == pytest.approx(expected_end)
+    assert points[4] == pytest.approx(mid)
+    assert all(math.hypot(x - 10, y - 20) == pytest.approx(2) for x, y in points)
+
+
 def _run_lengths(runs) -> list:
     lengths = []
     for run in runs:

@@ -595,9 +595,11 @@ def _sample_arc_points(
     end_angle: float,
     num_points: int = _ARC_SAMPLE_COUNT,
 ) -> list:
-    """Sample points along an arc defined by center, radius, and angle range."""
+    """Sample the core's DXF-style degree angles along a counterclockwise arc."""
     cx, cy = center
     # Normalize angle sweep
+    start_angle = math.radians(start_angle)
+    end_angle = math.radians(end_angle)
     sweep = end_angle - start_angle
     if sweep <= 0:
         sweep += 2.0 * math.pi

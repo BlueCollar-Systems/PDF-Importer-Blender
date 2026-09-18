@@ -262,6 +262,73 @@ def test_inline_image_is_imported_as_an_individual_exact_placement(tmp_path):
         assert actual == pytest.approx(expected)
 
 
+def test_annotation_image_survives_different_device_numbers_and_soft_mask(tmp_path):
+    """A Square /AP image is not in page resources and has independent numbering."""
+    document = fitz.open()
+    page = document.new_page(width=100, height=100)
+    carrier = document.new_page(width=100, height=100)
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 2, 1), True)
+    pix.set_pixel(0, 0, (255, 0, 0, 255))
+    pix.set_pixel(1, 0, (0, 0, 0, 0))
+    image_xref = carrier.insert_image(fitz.Rect(10, 10, 30, 20), pixmap=pix)
+    document.delete_page(1)
+    page = document[0]
+    annotation = page.add_rect_annot(fitz.Rect(10, 20, 30, 30))
+    document.xref_set_key(annotation.xref, "Rect", "[10 70 30 80]")
+    appearance = document.get_new_xref()
+    document.update_object(appearance, (
+        "<< /Type /XObject /Subtype /Form /BBox [0 0 20 10] "
+        f"/Resources << /XObject << /I {image_xref} 0 R >> >> >>"
+    ))
+    document.update_stream(appearance, b"q 20 0 0 10 0 0 cm /I Do Q")
+    document.xref_set_key(annotation.xref, "AP", f"<< /N {appearance} 0 R >>")
+    pdf_bytes = document.tobytes()
+    document.close()
+    document = fitz.open(stream=pdf_bytes, filetype="pdf")
+    page = document[0]
+    assert page.get_images(full=True) == []
+    inventory = page.get_image_info(hashes=True, xrefs=True)
+    assert len(inventory) == 1 and inventory[0]["xref"] == 0
+
+    class DifferentTextDeviceNumbers:
+        def __getattr__(self, name):
+            return getattr(page, name)
+
+        def get_text(self, *args, **kwargs):
+            result = page.get_text(*args, **kwargs)
+            for block in result["blocks"]:
+                block["number"] += 17
+            return result
+
+    placements = bl_import_engine._extract_image_placements(
+        document, DifferentTextDeviceNumbers(), 1,
+        types.SimpleNamespace(flip_y=True, user_scale=1.0), str(tmp_path),
+    )
+    assert len(placements) == 1
+    delivered = fitz.Pixmap(placements[0]["path"])
+    assert (delivered.width, delivered.height, delivered.alpha) == (2, 1, 1)
+    assert delivered.pixel(0, 0) == (255, 0, 0, 255)
+    assert delivered.pixel(1, 0) == (0, 0, 0, 0)
+    assert placements[0]["source_image_number"] == inventory[0]["number"]
+    assert placements[0]["width_mm"] == pytest.approx(20 * 25.4 / 72)
+    assert placements[0]["height_mm"] == pytest.approx(10 * 25.4 / 72)
+    document.close()
+
+
+def test_repeated_inline_pixels_keep_distinct_source_transforms(tmp_path):
+    path = tmp_path / "repeated.pdf"
+    _write_inline_image_pdf(path, [(20, 0, 0, 10, 10, 30), (20, 0, 0, 10, 50, 60)])
+    with fitz.open(path) as document:
+        placements = bl_import_engine._extract_image_placements(
+            document, document[0], 1,
+            types.SimpleNamespace(flip_y=True, user_scale=1.0), str(tmp_path),
+        )
+    assert len(placements) == 2
+    assert placements[0]["path"] == placements[1]["path"]
+    assert placements[0]["x_mm"] != placements[1]["x_mm"]
+    assert placements[0]["y_mm"] != placements[1]["y_mm"]
+
+
 def test_dense_inline_images_are_one_transparent_images_only_composite(tmp_path):
     pdf_path = tmp_path / "dense-inline-images.pdf"
     _write_inline_image_pdf(
