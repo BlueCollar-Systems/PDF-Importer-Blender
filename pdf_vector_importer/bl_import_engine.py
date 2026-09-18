@@ -2021,9 +2021,9 @@ def _render_text_item_raster(
     renderer: Optional[_PageDisplayListRenderer] = None,
 ) -> Optional[bpy.types.Object]:
     """Render and verify one text span as the terminal item-scoped fallback."""
-    source_bbox = getattr(text_item, "source_bbox_pdf", None)
-    from .raster_geometry import source_bbox_to_model
-    target_bbox = source_bbox_to_model(text_item)
+    from .raster_geometry import source_bbox_to_model, source_raster_bounds
+    source_bbox = source_raster_bounds(text_item)
+    target_bbox = source_bbox_to_model(text_item, source_bbox)
     if not image_dir or not source_bbox or not target_bbox:
         return None
     try:
@@ -2121,7 +2121,8 @@ def _render_text_item_raster(
         "height_mm": ty1 - ty0,
         "xref": -1_000_000 - source_id,
         "page_number": int(page_num),
-        "source_bbox_pdf": [sx0, sy0, sx1, sy1],
+        "source_bbox_pdf": list(text_item.source_bbox_pdf),
+        "source_coverage_bbox_pdf": [sx0, sy0, sx1, sy1],
         "source_render_clip_pdf": render_clip,
         "source_pixel_bbox_pdf": pixel_bbox,
         "source_item_id": str(item_id),
@@ -2146,6 +2147,7 @@ def _render_text_item_raster(
     try:
         obj["pdf_raster_source_item_id"] = str(item_id)
         obj["pdf_raster_source_bbox_pdf"] = list(placement["source_bbox_pdf"])
+        obj["pdf_raster_coverage_bbox_pdf"] = list(placement["source_coverage_bbox_pdf"])
         obj["pdf_raster_render_clip_pdf"] = list(
             placement["source_render_clip_pdf"]
         )

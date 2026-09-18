@@ -2889,10 +2889,15 @@ def _attempt_raster_impl(
         if not unlit:
             failures.append("raster_source_display_material_unverified")
     try:
-        from .raster_geometry import source_bbox_to_model
+        from .raster_geometry import source_bbox_to_model, source_raster_bounds
         pixel_bbox = obj.get("pdf_raster_pixel_bbox_pdf")
         if pixel_bbox is not None:
-            source_bbox = getattr(text_item, "source_bbox_pdf", None)
+            source_bbox = source_raster_bounds(text_item)
+            coverage = obj.get("pdf_raster_coverage_bbox_pdf", getattr(text_item, "source_bbox_pdf", None))
+            if coverage is None or len(coverage) != 4 or any(abs(float(a)-float(b)) > 1e-7
+                    for a,b in zip(coverage,source_bbox,strict=True)):
+                raise ValueError("Raster glyph coverage bounds do not match the original source quads")
+            verification_evidence["source_coverage_bbox_pdf"] = list(source_bbox)
             dpi = float(obj.get("pdf_raster_dpi", 0))
             if not source_bbox or dpi <= 0 or len(pixel_bbox) != 4:
                 raise ValueError("Raster source pixel bounds are unavailable")
