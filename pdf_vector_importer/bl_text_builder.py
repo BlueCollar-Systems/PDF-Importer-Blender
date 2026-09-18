@@ -2872,15 +2872,17 @@ def _attempt_raster_impl(
     if "pdf_raster_final_page_composite" in obj:
         try:
             shader = shader_nodes[0]
+            from .image_materials import source_image_sockets
+            specular, emission = source_image_sockets(shader)
             unlit = (
                 len(shader_nodes) == 1
                 and tuple(shader.inputs["Base Color"].default_value) == (0, 0, 0, 1)
-                and float(shader.inputs["Specular IOR Level"].default_value) == 0
+                and float(specular.default_value) == 0
                 and float(shader.inputs["Emission Strength"].default_value) == 1
                 and image.colorspace_settings.name == "Non-Color"
                 and all(node.extension == "EXTEND" for node in texture_nodes)
                 and any(link.from_node in texture_nodes and link.to_node == shader
-                        and link.to_socket == shader.inputs["Emission Color"]
+                        and link.to_socket == emission
                         for link in links)
             )
         except (AttributeError, IndexError, KeyError, TypeError, ValueError):

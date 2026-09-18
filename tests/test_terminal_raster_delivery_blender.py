@@ -1049,9 +1049,11 @@ def test_image_plane_constructor_rolls_back_object_and_mesh_after_partial_mutati
     assert meshes.removed == ["partial_mesh"]
 
 
+@pytest.mark.parametrize("legacy_sockets", [False, True])
 def test_image_plane_constructor_never_mutates_or_reuses_existing_resources(
     monkeypatch,
     tmp_path,
+    legacy_sockets,
 ):
     image_path = tmp_path / "clip.png"
     image_path.write_bytes(b"png-bytes")
@@ -1069,7 +1071,7 @@ def test_image_plane_constructor_never_mutates_or_reuses_existing_resources(
             }.get(node_type, node_type)
             self.image = None
             self.outputs = {"Color": _Socket(self), "Alpha": _Socket(self), "BSDF": _Socket(self)}
-            self.inputs = {name: _Socket(self) for name in ("Base Color", "Alpha", "Surface", "Roughness", "Specular IOR Level", "Emission Strength", "Emission Color")}
+            self.inputs = {name: _Socket(self) for name in ("Base Color", "Alpha", "Surface", "Roughness", "Specular" if legacy_sockets else "Specular IOR Level", "Emission Strength", "Emission" if legacy_sockets else "Emission Color")}
 
     class _Nodes(list):
         def clear(self):
@@ -1082,7 +1084,7 @@ def test_image_plane_constructor_never_mutates_or_reuses_existing_resources(
 
     class _Links(list):
         def new(self, source, target):
-            self.append(types.SimpleNamespace(from_node=source.node, to_node=target.node))
+            self.append(types.SimpleNamespace(from_node=source.node, to_node=target.node, from_socket=source, to_socket=target))
 
     class _Material:
         def __init__(self, name, *, sentinel=False):
@@ -1282,6 +1284,15 @@ def test_image_plane_constructor_never_mutates_or_reuses_existing_resources(
     assert isolated.data is not cached_first.data
     assert len(materials.created) == 4
     assert len(images.created) == 3
+    for material in materials.created:
+        nodes = material.node_tree.nodes
+        shader = next(node for node in nodes if node.type == "BSDF_PRINCIPLED")
+        texture = next(node for node in nodes if node.type == "TEX_IMAGE")
+        specular = shader.inputs["Specular" if legacy_sockets else "Specular IOR Level"]
+        emission = shader.inputs["Emission" if legacy_sockets else "Emission Color"]
+        assert specular.default_value == 0.0
+        assert shader.inputs["Emission Strength"].default_value == 1.0
+        assert any(link.from_socket is texture.outputs["Color"] and link.to_socket is emission for link in material.node_tree.links)
 
 
 def test_remove_created_image_plane_removes_all_owned_datablocks(monkeypatch):

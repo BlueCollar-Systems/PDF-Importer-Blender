@@ -2428,9 +2428,11 @@ def _create_uncached_image_plane(
         image.colorspace_settings.name = "Non-Color"
         bsdf.inputs["Base Color"].default_value = (0, 0, 0, 1)
         bsdf.inputs["Roughness"].default_value = 1
-        bsdf.inputs["Specular IOR Level"].default_value = 0
+        from .image_materials import source_image_sockets
+        specular, emission = source_image_sockets(bsdf)
+        specular.default_value = 0
         bsdf.inputs["Emission Strength"].default_value = 1
-        links.new(tex.outputs["Color"], bsdf.inputs["Emission Color"])
+        links.new(tex.outputs["Color"], emission)
         links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
         links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
         material.blend_method = "HASHED"
@@ -2561,9 +2563,11 @@ def _create_image_plane(
             image.colorspace_settings.name = "Non-Color"
             bsdf.inputs["Base Color"].default_value = (0, 0, 0, 1)
             bsdf.inputs["Roughness"].default_value = 1
-            bsdf.inputs["Specular IOR Level"].default_value = 0
+            from .image_materials import source_image_sockets
+            specular, emission = source_image_sockets(bsdf)
+            specular.default_value = 0
             bsdf.inputs["Emission Strength"].default_value = 1
-            links.new(tex.outputs["Color"], bsdf.inputs["Emission Color"])
+            links.new(tex.outputs["Color"], emission)
             links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
             links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
             created.blend_method = "HASHED"
