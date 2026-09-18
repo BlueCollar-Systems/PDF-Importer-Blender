@@ -1553,11 +1553,11 @@ def _extract_image_placements(doc, page, page_num: int, import_cfg, image_dir: s
         image_inventory = page.get_image_info(hashes=True, xrefs=True)
     except (AttributeError, RuntimeError, TypeError, ValueError):
         image_inventory = []
-    inline_inventory = {}
+    image_instances = {}
     for info in image_inventory:
-        if int(info.get("xref", 0) or 0) == 0:
-            inline_inventory.setdefault(_image_paint_key(info, info.get("digest") or b""), []).append(info)
-    if inline_inventory:
+        image_instances.setdefault(_image_paint_key(info, info.get("digest") or b""), []).append(info)
+    inline_count = sum(int(info.get("xref", 0) or 0) == 0 for info in image_inventory)
+    if inline_count:
         try:
             image_blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_IMAGES).get(
                 "blocks", []
@@ -1569,7 +1569,7 @@ def _extract_image_placements(doc, page, page_num: int, import_cfg, image_dir: s
             for block in image_blocks
             if int(block.get("type", 0) or 0) == 1
         ]
-        if sum(len(instances) for instances in inline_inventory.values()) > _INLINE_IMAGE_COMPOSITE_THRESHOLD:
+        if inline_count > _INLINE_IMAGE_COMPOSITE_THRESHOLD:
             composite = _render_images_only_composite(
                 page,
                 page_num,
@@ -1586,10 +1586,12 @@ def _extract_image_placements(doc, page, page_num: int, import_cfg, image_dir: s
             if not image_bytes:
                 continue
             digest = fitz.Pixmap(image_bytes).digest
-            matches = inline_inventory.get(_image_paint_key(block, digest), [])
+            matches = image_instances.get(_image_paint_key(block, digest), [])
             if not matches:
                 continue
             info = matches.pop(0)
+            if int(info.get("xref", 0) or 0) != 0:
+                continue
             image_number = int(info.get("number", -1))
             image_bytes, extension = _image_block_bytes(block, fitz)
             content_sha256 = hashlib.sha256(image_bytes).hexdigest()

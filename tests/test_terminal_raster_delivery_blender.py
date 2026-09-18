@@ -312,6 +312,31 @@ def test_annotation_image_survives_different_device_numbers_and_soft_mask(tmp_pa
     assert placements[0]["source_image_number"] == inventory[0]["number"]
     assert placements[0]["width_mm"] == pytest.approx(20 * 25.4 / 72)
     assert placements[0]["height_mm"] == pytest.approx(10 * 25.4 / 72)
+
+    class EarlierXObjectWithDifferentMask(DifferentTextDeviceNumbers):
+        def get_image_info(self, **kwargs):
+            actual = page.get_image_info(**kwargs)
+            return [dict(actual[0], xref=999), *actual]
+
+        def get_text(self, *args, **kwargs):
+            result = super().get_text(*args, **kwargs)
+            block = next(b for b in result["blocks"] if b["type"] == 1)
+            mask = fitz.Pixmap(fitz.csGRAY, fitz.IRect(0, 0, 2, 1), False)
+            mask.set_pixel(0, 0, (0,))
+            mask.set_pixel(1, 0, (255,))
+            result["blocks"].insert(0, dict(block, mask=mask.tobytes("png")))
+            return result
+
+    # Equal color pixels/transforms can occur with different soft masks. Consume
+    # all renderer instances before choosing inline entries, in source order.
+    placements = bl_import_engine._extract_image_placements(
+        document, EarlierXObjectWithDifferentMask(), 1,
+        types.SimpleNamespace(flip_y=True, user_scale=1.0), str(tmp_path),
+    )
+    assert len(placements) == 1
+    delivered = fitz.Pixmap(placements[0]["path"])
+    assert delivered.pixel(0, 0) == (255, 0, 0, 255)
+    assert delivered.pixel(1, 0) == (0, 0, 0, 0)
     document.close()
 
 

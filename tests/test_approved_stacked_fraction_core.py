@@ -24,11 +24,13 @@ from pdfcadcore import primitive_extractor  # noqa: E402
 # legacy composite colors; finite integer order validation rejects invented order.
 # September 17: preserve original MuPDF affine character quads; synthesized
 # recovered font-metric shear is rejected by anisotropic/sheared source tests.
+# September 17: a single filled contour with an exactly repeated endpoint is
+# closed even without h; no tolerance-based closure or compound-hole changes.
 # This is the reviewed integration output: current main plus the fraction-core
 # port. It deliberately does not claim that these combined bytes were approved
 # independently before the merge review.
 REVIEWED_COMBINED_SUCCESSOR_SHA256 = (
-    "ff061f62ca608e90728f894d81f6a24cca288212c12a0b2a8555bed586089562"
+    "19649d27cd5e860a243cbbe429a20dfe7d56aebb501335cc53d4482f427cd595"
 )
 
 
