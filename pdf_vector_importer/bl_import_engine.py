@@ -3506,11 +3506,26 @@ def import_pdf(
             total_stats["complexity"] = complexity
             _progress(_page_progress(i, 0.40), complexity["message"])
 
+            # Bind exact visible source marks before optional micro-line cleanup.
+            # Their tiny centerline length does not describe their painted area.
+            from .bl_source_capsules import (
+                prepare_capsules, cleanup_preserving_capsules,
+            )
+
+            prepared_capsules = []
+            if import_mode != "raster":
+                prepared_capsules, unresolved_capsules = prepare_capsules(
+                    page, page_data, source_sha256=source_sha256, page_number=page_num,
+                    user_scale=import_cfg.user_scale, flip_y=import_cfg.flip_y,
+                    used_pixels=int(total_stats.get('nontext_composite_pixels', 0)),
+                )
+                total_stats.setdefault('source_capsule_footprints', []).extend(unresolved_capsules)
+
             # 9c. Geometry cleanup (remove micro-segments)
             if import_cfg.cleanup_level != "conservative" or import_cfg.min_seg_len > 0:
                 t_phase = time.perf_counter()
-                cleanup_stats = cleanup_primitives(
-                    page_data.primitives,
+                cleanup_stats = cleanup_preserving_capsules(
+                    page_data.primitives, prepared_capsules, cleanup_primitives,
                     cleanup_level=import_cfg.cleanup_level,
                 )
                 _add_phase_ms("cleanup_ms", t_phase)
@@ -3571,7 +3586,6 @@ def import_pdf(
             # 9g. Build geometry
             page_stats = {"curves": 0, "meshes": 0, "circles": 0, "arcs": 0}
             image_order_plans = []
-            prepared_capsules = []
             if import_mode != "raster":
                 page_builder_config = dict(builder_config)
                 if not import_cfg.ignore_images:
@@ -3585,14 +3599,6 @@ def import_pdf(
                     page_builder_config['_image_order_isolated_stroke_ids'] = {
                         primitive_id for plan in image_order_plans for primitive_id in plan['later_strokes'].values()
                     }
-                from .bl_source_capsules import prepare_capsules
-
-                prepared_capsules, unresolved_capsules = prepare_capsules(
-                    page, page_data, source_sha256=source_sha256, page_number=page_num,
-                    user_scale=import_cfg.user_scale, flip_y=import_cfg.flip_y,
-                    used_pixels=int(total_stats.get('nontext_composite_pixels', 0)),
-                )
-                total_stats.setdefault('source_capsule_footprints', []).extend(unresolved_capsules)
                 page_builder_config.setdefault('_image_order_isolated_stroke_ids', set()).update(
                     spec['primitive_id'] for spec in prepared_capsules
                 )

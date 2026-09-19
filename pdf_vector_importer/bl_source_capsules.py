@@ -25,6 +25,29 @@ from .stroke_footprint import bind_similarity_strokes, unclipped_capsules
 MAX_IMPORT_PIXELS = 64_000_000
 
 
+def cleanup_preserving_capsules(primitives, prepared, cleanup, **kwargs):
+    """Keep certified source centerlines out of optional micro-line cleanup."""
+    if not prepared:
+        return cleanup(primitives, **kwargs)
+    protected = {spec["primitive_id"] for spec in prepared}
+    if len(protected) != len(prepared):
+        raise ValueError("Duplicate source capsule ownership before cleanup")
+    originals = list(primitives)
+    for spec in prepared:
+        matches = [p for p in originals if p.id == spec["primitive_id"]]
+        if len(matches) != 1 or list(matches[0].points) != spec["points_mm"]:
+            raise ValueError("Source capsule changed before cleanup")
+    eligible = [p for p in originals if p.id not in protected]
+    original_eligible = {id(p) for p in eligible}
+    stats = cleanup(eligible, **kwargs)
+    remaining = {id(p) for p in eligible}
+    if not remaining.issubset(original_eligible):
+        raise ValueError("Cleanup replaced canonical source primitives")
+    primitives[:] = [p for p in originals if p.id in protected or id(p) in remaining]
+    stats["preserved_source_capsules"] = len(protected)
+    return stats
+
+
 def model_point(point, height, scale, flip_y):
     return (point[0] * scale, (height - point[1] if flip_y else point[1]) * scale)
 
