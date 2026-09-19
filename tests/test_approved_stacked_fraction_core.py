@@ -26,11 +26,14 @@ from pdfcadcore import primitive_extractor  # noqa: E402
 # recovered font-metric shear is rejected by anisotropic/sheared source tests.
 # September 17: a single filled contour with an exactly repeated endpoint is
 # closed even without h; no tolerance-based closure or compound-hole changes.
+# September 19: a literal single open unfilled line retains both exact source
+# endpoints, including zero-length and sub-cleanup-tolerance round-cap strokes.
+# Source font metrics, fraction layout and all other cleanup routes are unchanged.
 # This is the reviewed integration output: current main plus the fraction-core
 # port. It deliberately does not claim that these combined bytes were approved
 # independently before the merge review.
 REVIEWED_COMBINED_SUCCESSOR_SHA256 = (
-    "60c1ce7648f7fb5d36e9580666d18071dd468a09f9c1f7452249213e4a4e00cb"
+    "8a2956d7174db158200d10e5f536dc913b773ccefab5050b324c0625bd7954d3"
 )
 
 

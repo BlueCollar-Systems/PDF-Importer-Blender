@@ -491,6 +491,13 @@ def test_engine_resume_reuses_root_and_only_builds_unfinished_pages(
     class Page:
         rect = types.SimpleNamespace(width=72.0, height=72.0)
         mediabox = types.SimpleNamespace(width=72.0, height=72.0)
+        rotation = 0
+
+        def get_drawings(self, **_kwargs):
+            return []
+
+        def get_image_info(self, **_kwargs):
+            return []
 
     class Document:
         page_count = 2
