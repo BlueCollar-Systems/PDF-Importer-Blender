@@ -649,6 +649,10 @@ def write_import_report(
         "final_transparent_annotations": stats.get("final_transparent_annotations", []),
         "source_capsule_footprints": stats.get("source_capsule_footprints", []),
         "opaque_image_paint_order": stats.get("opaque_image_paint_order", []),
+        "opaque_fill_depth_order": stats.get("opaque_fill_depth_order", []),
+        "opaque_rectangle_paint_order": stats.get("opaque_rectangle_paint_order", []),
+        "terminal_triangle_paint_order": stats.get("terminal_triangle_paint_order", []),
+        "display_aids": stats.get("display_aids", []),
         "scale_hints": stats.get("scale_hints"),
         "fallback_attempted": bool(fallback_attempted),
         "result_status": (
@@ -3586,8 +3590,25 @@ def import_pdf(
             # 9g. Build geometry
             page_stats = {"curves": 0, "meshes": 0, "circles": 0, "arcs": 0}
             image_order_plans = []
+            rectangle_order_plans = []
+            triangle_order_plans = []
             if import_mode != "raster":
                 page_builder_config = dict(builder_config)
+                from .opaque_rectangle_proof import plan_opaque_rectangles
+                from .opaque_rectangle_order import bind_rectangle_plans
+
+                rectangle_order_plans, unqualified_masks = bind_rectangle_plans(
+                    plan_opaque_rectangles(page, source_sha256), page_data, page.rect,
+                    user_scale=import_cfg.user_scale, flip_y=import_cfg.flip_y,
+                )
+                total_stats.setdefault('opaque_rectangle_paint_order', []).extend(unqualified_masks)
+                from .triangle_paint_order import plan_terminal_triangles
+
+                triangle_order_plans, unqualified_triangles = plan_terminal_triangles(
+                    page, page_data, source_sha256,
+                    user_scale=import_cfg.user_scale, flip_y=import_cfg.flip_y,
+                )
+                total_stats.setdefault('terminal_triangle_paint_order', []).extend(unqualified_triangles)
                 if not import_cfg.ignore_images:
                     from .image_paint_order import plan_opaque_images
 
@@ -3601,6 +3622,15 @@ def import_pdf(
                     }
                 page_builder_config.setdefault('_image_order_isolated_stroke_ids', set()).update(
                     spec['primitive_id'] for spec in prepared_capsules
+                )
+                page_builder_config['_image_order_isolated_stroke_ids'].update(
+                    plan['primitive_id'] for plan in rectangle_order_plans if plan['has_border']
+                )
+                page_builder_config['_image_order_isolated_stroke_ids'].update(
+                    plan['primitive_id'] for plan in triangle_order_plans if plan.get('outline')
+                )
+                page_builder_config['_image_order_isolated_stroke_ids'].update(
+                    stroke['primitive_id'] for plan in triangle_order_plans for stroke in plan['later_strokes']
                 )
                 try:
                     from .pdfcadcore.model3d_intent import analyze_model3d_intent
@@ -3628,6 +3658,34 @@ def import_pdf(
                     cancelled_page = page_num
                     _discard_page_collection(page_col)
                     break
+                if not page_stats.get('model3d_solids'):
+                    from .fill_paint_order import apply_fill_depths
+
+                    fill_orders = apply_fill_depths(
+                        page_col, page_builder_config.get('_source_fill_objects', ()),
+                    )
+                    total_stats.setdefault('opaque_fill_depth_order', []).extend(fill_orders)
+                    from .triangle_paint_order import apply_terminal_triangles
+
+                    total_stats.setdefault('terminal_triangle_paint_order', []).extend(
+                        apply_terminal_triangles(triangle_order_plans, page_col, page_builder_config))
+                else:
+                    total_stats.setdefault('opaque_fill_depth_order', []).append({
+                        'page': page_num, 'status': 'unqualified',
+                        'reason': 'model_geometry_is_extruded',
+                    })
+                    total_stats.setdefault('terminal_triangle_paint_order', []).extend(
+                        {'page': page_num, 'primitive_id': plan['primitive_id'],
+                         'source_draw_order': plan['source_draw_order'],
+                         'status': 'unqualified', 'reason': 'model_geometry_is_extruded'}
+                        for plan in triangle_order_plans)
+                    total_stats.setdefault('opaque_rectangle_paint_order', []).extend(
+                        {'page': page_num, 'primitive_id': plan['primitive_id'],
+                         'source_draw_order': plan['source_proof']['source_draw_order'],
+                         'status': 'unqualified', 'reason': 'model_geometry_is_extruded'}
+                        for plan in rectangle_order_plans
+                    )
+                    rectangle_order_plans = []
                 _add_phase_ms("geometry_ms", t_phase)
 
             # 9h. Build text objects
@@ -3807,6 +3865,14 @@ def import_pdf(
 
             from .late_paint import position_final_page_crops
 
+            if rectangle_order_plans:
+                from .opaque_rectangle_order import apply_rectangle_order
+
+                mask_orders = apply_rectangle_order(
+                    rectangle_order_plans, page_col, page_builder_config,
+                    getattr(import_cfg, '_text_delivery_records', ()),
+                )
+                total_stats.setdefault('opaque_rectangle_paint_order', []).extend(mask_orders)
             if image_order_plans:
                 from .image_paint_order import apply_opaque_image_order
 
@@ -3839,6 +3905,15 @@ def import_pdf(
                 total_stats['nontext_composite_pixels'] = int(total_stats.get('nontext_composite_pixels', 0)) + sum(
                     pixel_count(spec['recipe']) for spec in prepared_capsules
                 )
+
+            from .page_background import add_page_background
+
+            page_background = add_page_background(
+                page_col, page_data.width, page_data.height,
+                enabled=bool(config.get('white_page_background', True)), style=visual_style,
+            )
+            if page_background is not None:
+                total_stats.setdefault('display_aids', []).append(page_background)
 
             # 9j. Multi-page stacking: shift this page's collection downward
             if len(requested_page_indices) > 1 and _page_stack_offset_m != 0.0:

@@ -455,6 +455,16 @@ def test_engine_resume_reuses_root_and_only_builds_unfinished_pages(
     """Regression: resume must assemble into the prior model without duplicate pages."""
     import hashlib
 
+    # Resume ownership is the subject here; the fake page/scene does not
+    # implement the separately tested original paint and display-aid APIs.
+    masks = importlib.import_module("pdf_vector_importer.opaque_rectangle_proof")
+    triangles = importlib.import_module("pdf_vector_importer.triangle_paint_order")
+    paper = importlib.import_module("pdf_vector_importer.page_background")
+    monkeypatch.setattr(masks, "plan_opaque_rectangles", lambda *_a, **_k: [])
+    monkeypatch.setattr(triangles, "plan_terminal_triangles", lambda *_a, **_k: ([], []))
+    monkeypatch.setattr(triangles, "apply_terminal_triangles", lambda *_a, **_k: [])
+    monkeypatch.setattr(paper, "add_page_background", lambda *_a, **_k: None)
+
     _install_blender_stubs(monkeypatch)
     engine = importlib.import_module("pdf_vector_importer.bl_import_engine")
     fitz_loader = importlib.import_module("pdf_vector_importer.pdfcadcore.fitz_loader")
@@ -489,7 +499,9 @@ def test_engine_resume_reuses_root_and_only_builds_unfinished_pages(
             self.items.remove(value)
 
     class Page:
-        rect = types.SimpleNamespace(width=72.0, height=72.0)
+        # The source binding seam uses the original page's four coordinates.
+        from pymupdf import Rect
+        rect = Rect(0.0, 0.0, 72.0, 72.0)
         mediabox = types.SimpleNamespace(width=72.0, height=72.0)
         rotation = 0
 

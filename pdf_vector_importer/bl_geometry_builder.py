@@ -956,6 +956,16 @@ def build_page(
             obj['pdf_image_order_primitive_id'] = prim.id
             config.setdefault('_image_order_stroke_objects', {}).setdefault(prim.id, []).append(obj)
 
+    def _own_source_fill(obj, points):
+        config.setdefault('_source_fill_objects', []).append({
+            'object': obj, 'primitive_id': prim.id,
+            'source_draw_order': getattr(prim, 'source_draw_order', None),
+            'points_mm': [tuple(point) for point in points],
+            'fill_rgb': tuple(prim.fill_color),
+            'fill_opacity': getattr(prim, 'fill_opacity', None),
+            'visual_style': visual_style,
+        })
+
     def _queue_open_curve(
         name: str,
         points: list,
@@ -1072,6 +1082,16 @@ def build_page(
                 [p.points for p in members], target_col, material, prim.clip_fill_even_odd,
             )
             obj["bcs_clip_fill_group_id"] = group_id
+            source_orders = {p.source_draw_order for p in members}
+            source_opacities = {p.fill_opacity for p in members}
+            config.setdefault('_source_compound_fill_objects', []).append({
+                'object': obj, 'primitive_ids': [p.id for p in members],
+                'contours_mm': [[tuple(point) for point in p.points] for p in members],
+                'source_draw_order': next(iter(source_orders)) if len(source_orders) == 1 else None,
+                'fill_opacity': next(iter(source_opacities)) if len(source_opacities) == 1 else None,
+                'fill_rgb': tuple(prim.fill_color), 'visual_style': visual_style,
+                'even_odd': prim.clip_fill_even_odd,
+            })
             stats["curves"] += 1
             stats["compound_clip_fills"] += 1
             stats["compound_clip_contours"] += len(members)
@@ -1159,13 +1179,14 @@ def build_page(
                         material_cache,
                         style=visual_style,
                     )
-                    _create_face_mesh(
+                    face_obj = _create_face_mesh(
                         obj_name + "_face",
                         circle_points,
                         target_col,
                         fill_mat,
                         z_offset_m=fill_face_z,
                     )
+                    _own_source_fill(face_obj, circle_points)
                     stats["meshes"] += 1
                 if _model3d_should_extrude(prim, page_area, has_fill, config, circle_points):
                     solid_mat = _get_or_create_material(
@@ -1203,13 +1224,14 @@ def build_page(
                         material_cache,
                         style=visual_style,
                     )
-                    _create_face_mesh(
+                    face_obj = _create_face_mesh(
                         obj_name + "_face",
                         prim.points,
                         target_col,
                         fill_mat,
                         z_offset_m=fill_face_z,
                     )
+                    _own_source_fill(face_obj, prim.points)
                     stats["meshes"] += 1
                 if _model3d_should_extrude(prim, page_area, has_fill, config, prim.points):
                     solid_mat = _get_or_create_material(
@@ -1271,6 +1293,7 @@ def build_page(
                 face_obj = _create_face_mesh(
                     obj_name + "_face", prim.points, target_col, face_mat, z_offset_m=face_z,
                 )
+                _own_source_fill(face_obj, prim.points)
                 _own_image_order_stroke(outline_obj)
                 if 0.0 < prim.fill_opacity < 1.0:
                     config.setdefault("_source_paint_objects", {})[prim.id] = (face_obj, outline_obj)

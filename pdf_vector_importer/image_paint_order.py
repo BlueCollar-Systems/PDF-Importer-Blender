@@ -468,7 +468,8 @@ def _local_geometry(obj):
             tuple(tuple(v.co) for v in obj.data.vertices),
             tuple(tuple(e.vertices) for e in obj.data.edges),
             tuple(tuple(p.vertices) for p in obj.data.polygons),
-            tuple(tuple(p.uv) for p in obj.data.uv_layers.active.data),
+            tuple(tuple(p.uv) for p in obj.data.uv_layers.active.data)
+            if obj.data.uv_layers.active is not None else (),
         )
     if obj.type == "CURVE":
         return tuple(
