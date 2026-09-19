@@ -24,6 +24,9 @@ class Translation:
     def __matmul__(self, point):
         return Vec(a + b for a, b in zip(point, self.obj.location, strict=True))
 
+    def copy(self):
+        return Translation(NS(location=tuple(self.obj.location)))
+
 
 class Object(dict):
     def __init__(self, name, kind, data):
@@ -38,6 +41,12 @@ class Object(dict):
 
     def evaluated_get(self, _):
         return self
+
+    def to_mesh(self):
+        return NS(vertices=[NS(co=Vec(p)) for p in self.bound_box])
+
+    def to_mesh_clear(self):
+        self.mesh_cleared = True
 
     @property
     def bound_box(self):
@@ -230,6 +239,76 @@ def test_source_image_and_later_stroke_clear_earlier_3d_without_geometry_changes
     assert order._local_geometry(case.stroke) == old_stroke
     assert case.plane.location[:2] == case.stroke.location[:2] == [0.0, 0.0]
     assert case.older.location == [0.0, 0.0, 0.0]
+
+
+def test_default_radius_cached_bounds_cannot_reject_source_stroke(native_case):
+    case = native_case
+    stroke = case.stroke
+    actual = stroke.to_mesh()
+    cleared = []
+    evaluated = NS(
+        bound_box=[(-1, -1, -1), (1, 1, 1)],
+        matrix_world=stroke.matrix_world,
+        to_mesh=lambda: actual,
+        to_mesh_clear=lambda: cleared.append(True),
+    )
+    stroke.evaluated_get = lambda _: evaluated
+    assert apply(case)["status"] == "applied"
+    assert 0.01 < case.plane.location.z < 0.02
+    assert cleared
+
+
+def test_empty_later_stroke_cannot_claim_source_paint(native_case):
+    native_case.stroke.to_mesh = lambda: NS(vertices=[])
+    assert apply(native_case)["reason"] == "native_stroke_has_no_evaluated_geometry"
+    assert native_case.plane.location.z == native_case.stroke.location.z == 0
+    assert native_case.stroke.mesh_cleared
+
+
+@pytest.mark.parametrize("kind", ["FONT", "CURVE", "MESH"])
+def test_bounds_use_actual_evaluated_mesh_and_matching_transform(monkeypatch, kind):
+    monkeypatch.setitem(sys.modules, "mathutils", NS(Vector=Vec))
+    cleared = []
+    evaluated = NS(
+        bound_box=[(-1, -1, -1), (1, 1, 1)],
+        matrix_world=Translation(NS(location=(1., 2., .003))),
+        to_mesh=lambda: NS(vertices=[NS(co=Vec((0, 0, -.0002))), NS(co=Vec((.04, .02, .0004)))]),
+        to_mesh_clear=lambda: cleared.append(True),
+    )
+    obj = NS(type=kind, matrix_world=Translation(NS(location=(9, 9, 9))), evaluated_get=lambda _: evaluated)
+    points = order._world_corners(obj, None)
+    assert min(p.z for p in points) == pytest.approx(.0028)
+    assert max(p.z for p in points) == pytest.approx(.0034)
+    assert max(p.x for p in points) == pytest.approx(1.04)
+    assert cleared == [True]
+
+
+@pytest.mark.parametrize("coordinates", [[], [(0., 0., 0.)], [(float("nan"), 0., 0.)], None])
+def test_empty_and_failed_mesh_bounds_release_temporary_geometry(monkeypatch, coordinates):
+    monkeypatch.setitem(sys.modules, "mathutils", NS(Vector=Vec))
+    cleared = []
+    mesh = None if coordinates is None else NS(vertices=[NS(co=Vec(p)) for p in coordinates])
+    evaluated = NS(matrix_world=Translation(NS(location=(0., 0., 0.))), to_mesh=lambda: mesh, to_mesh_clear=lambda: cleared.append(True))
+    obj = NS(evaluated_get=lambda _: evaluated)
+    if coordinates is None or (coordinates and coordinates[0][0] != coordinates[0][0]):
+        with pytest.raises(ValueError):
+            order._world_corners(obj, None)
+    else:
+        points = order._world_corners(obj, None)
+        assert len(points) == (8 if coordinates else 0)
+    assert cleared == [True]
+
+
+def test_failed_mesh_conversion_still_releases_native_temporary_geometry(monkeypatch):
+    monkeypatch.setitem(sys.modules, "mathutils", NS(Vector=Vec))
+    cleared = []
+    error = RuntimeError("Native conversion failed")
+    def fail():
+        raise error
+    evaluated = NS(matrix_world=Translation(NS(location=(0., 0., 0.))), to_mesh=fail, to_mesh_clear=lambda: cleared.append(True))
+    with pytest.raises(RuntimeError) as caught:
+        order._world_corners(NS(evaluated_get=lambda _: evaluated), None)
+    assert caught.value is error and cleared == [True]
 
 
 @pytest.mark.parametrize(

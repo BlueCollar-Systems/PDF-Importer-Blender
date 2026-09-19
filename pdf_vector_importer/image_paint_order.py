@@ -591,10 +591,35 @@ def _verify_native_stroke(obj, spec):
 
 
 def _world_corners(obj, depsgraph):
+    """Measure rendered geometry, avoiding stale evaluated curve bound boxes.
+
+    Native curves can expose a default-radius evaluated bound box during import,
+    even after a graph update. Mesh vertices include the actual bevel/extrusion.
+    Empty evaluated geometry contributes no bounds; no source object is removed.
+    """
     from mathutils import Vector
 
     evaluated = obj.evaluated_get(depsgraph)
-    return [obj.matrix_world @ Vector(p) for p in evaluated.bound_box]
+    matrix = evaluated.matrix_world.copy()
+    try:
+        mesh = evaluated.to_mesh()
+        if mesh is None:
+            raise ValueError("Native display geometry could not be evaluated")
+        if not mesh.vertices:
+            return []
+        low = [math.inf] * 3
+        high = [-math.inf] * 3
+        for vertex in mesh.vertices:
+            point = matrix @ vertex.co
+            if not all(math.isfinite(v) for v in point):
+                raise ValueError("Native display geometry has nonfinite coordinates")
+            for axis in range(3):
+                low[axis] = min(low[axis], point[axis])
+                high[axis] = max(high[axis], point[axis])
+        return [Vector((x, y, z)) for x in (low[0], high[0])
+                for y in (low[1], high[1]) for z in (low[2], high[2])]
+    finally:
+        evaluated.to_mesh_clear()
 
 
 def _move_display_z(obj, depth):
@@ -679,6 +704,9 @@ def apply_opaque_image_order(plans, collection, native_images, builder_config):
             native_xy = [
                 (p.x * 1000, p.y * 1000) for p in _world_corners(obj, depsgraph)
             ]
+            if not native_xy:
+                record["reason"] = "native_stroke_has_no_evaluated_geometry"
+                break
             if not _contains(((x0, y0), (x1, y0), (x1, y1), (x0, y1)), native_xy):
                 record["reason"] = (
                     "native_stroke_footprint_exceeds_source_dependency_bounds"
@@ -689,7 +717,7 @@ def apply_opaque_image_order(plans, collection, native_images, builder_config):
             continue
 
         def top_of(obj, graph=depsgraph):
-            return max(p.z for p in _world_corners(obj, graph))
+            return max((p.z for p in _world_corners(obj, graph)), default=-math.inf)
 
         top = max(
             (
