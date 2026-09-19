@@ -16,6 +16,7 @@ from pdf_vector_importer.pdfcadcore.document_profiler import profile as profile_
 from pdf_vector_importer.pdfcadcore.fitz_loader import safe_open
 from pdf_vector_importer.pdfcadcore.geometry_cleanup import circle_fit
 from pdf_vector_importer.pdfcadcore.auto_mode import drawings_need_text_counts
+from pdf_vector_importer.pdfcadcore.drawing_clips import get_clip_aware_drawings
 from pdf_vector_importer.pdfcadcore.primitive_extractor import extract_page
 from pdf_vector_importer.pdfcadcore.primitives import PageData
 
@@ -188,7 +189,9 @@ def extract_document(pdf_path: str, options: Optional[ExtractionOptions] = None)
             drawings = None
 
             if mode == "auto":
-                drawings = page.get_drawings()
+                # Clip-aware rows, as every other mode gets them: a plain fetch
+                # loses the clips, and a clipped rectangle fill floods the sheet.
+                drawings = get_clip_aware_drawings(page)
                 if drawings_need_text_counts(drawings):
                     text_blocks = page.get_text("blocks") or []
                     text_words = page.get_text("words") or []

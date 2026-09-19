@@ -50,6 +50,44 @@ def test_unsupported_winding_or_invalid_contours_fail_before_creating_geometry()
         module._create_compound_clip_fill("mask", [[(0, 0), (1, 1), (float("nan"), 0)]], None, None, True)
 
 
+@pytest.mark.parametrize("bad,detail", [
+    (dict(rings=2, even_odd=False), "ValueError: Compound nonzero clip fill requires a winding-aware intersection"),
+    (dict(rings=2, even_odd=True, fills=[(0, 0, 0), (1, 0, 0)]), "ValueError: Clip fill contours disagree about their source fill"),
+    (dict(rings=1, even_odd=True, points=[(0, 0), (1, 1), (0, 0)]), "ValueError: Clip fill contains a degenerate or non-finite contour"),
+])
+def test_build_page_leaves_out_one_unbuildable_clip_fill_and_builds_the_rest(monkeypatch, bad, detail):
+    """The function-level refusals above stay; build_page turns each into one reported drop."""
+    module = builder()
+    from pdf_vector_importer.pdfcadcore.primitives import PageData, Primitive
+    ring = [(0, 0), (10, 0), (10, 10), (0, 10)]
+    fills = bad.get("fills", [(0, 0, 0)] * bad["rings"])
+    primitives = [Primitive(id=i, type="closed_loop", points=bad.get("points", ring), closed=True, fill_color=fills[i],
+                            source_fill_color=fills[i], source_draw_order=4, clip_fill_group_id="clip-fill:4",
+                            clip_fill_even_odd=bad["even_odd"]) for i in range(bad["rings"])]
+    primitives.append(Primitive(id=9, type="closed_loop", points=ring, closed=True, fill_color=(0, 0, 0),
+                                source_draw_order=6, clip_fill_group_id="clip-fill:6", clip_fill_even_odd=True))
+    made = []
+    monkeypatch.setattr(module.bpy, "data", SimpleNamespace(
+        curves=SimpleNamespace(new=lambda **kwargs: SimpleNamespace(
+            splines=SimpleNamespace(new=lambda kind: SimpleNamespace()), materials=[])),
+        objects=SimpleNamespace(new=lambda name, data: made.append(name) or {})), raising=False)
+    monkeypatch.setattr(module, "_write_spline_points", lambda spline, pts: None)
+    monkeypatch.setattr(module, "_resolve_collection", lambda *a, **k: SimpleNamespace(objects=SimpleNamespace(link=lambda obj: None)))
+    monkeypatch.setattr(module, "_get_or_create_material", lambda *a, **k: None)
+    page = PageData(1, 20, 20, primitives=primitives)
+    page._source_drawings = [{"bcs_clip_fill_group_id": "clip-fill:4", "rect": (1, 2, 3, 4)}]
+    stats = module.build_page(page, None)
+    assert made == ["P1_clip_fill_9"]
+    assert stats["compound_clip_fills"] == 1 and stats["curves"] == 1
+    assert stats["clip_fill_build_drops"] == [{
+        "seqno": 4, "reason": "host-build-error", "action": "dropped-unsupported", "exact": False,
+        "severity": "warning", "dropped": True, "detail": detail, "paint_rect": [1.0, 2.0, 3.0, 4.0],
+        "fill": [0, 0, 0], "fill_opacity": 1.0, "stage": "host-build",
+    }]
+    # A dropped clip fill is never a geometry delivery issue: those are terminal.
+    assert stats["geometry_delivery_issues"] == []
+
+
 def test_build_page_emits_each_clip_group_once_instead_of_separate_faces(monkeypatch):
     module = builder()
     from pdf_vector_importer.pdfcadcore.primitives import PageData, Primitive

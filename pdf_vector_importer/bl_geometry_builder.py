@@ -339,21 +339,85 @@ def _create_compound_clip_fill(name, contours, collection, material, even_odd):
         raise ValueError("Compound nonzero clip fill requires a winding-aware intersection")
 
     curve_data = bpy.data.curves.new(name=name, type="CURVE")
-    curve_data.dimensions = "2D"
-    curve_data.fill_mode = "BOTH"
-    curve_data.bevel_depth = 0.0
-    curve_data.extrude = 0.0
-    for points in runs:
-        spline = curve_data.splines.new("POLY")
-        _write_spline_points(spline, points)
-        spline.use_cyclic_u = True
-    curve_data.materials.append(material)
-    obj = bpy.data.objects.new(name, curve_data)
-    obj["bcs_compound_clip_fill"] = True
-    obj["bcs_clip_fill_even_odd"] = bool(even_odd)
-    obj["bcs_clip_fill_contour_count"] = len(runs)
-    collection.objects.link(obj)
+    obj = None
+    try:
+        curve_data.dimensions = "2D"
+        curve_data.fill_mode = "BOTH"
+        curve_data.bevel_depth = 0.0
+        curve_data.extrude = 0.0
+        for points in runs:
+            spline = curve_data.splines.new("POLY")
+            _write_spline_points(spline, points)
+            spline.use_cyclic_u = True
+        curve_data.materials.append(material)
+        obj = bpy.data.objects.new(name, curve_data)
+        obj["bcs_compound_clip_fill"] = True
+        obj["bcs_clip_fill_even_odd"] = bool(even_odd)
+        obj["bcs_clip_fill_contour_count"] = len(runs)
+        collection.objects.link(obj)
+    except Exception:
+        # An outer ring left behind without its holes would flood the shape.
+        _discard_partial_clip_fill(obj, curve_data)
+        raise
     return obj
+
+
+def _discard_partial_clip_fill(obj, curve_data) -> None:
+    """Best-effort removal of a clip fill that was not built completely."""
+    try:
+        if obj is not None:
+            bpy.data.objects.remove(obj, do_unlink=True)
+    except Exception:
+        pass
+    try:
+        if curve_data is not None:
+            bpy.data.curves.remove(curve_data)
+    except Exception:
+        pass
+
+
+def _clip_fill_build_drop(page_data, group_id, prim, error) -> dict:
+    """Host-side clip-fill issue record: one fill the builder could not build.
+
+    ``paint_rect`` is the resolved row's rect here, i.e. the fill's visible
+    (clipped) bounds; a resolved row no longer carries the rectangle the PDF painted.
+    Writing the record must not raise: it runs while a drop is being handled.
+    """
+    record = {
+        "seqno": None,
+        "reason": "host-build-error",
+        "action": "dropped-unsupported",
+        "exact": False,
+        "severity": "warning",
+        "dropped": True,
+        "detail": type(error).__name__,
+        "paint_rect": [],
+        "fill": None,
+        "fill_opacity": None,
+        "stage": "host-build",
+    }
+    try:
+        record["detail"] = f"{type(error).__name__}: {error}"
+    except Exception:
+        pass  # str(error) raised; the type name still says what happened
+    try:
+        seqno = prim.source_draw_order
+        if seqno is None:
+            try:
+                seqno = int(str(group_id).rpartition(":")[2])
+            except ValueError:
+                seqno = None
+        record["seqno"] = seqno
+        fill = prim.source_fill_color or prim.fill_color
+        record["fill"] = list(fill) if fill is not None else None
+        record["fill_opacity"] = prim.fill_opacity
+        for row in getattr(page_data, "_source_drawings", None) or ():
+            if isinstance(row, dict) and row.get("bcs_clip_fill_group_id") == group_id:
+                record["paint_rect"] = [float(value) for value in tuple(row.get("rect") or ())[:4]]
+                break
+    except Exception:
+        pass  # a shorter record still reports the drop
+    return record
 
 
 def _dash_pattern_to_model_mm(
@@ -906,6 +970,7 @@ def build_page(
         "model3d_solids": 0,
         "compound_clip_fills": 0,
         "compound_clip_contours": 0,
+        "clip_fill_build_drops": [],
         "geometry_delivery_issues": [],
     }
     page_area = max(float(page_data.width or 0.0) * float(page_data.height or 0.0), 1e-9)
@@ -1023,15 +1088,30 @@ def build_page(
             if not make_faces:
                 continue
             members = clip_groups[group_id]
-            if any(p.fill_color != prim.fill_color or p.clip_fill_even_odd != prim.clip_fill_even_odd for p in members):
-                raise ValueError("Clip fill contours disagree about their source fill")
-            target_col = _resolve_collection(collection, prim, group_by_color, collection_cache=collection_cache)
-            material = _get_or_create_material(prim.fill_color, material_cache, style=visual_style)
-            obj = _create_compound_clip_fill(
-                f"P{page_data.page_number}_clip_fill_{prim.id}",
-                [p.points for p in members], target_col, material, prim.clip_fill_even_odd,
-            )
-            obj["bcs_clip_fill_group_id"] = group_id
+            obj = None
+            try:
+                if any(p.fill_color != prim.fill_color or p.clip_fill_even_odd != prim.clip_fill_even_odd for p in members):
+                    raise ValueError("Clip fill contours disagree about their source fill")
+                target_col = _resolve_collection(collection, prim, group_by_color, collection_cache=collection_cache)
+                material = _get_or_create_material(prim.fill_color, material_cache, style=visual_style)
+                obj = _create_compound_clip_fill(
+                    f"P{page_data.page_number}_clip_fill_{prim.id}",
+                    [p.points for p in members], target_col, material, prim.clip_fill_even_odd,
+                )
+                obj["bcs_clip_fill_group_id"] = group_id
+            except Exception as error:
+                from .import_session import ImportCancelledError
+
+                if isinstance(error, ImportCancelledError):
+                    raise
+                # One fill this builder cannot express is left out and reported;
+                # it never costs the page or the document.
+                if obj is not None:
+                    _discard_partial_clip_fill(obj, getattr(obj, "data", None))
+                stats["clip_fill_build_drops"].append(
+                    _clip_fill_build_drop(page_data, group_id, prim, error)
+                )
+                continue
             stats["curves"] += 1
             stats["compound_clip_fills"] += 1
             stats["compound_clip_contours"] += len(members)

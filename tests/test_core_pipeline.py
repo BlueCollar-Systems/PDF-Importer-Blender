@@ -140,6 +140,33 @@ class TestCorePipeline(unittest.TestCase):
         self.assertGreaterEqual(summary["text_items"], 2)
         self.assertEqual(summary["images"], 0)
 
+    def test_auto_mode_never_emits_a_clipped_fill_as_its_unclipped_rectangle(self) -> None:
+        """Auto fetched plain rows, so the clips were gone and the flood rectangle covered the sheet."""
+        from pdf_vector_importer.pdfcadcore.drawing_clips import clip_fill_issues
+
+        clipped_pdf = self.tmp_path / "clipped_flood.pdf"
+        doc = fitz.open()
+        page = doc.new_page(width=200, height=200)
+        page.draw_line((10, 190), (190, 190), color=(0, 0, 0), width=1.0)
+        xref = page.get_contents()[0]
+        # Two different triangles clip at once, then the whole sheet is flooded red.
+        doc.update_stream(xref, doc.xref_stream(xref) + (
+            b"\nq 20 20 m 100 20 l 60 90 l h W n 40 25 m 120 25 l 80 100 l h W n "
+            b"1 0 0 rg 0 0 200 200 re f Q\n"
+        ))
+        doc.save(str(clipped_pdf))
+        doc.close()
+
+        for mode in ("auto", "vector"):
+            extraction = extract_document(
+                str(clipped_pdf),
+                ExtractionOptions(pages="1", import_mode=mode, import_text=False, import_images=False),
+            )
+            page_data = extraction.pages[0].page_data
+            self.assertEqual([p.type for p in page_data.primitives], ["line"], mode)
+            issues = clip_fill_issues(page_data._source_drawings)
+            self.assertEqual([(i["reason"], i["action"]) for i in issues], [("nested", "dropped-unsupported")], mode)
+
     def test_reference_scale_transform(self) -> None:
         run = run_import(str(self.pdf_path), mode="auto", overrides={"pages": "1"})
         page = run.extraction.pages[0].page_data
