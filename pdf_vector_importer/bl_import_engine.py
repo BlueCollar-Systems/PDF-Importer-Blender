@@ -32,6 +32,12 @@ from .pdfcadcore import (
 )
 from .bl_geometry_builder import build_page
 from .bl_text_builder import build_all_text, cleanup_delivery_outcome, text_stage_timings
+from .pdfcadcore.drawing_clips import (
+    ClipAwareDrawings,
+    clip_fill_issues,
+    get_clip_aware_drawings,
+    summarize_clip_fill_issues,
+)
 from .pdfcadcore.primitive_extractor import (
     _page_rotation_transform,
     _transform_pdf_point,
@@ -495,6 +501,167 @@ def _terminal_import_failures(config: Dict, stats: Dict, provenance_opts: Any) -
     return failures
 
 
+_CLIP_FILL_ISSUE_CAP = 200
+_CLIP_FILL_COUNTERS = ("resolved_exactly", "dropped_invisible", "approximated", "dropped")
+
+
+def _new_clip_fill_delivery() -> Dict[str, Any]:
+    """Empty clip-fill tally. JSON-serializable, so it survives cancel/resume."""
+    tally: Dict[str, Any] = {key: 0 for key in _CLIP_FILL_COUNTERS}
+    tally.update(by_action={}, issues=[], issues_truncated=False, warning_pages=[])
+    return tally
+
+
+def _clip_fill_count(value: Any) -> int:
+    """A tally counter as an int; a damaged restored checkpoint must not raise."""
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
+def _record_clip_fill_issues(stats: Dict, page_num: int, core_issues, build_drops) -> None:
+    """Tally one vector page's clipped fills into stats["clip_fill_delivery"].
+
+    Never a terminal failure: a fill that could not be drawn is left out and
+    reported, the document still imports. Info-level issues run to thousands per
+    sheet, so they are only counted; warning-level records are kept (capped).
+    A fill the resolver handled but the builder then dropped counts once, as
+    the drop.
+    """
+    tally = stats.get("clip_fill_delivery")
+    if not isinstance(tally, dict):
+        tally = stats["clip_fill_delivery"] = {}
+    for key, value in _new_clip_fill_delivery().items():
+        # A tally restored from an older or damaged checkpoint must not raise here.
+        if not isinstance(tally.get(key), type(value)):
+            tally[key] = value
+    build_drops = [issue for issue in list(build_drops or []) if isinstance(issue, dict)]
+    host_dropped = {issue.get("seqno") for issue in build_drops} - {None}
+    page_issues = [
+        issue
+        for issue in list(core_issues or [])
+        if isinstance(issue, dict)
+        and (issue.get("dropped") or issue.get("seqno") not in host_dropped)
+    ] + build_drops
+    for issue in page_issues:
+        action = str(issue.get("action") or "unknown")
+        tally["by_action"][action] = _clip_fill_count(tally["by_action"].get(action)) + 1
+        if issue.get("severity") != "warning":
+            tally["dropped_invisible" if issue.get("dropped") else "resolved_exactly"] += 1
+            continue
+        tally["dropped" if issue.get("dropped") else "approximated"] += 1
+        if page_num not in tally["warning_pages"]:
+            tally["warning_pages"].append(page_num)
+        if len(tally["issues"]) < _CLIP_FILL_ISSUE_CAP:
+            tally["issues"].append(dict(issue, page=page_num))
+        else:
+            tally["issues_truncated"] = True
+
+
+def _clip_fill_warning_line(tally: Any) -> str:
+    """One operator sentence per import; '' when no visible fill was affected."""
+    if not isinstance(tally, dict):
+        return ""
+    issues = [issue for issue in list(tally.get("issues") or []) if isinstance(issue, dict)]
+    summary = summarize_clip_fill_issues(issues)
+    if not summary:
+        return ""
+    affected = _clip_fill_count(tally.get("dropped")) + _clip_fill_count(tally.get("approximated"))
+    if affected > len(issues):
+        summary += f"; {affected} fills were affected in all, the report lists the first {len(issues)}"
+    pages = _clip_fill_warning_pages(tally, issues)
+    if not pages:
+        return summary
+    named = ", ".join(str(page) for page in pages[:10])
+    if len(pages) > 10:
+        named += f" and {len(pages) - 10} more"
+    return f"{summary} on page{'' if len(pages) == 1 else 's'} {named}"
+
+
+def _clip_fill_warning_pages(tally: Dict, issues) -> List[int]:
+    pages = set()
+    for page in list(tally.get("warning_pages") or []) + [issue.get("page") for issue in issues]:
+        try:
+            if int(page) > 0:
+                pages.add(int(page))
+        except (TypeError, ValueError):
+            continue
+    return sorted(pages)
+
+
+def _clip_fill_delivery_block(stats: Dict) -> Optional[Dict[str, Any]]:
+    """extra.clip_fill_delivery for the report; None when the run kept no tally."""
+    tally = stats.get("clip_fill_delivery")
+    if not isinstance(tally, dict):
+        return None
+    issues = [dict(issue) for issue in list(tally.get("issues") or []) if isinstance(issue, dict)]
+    block: Dict[str, Any] = {key: _clip_fill_count(tally.get(key)) for key in _CLIP_FILL_COUNTERS}
+    by_action = tally.get("by_action")
+    block["by_action"] = {
+        str(action): _clip_fill_count(count)
+        for action, count in (by_action if isinstance(by_action, dict) else {}).items()
+    }
+    block["issues"] = issues[:_CLIP_FILL_ISSUE_CAP]
+    block["issues_truncated"] = bool(tally.get("issues_truncated")) or len(issues) > _CLIP_FILL_ISSUE_CAP
+    block["warning_pages"] = _clip_fill_warning_pages(tally, issues)
+    block["summary"] = _clip_fill_warning_line(tally)
+    return block
+
+
+class _ClipFillPoint:
+    """x/y stand-in for a cut clip-path point the resolver returned as a bare tuple."""
+
+    __slots__ = ("x", "y")
+
+    def __init__(self, x, y):
+        self.x = float(x)
+        self.y = float(y)
+
+
+def _readable_clip_fill_rows(rows) -> Optional[ClipAwareDrawings]:
+    """Resolver rows with every compound clip-fill point readable by extract_page.
+
+    A clip path made only of re/qu items leaves the resolver no point whose type
+    it can copy, so it cuts that path into bare (x, y) tuples, and extract_page
+    reads line ends by attribute only. None when no row had to change. The
+    issues ride along: they are lost with the list object otherwise.
+    """
+    readable, changed = [], False
+    for row in rows:
+        items = list(row.get("items") or ()) if row.get("bcs_compound_clip_fill") else []
+        if all(hasattr(point, "x") for item in items if item[0] in ("l", "c") for point in item[1:]):
+            readable.append(row)
+            continue
+        changed = True
+        readable.append(dict(row, items=[
+            (item[0], *(point if hasattr(point, "x") else _ClipFillPoint(*point) for point in item[1:]))
+            if item[0] in ("l", "c") else item
+            for item in items
+        ]))
+    return ClipAwareDrawings(readable, clip_fill_issues(rows)) if changed else None
+
+
+def _extract_page_with_readable_clip_fills(doc, page_num: int, extract_kwargs: Dict, error: Exception):
+    """Second attempt at a page extract_page refused, on clip-fill rows it can read.
+
+    One clipped fill must not cost the document. ``error`` is re-raised as it was
+    when the page's clip fills were not what stopped the extraction.
+    """
+    from .import_session import ImportCancelledError
+
+    rows = None
+    if not isinstance(error, ImportCancelledError):
+        try:
+            page = doc.load_page(page_num - 1)
+            rows = _readable_clip_fill_rows(get_clip_aware_drawings(page))
+        except Exception:
+            rows = None
+    if rows is None:
+        raise error
+    return extract_page(page, page_num, drawings=rows, **extract_kwargs)
+
+
 def write_import_report(
     filepath: str,
     config: Dict,
@@ -680,6 +847,13 @@ def write_import_report(
     if geometry_delivery_issues:
         extra["geometry_delivery_issues"] = geometry_delivery_issues
         extra["geometry_delivery_issue_count"] = len(geometry_delivery_issues)
+    # Clipped fills left out or approximated are warnings, never a terminal
+    # failure: one fill must not cost the document (see _record_clip_fill_issues).
+    clip_fill_delivery = _clip_fill_delivery_block(stats)
+    clip_fill_warnings = 0
+    if clip_fill_delivery is not None:
+        extra["clip_fill_delivery"] = clip_fill_delivery
+        clip_fill_warnings = clip_fill_delivery["dropped"] + clip_fill_delivery["approximated"]
     if stats.get("temp_cleanup_error"):
         extra["temp_cleanup_error"] = str(stats.get("temp_cleanup_error"))
     if int(stats.get("recognition_skipped_pages", 0) or 0) > 0:
@@ -731,6 +905,7 @@ def write_import_report(
             )
             + len(raster_delivery_failures)
             + len(geometry_delivery_issues)
+            + clip_fill_warnings
             + (1 if stats.get("temp_cleanup_error") else 0)
         ),
         fallback_used=fallback_used,
@@ -3315,6 +3490,7 @@ def import_pdf(
             "model3d_solids": 0,
             "raster_delivery_failures": [],
             "geometry_delivery_issues": [],
+            "clip_fill_delivery": _new_clip_fill_delivery(),
             "text_final_state_failures": [],
             "cancelled": False,
         }
@@ -3404,11 +3580,14 @@ def import_pdf(
             # arc_min_pts is consumed by extract_page / iter_pages via pdfcadcore;
             # arc_sampling_pts in ImportConfig maps to that gate parameter.
             if use_streaming:
+                stream_base = 0
+
                 def _on_stream_progress(prog):
                     nonlocal stream_cancelled
+                    page_offset = stream_base + prog.page_index - 1
                     keep_going = _progress(
-                        _page_progress(prog.page_index - 1, 0.35),
-                        f"Extracted page {prog.page_number}/{prog.total_pages}: "
+                        _page_progress(page_offset, 0.35),
+                        f"Extracted page {prog.page_number}/{len(page_numbers)}: "
                         f"{prog.primitive_count} primitives ({prog.elapsed_s:.1f}s)",
                     )
                     if keep_going is False:
@@ -3416,7 +3595,7 @@ def import_pdf(
                         return False
                     if prog.over_budget:
                         keep_going = _progress(
-                            _page_progress(prog.page_index - 1, 0.38),
+                            _page_progress(page_offset, 0.38),
                             f"Page {prog.page_number} exceeded soft budget ({prog.elapsed_s:.1f}s)",
                         )
                         if keep_going is False:
@@ -3424,14 +3603,38 @@ def import_pdf(
                             return False
                     return False if stream_cancelled else None
 
-                for loop_i, (page_num, page_data) in enumerate(
-                    iter_pages(
-                        doc,
-                        pages=page_numbers,
-                        progress=_on_stream_progress,
-                        **extract_kwargs,
-                    )
-                ):
+                def _stream_pages():
+                    # iter_pages ends with a page it cannot extract, so after that
+                    # page's second attempt the stream reopens on the pages left.
+                    nonlocal stream_base
+                    pending = list(page_numbers)
+                    stream = None
+                    while stream is not None or pending:  # iter_pages reads "no pages" as "all"
+                        if stream is None:
+                            stream_base = len(page_numbers) - len(pending)
+                            stream = iter_pages(
+                                doc,
+                                pages=pending,
+                                progress=_on_stream_progress,
+                                **extract_kwargs,
+                            )
+                        try:
+                            page_num, page_data = next(stream)
+                        except StopIteration:
+                            return
+                        except Exception as error:
+                            if not pending:
+                                raise
+                            stream = None
+                            page_num = pending[0]
+                            page_data = _extract_page_with_readable_clip_fills(
+                                doc, page_num, extract_kwargs, error
+                            )
+                        if page_num in pending:
+                            del pending[: pending.index(page_num) + 1]
+                        yield page_num, page_data
+
+                for loop_i, (page_num, page_data) in enumerate(_stream_pages()):
                     page_idx = page_num - 1
                     page = doc.load_page(page_idx)
                     yield loop_i, page_idx, page_num, page, page_data
@@ -3439,7 +3642,12 @@ def import_pdf(
                 page_idx = page_indices[0]
                 page_num = page_idx + 1
                 page = doc.load_page(page_idx)
-                page_data = extract_page(page, page_num, **extract_kwargs)
+                try:
+                    page_data = extract_page(page, page_num, **extract_kwargs)
+                except Exception as error:
+                    page_data = _extract_page_with_readable_clip_fills(
+                        doc, page_num, extract_kwargs, error
+                    )
                 yield 0, page_idx, page_num, page, page_data
 
         for i, _page_idx, page_num, page, page_data in _iter_pages_for_import():
@@ -3451,6 +3659,11 @@ def import_pdf(
                 break
 
             import_mode = (import_cfg.import_mode or "auto").strip().lower()
+            # The issues ride on the resolver's list object; read them before
+            # anything can rebuild that list.
+            page_clip_fill_issues = clip_fill_issues(
+                getattr(page_data, "_source_drawings", None)
+            )
 
             # 9a. Auto-mode classification (before extraction)
             if import_mode == "auto":
@@ -3812,6 +4025,14 @@ def import_pdf(
             total_stats["geometry_delivery_issues"].extend(
                 list(page_stats.get("geometry_delivery_issues") or [])
             )
+            # A raster-delivered page built no vector fills, so it has none to report.
+            if import_mode != "raster":
+                _record_clip_fill_issues(
+                    total_stats,
+                    page_num,
+                    page_clip_fill_issues,
+                    page_stats.get("clip_fill_build_drops"),
+                )
             completed_pages.append(page_num)
             _write_resume_checkpoint_guarded(
                 checkpoint_path, _current_resume_state(), total_stats
@@ -3930,6 +4151,9 @@ def import_pdf(
         total_stats["text_delivery_fallback_items"] = int(delivery_summary["fallback_items"])
         total_stats["text_delivery_failed_items"] = int(delivery_summary["failed_items"])
         total_stats["text_delivery_failed_item_ids"] = list(delivery_summary["failed_item_ids"])
+        total_stats["clip_fill_warning"] = _clip_fill_warning_line(
+            total_stats.get("clip_fill_delivery")
+        )
         try:
             report_path = write_import_report(
                 filepath,
