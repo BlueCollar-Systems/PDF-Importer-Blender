@@ -71,6 +71,15 @@ class _FakeBpy:
 
 class _Page:
     rect = types.SimpleNamespace(width=72.0, height=72.0)
+    rotation = 0
+
+    def get_drawings(self, **_kwargs):
+        return []
+
+    def get_image_info(self, **_kwargs):
+        # These delivery tests supply image placements separately and do not
+        # claim a source-bound image paint-order plan.
+        return []
 
 
 class _Document:

@@ -647,6 +647,8 @@ def write_import_report(
         "model_3d": stats.get("model_3d"),
         "resolved_scale": stats.get("resolved_scale"),
         "final_transparent_annotations": stats.get("final_transparent_annotations", []),
+        "source_capsule_footprints": stats.get("source_capsule_footprints", []),
+        "opaque_image_paint_order": stats.get("opaque_image_paint_order", []),
         "scale_hints": stats.get("scale_hints"),
         "fallback_attempted": bool(fallback_attempted),
         "result_status": (
@@ -3165,7 +3167,7 @@ def import_pdf(
         from .pdfcadcore.fitz_loader import import_fitz
         from .dependency_manager import get_lib_dir
 
-        import_fitz(prefer_lib_dir=str(get_lib_dir()))
+        fitz = import_fitz(prefer_lib_dir=str(get_lib_dir()))
         phase_timings_ms["dependencies_ms"] = (time.perf_counter() - t_phase) * 1000.0
 
         # 2. Verify file exists
@@ -3568,8 +3570,32 @@ def import_pdf(
 
             # 9g. Build geometry
             page_stats = {"curves": 0, "meshes": 0, "circles": 0, "arcs": 0}
+            image_order_plans = []
+            prepared_capsules = []
             if import_mode != "raster":
                 page_builder_config = dict(builder_config)
+                if not import_cfg.ignore_images:
+                    from .image_paint_order import plan_opaque_images
+
+                    image_order_plans = plan_opaque_images(
+                        page, page_data, user_scale=import_cfg.user_scale, flip_y=import_cfg.flip_y,
+                    )
+                    for image_plan in image_order_plans:
+                        image_plan['source_pdf_sha256'] = source_sha256
+                    page_builder_config['_image_order_isolated_stroke_ids'] = {
+                        primitive_id for plan in image_order_plans for primitive_id in plan['later_strokes'].values()
+                    }
+                from .bl_source_capsules import prepare_capsules
+
+                prepared_capsules, unresolved_capsules = prepare_capsules(
+                    page, page_data, source_sha256=source_sha256, page_number=page_num,
+                    user_scale=import_cfg.user_scale, flip_y=import_cfg.flip_y,
+                    used_pixels=int(total_stats.get('nontext_composite_pixels', 0)),
+                )
+                total_stats.setdefault('source_capsule_footprints', []).extend(unresolved_capsules)
+                page_builder_config.setdefault('_image_order_isolated_stroke_ids', set()).update(
+                    spec['primitive_id'] for spec in prepared_capsules
+                )
                 try:
                     from .pdfcadcore.model3d_intent import analyze_model3d_intent
 
@@ -3658,6 +3684,7 @@ def import_pdf(
 
             # 9i. Build image/raster planes
             image_count = 0
+            native_image_placements = []
             raster_page_delivered = False
             delivery_records = getattr(import_cfg, "_text_delivery_records", ())
             excluded_text_bboxes = _delivered_text_bboxes(
@@ -3723,7 +3750,7 @@ def import_pdf(
                             )
 
                 for placement in placements:
-                    if _create_image_plane(
+                    image_obj = _create_image_plane(
                         placement,
                         page_col,
                         z_offset_m=image_z_offset_m,
@@ -3733,7 +3760,9 @@ def import_pdf(
                             "base-color-alpha",
                             "hashed",
                         ),
-                    ):
+                    )
+                    if image_obj is not None:
+                        native_image_placements.append((image_obj, placement))
                         image_count += 1
                         source_image_count = int(
                             placement.get("source_image_count", 1) or 1
@@ -3772,12 +3801,38 @@ def import_pdf(
 
             from .late_paint import position_final_page_crops
 
+            if image_order_plans:
+                from .image_paint_order import apply_opaque_image_order
+
+                image_orders = apply_opaque_image_order(
+                    image_order_plans, page_col, native_image_placements, page_builder_config,
+                )
+                total_stats.setdefault('opaque_image_paint_order', []).extend(image_orders)
             position_final_page_crops(page_col)
             if import_mode != "raster":
                 from .late_paint import apply_final_rectangles
 
                 late_paints = apply_final_rectangles(page, page_data, page_col, page_builder_config)
                 total_stats.setdefault("final_transparent_annotations", []).extend(late_paints)
+
+            if prepared_capsules:
+                from .bl_source_capsules import apply_capsules
+                from .nontext_composite import pixel_count
+
+                if not image_dir:
+                    image_dir = tempfile.mkdtemp(prefix='bc_bl_pdf_images_')
+                    image_dir_owned = True
+                capsule_records = apply_capsules(
+                    page, prepared_capsules, page_col, page_builder_config,
+                    source_path=filepath, image_dir=image_dir,
+                    create_image_plane=_create_image_plane, image_cache=image_cache, fitz=fitz,
+                )
+                total_stats.setdefault('source_capsule_footprints', []).extend(capsule_records)
+                page_stats['curves'] = int(page_stats.get('curves', 0)) + len(capsule_records)
+                image_count += len(capsule_records)
+                total_stats['nontext_composite_pixels'] = int(total_stats.get('nontext_composite_pixels', 0)) + sum(
+                    pixel_count(spec['recipe']) for spec in prepared_capsules
+                )
 
             # 9j. Multi-page stacking: shift this page's collection downward
             if len(requested_page_indices) > 1 and _page_stack_offset_m != 0.0:
@@ -3903,6 +3958,7 @@ def import_pdf(
                         prefer_material_preview=(
                             raster_pages_imported > 0 or item_raster_patches > 0
                             or bool(total_stats.get("final_transparent_annotations"))
+                            or bool(total_stats.get("nontext_composite_pixels"))
                         ),
                     )
                 )

@@ -661,27 +661,51 @@ def _create_face_mesh(
     material: bpy.types.Material,
     z_offset_m: float = 0.0,
 ) -> bpy.types.Object:
-    """Create a flat mesh face from a closed polygon of 2D points."""
-    mesh = bpy.data.meshes.new(name=name)
-    obj = bpy.data.objects.new(name, mesh)
-    collection.objects.link(obj)
+    """Create and verify a nonempty face without changing canonical points."""
+    boundary = list(points)
+    # PDF paths commonly repeat their initial point explicitly. A face closes
+    # itself; creating a second native vertex at the same point corrupts its
+    # boundary. Remove only exact closure, never nearby or interior vertices.
+    if len(boundary) > 1 and tuple(boundary[0]) == tuple(boundary[-1]):
+        boundary.pop()
+    if len(boundary) < 3 or not all(
+        len(point) == 2 and all(math.isfinite(float(v)) for v in point)
+        for point in boundary
+    ) or not math.isfinite(z_offset_m):
+        raise ValueError("Source fill lacks a finite native face boundary")
 
-    bm = bmesh.new()
-    verts = [bm.verts.new((x * MM_TO_M, y * MM_TO_M, z_offset_m)) for x, y in points]
-    bm.verts.ensure_lookup_table()
-
-    if len(verts) >= 3:
-        try:
-            bm.faces.new(verts)
-        except ValueError:
-            # Degenerate face — skip silently
-            pass
-
-    bm.to_mesh(mesh)
-    bm.free()
-
-    mesh.materials.append(material)
-    return obj
+    mesh = obj = bm = None
+    try:
+        mesh = bpy.data.meshes.new(name=name)
+        bm = bmesh.new()
+        verts = [bm.verts.new((x * MM_TO_M, y * MM_TO_M, z_offset_m)) for x, y in boundary]
+        bm.verts.ensure_lookup_table()
+        face = bm.faces.new(verts)
+        area = float(face.calc_area())
+        if not math.isfinite(area) or area <= 0:
+            raise ValueError("Native source fill has no positive face area")
+        bm.to_mesh(mesh)
+        mesh.update()
+        if len(mesh.vertices) != len(boundary) or len(mesh.polygons) != 1:
+            raise ValueError("Native source fill lost its face during mesh conversion")
+        saved_area = float(mesh.polygons[0].area)
+        if not math.isfinite(saved_area) or saved_area <= 0:
+            raise ValueError("Native source fill mesh has no positive face area")
+        mesh.materials.append(material)
+        obj = bpy.data.objects.new(name, mesh)
+        collection.objects.link(obj)
+        return obj
+    except Exception:
+        # No empty mesh may count as a delivered fill. Remove only this
+        # attempt's datablocks and let the existing import failure propagate.
+        if obj is not None:
+            bpy.data.objects.remove(obj, do_unlink=True)
+        if mesh is not None:
+            bpy.data.meshes.remove(mesh)
+        raise
+    finally:
+        if bm is not None:
+            bm.free()
 
 
 def _polygon_area(points: list) -> float:
@@ -925,6 +949,12 @@ def build_page(
     )
     batch_open_curves = bool(config.get("batch_open_curves", True))
     open_curve_batches: Dict[Tuple[int, int, object, float], dict] = {}
+    image_order_ids = set(config.get('_image_order_isolated_stroke_ids', ()))
+
+    def _own_image_order_stroke(obj):
+        if prim.id in image_order_ids and obj is not None:
+            obj['pdf_image_order_primitive_id'] = prim.id
+            config.setdefault('_image_order_stroke_objects', {}).setdefault(prim.id, []).append(obj)
 
     def _queue_open_curve(
         name: str,
@@ -938,6 +968,16 @@ def build_page(
         """Queue compatible open strokes into fewer Blender curve objects."""
         if not points or len(points) < 2:
             return 0
+        if prim.id in image_order_ids:
+            # A later source stroke must not share a native object with older
+            # paint: that would raise unrelated geometry above an opaque image.
+            runs = _dash_polyline(points, dash_pattern, dash_phase=dash_phase) if dash_pattern else [points]
+            obj = _create_multi_poly_curve(
+                name, runs, target_col, line_width, material,
+                z_offset_m=line_z_offset_m, use_tubes=use_line_tubes,
+            )
+            _own_image_order_stroke(obj)
+            return int(obj is not None)
         if not batch_open_curves:
             return _draw_stroked_polyline(
                 name,
@@ -1231,6 +1271,7 @@ def build_page(
                 face_obj = _create_face_mesh(
                     obj_name + "_face", prim.points, target_col, face_mat, z_offset_m=face_z,
                 )
+                _own_image_order_stroke(outline_obj)
                 if 0.0 < prim.fill_opacity < 1.0:
                     config.setdefault("_source_paint_objects", {})[prim.id] = (face_obj, outline_obj)
                 if create_outline:
@@ -1248,12 +1289,13 @@ def build_page(
                         stats["meshes"] += 1
                         stats["model3d_solids"] += 1
             elif create_outline:
-                _create_poly_curve(
+                outline_obj = _create_poly_curve(
                     obj_name, prim.points, True, target_col,
                     prim.line_width, mat,
                     z_offset_m=line_z_offset_m,
                     use_tubes=use_line_tubes,
                 )
+                _own_image_order_stroke(outline_obj)
                 stats["curves"] += 1
                 if _model3d_should_extrude(prim, page_area, has_fill, config, prim.points):
                     if _create_extruded_mesh(
