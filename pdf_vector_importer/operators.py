@@ -441,6 +441,15 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
                 f"source-point approximation; {geometry_failures} were not delivered. "
                 f"Review extra.geometry_delivery_issues in {report_path or 'the import report'}.",
             )
+        # One line per import, and only for fills the sheet visibly lost or had
+        # approximated; exactly resolved clip fills are counted in the report only.
+        clip_fill_warning = str(stats.get("clip_fill_warning") or "").strip()
+        if clip_fill_warning:
+            self.report(
+                {"WARNING"},
+                f"{clip_fill_warning}. Everything else was imported; review "
+                f"extra.clip_fill_delivery in {report_path or 'the import report'}.",
+            )
 
         prefs = _addon_prefs(context)
         if prefs is not None and bool(getattr(prefs, "remember_last_directory", True)):
