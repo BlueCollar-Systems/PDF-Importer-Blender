@@ -38,6 +38,11 @@ from .pdfcadcore.drawing_clips import (
     get_clip_aware_drawings,
     summarize_clip_fill_issues,
 )
+from .pdfcadcore.glyph_code_recovery import (
+    glyph_code_delivery_block,
+    glyph_code_issues as core_glyph_code_issues,
+    summarize_glyph_code_issues,
+)
 from .pdfcadcore.primitive_extractor import (
     _page_rotation_transform,
     _transform_pdf_point,
@@ -559,6 +564,30 @@ def _record_clip_fill_issues(stats: Dict, page_num: int, core_issues, build_drop
             tally["issues_truncated"] = True
 
 
+def _record_glyph_code_issues(stats: Dict, page_num: int, issues) -> None:
+    """Keep one page's glyph-code recovery records for the import report.
+
+    The shared core records every span a font delivered as raw glyph codes:
+    those whose characters it proved (with the route that proved them) and
+    those it left exactly as the PDF delivered them. Never a failure - a sheet
+    with unproven spans still imports and still draws identically.
+    """
+    kept = stats.get("glyph_code_issues")
+    if not isinstance(kept, list):
+        kept = stats["glyph_code_issues"] = []
+    for issue in list(issues or []):
+        if isinstance(issue, dict):
+            kept.append(dict(issue, page=int(page_num)))
+
+
+def _glyph_code_records(stats: Dict) -> List[Dict[str, Any]]:
+    return [
+        issue
+        for issue in list(stats.get("glyph_code_issues") or [])
+        if isinstance(issue, dict)
+    ]
+
+
 def _clip_fill_warning_line(tally: Any) -> str:
     """One operator sentence per import; '' when no visible fill was affected."""
     if not isinstance(tally, dict):
@@ -854,6 +883,13 @@ def write_import_report(
     if clip_fill_delivery is not None:
         extra["clip_fill_delivery"] = clip_fill_delivery
         clip_fill_warnings = clip_fill_delivery["dropped"] + clip_fill_delivery["approximated"]
+    # Text a font delivered as raw glyph codes: recovered spans name the route
+    # that proved them, unproven spans name the font, the page and the codes.
+    glyph_code_delivery = glyph_code_delivery_block(_glyph_code_records(stats))
+    glyph_code_warnings = 0
+    if glyph_code_delivery["spans_examined"]:
+        extra["text_glyph_codes"] = glyph_code_delivery
+        glyph_code_warnings = int(glyph_code_delivery["unproven"])
     if stats.get("temp_cleanup_error"):
         extra["temp_cleanup_error"] = str(stats.get("temp_cleanup_error"))
     if int(stats.get("recognition_skipped_pages", 0) or 0) > 0:
@@ -906,6 +942,7 @@ def write_import_report(
             + len(raster_delivery_failures)
             + len(geometry_delivery_issues)
             + clip_fill_warnings
+            + glyph_code_warnings
             + (1 if stats.get("temp_cleanup_error") else 0)
         ),
         fallback_used=fallback_used,
@@ -3664,6 +3701,8 @@ def import_pdf(
             page_clip_fill_issues = clip_fill_issues(
                 getattr(page_data, "_source_drawings", None)
             )
+            # Read beside the clip-fill records, from the same extracted page.
+            page_glyph_code_issues = core_glyph_code_issues(page)
 
             # 9a. Auto-mode classification (before extraction)
             if import_mode == "auto":
@@ -4033,6 +4072,7 @@ def import_pdf(
                     page_clip_fill_issues,
                     page_stats.get("clip_fill_build_drops"),
                 )
+            _record_glyph_code_issues(total_stats, page_num, page_glyph_code_issues)
             completed_pages.append(page_num)
             _write_resume_checkpoint_guarded(
                 checkpoint_path, _current_resume_state(), total_stats
@@ -4153,6 +4193,10 @@ def import_pdf(
         total_stats["text_delivery_failed_item_ids"] = list(delivery_summary["failed_item_ids"])
         total_stats["clip_fill_warning"] = _clip_fill_warning_line(
             total_stats.get("clip_fill_delivery")
+        )
+        total_stats["text_glyph_code_warning"] = summarize_glyph_code_issues(
+            _glyph_code_records(total_stats),
+            "See text_glyph_codes in the import report.",
         )
         try:
             report_path = write_import_report(
