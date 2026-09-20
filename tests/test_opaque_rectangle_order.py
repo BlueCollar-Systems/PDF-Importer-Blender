@@ -186,7 +186,8 @@ def test_actual_mask_rises_above_earlier_ink_then_native_3d_text_clears_mask(mon
     assert result[0]['status'] == 'applied'
     mask_z = fills[0]['object'].location.z - .0004
     text_z = text.location.z + .004
-    assert text_z > mask_z > .005
+    assert text_z > mask_z > -.0004
+    assert mask_z == pytest.approx(-.00035)
     assert text['pdf_text_mode'] == '3d_text'
     assert {obj.name: [tuple(v.co) for v in obj.data.vertices]
             for obj in collection.all_objects if obj.type == 'MESH'} == before
@@ -210,3 +211,14 @@ def test_a_disjoint_tall_model_does_not_push_source_mask_to_unrelated_height(mon
     result = apply_rectangle_order([plan], collection, {'_source_fill_objects': fills}, [delivery])
     assert result[0]['status'] == 'applied'
     assert result[0]['final_display_top_m'] < .01
+
+
+def test_own_future_text_extrusion_does_not_raise_mask_above_itself(monkeypatch):
+    collection, fills, text, delivery, plan = native_mask_case(monkeypatch)
+    text.data.splines[0].points[0].co[2] = -.003
+    text.data.splines[0].points[1].co[2] = .003
+    result = apply_rectangle_order([plan], collection, {'_source_fill_objects': fills}, [delivery])
+    assert result[0]['status'] == 'applied'
+    assert fills[0]['object'].location.z-.0004 == pytest.approx(-.00035)
+    assert text.location.z-.003 == pytest.approx(-.00030)
+    assert text.location.z+.003 == pytest.approx(.00570)

@@ -240,7 +240,12 @@ def apply_rectangle_order(plans, collection, builder_config, delivery_records):
                 if obj.parent is not None and not same_native_object(objects.get(obj.parent.name), obj.parent):
                     raise ValueError('Source mask text carrier left its owned page collection')
                 _translate_owned_text(obj, 0.0)
-        top = max((point.z for points in measured.values() if points
+        participant_names = {obj.name for obj in participants}
+        # The mask and its own later text are not earlier paint. Including the
+        # text here puts the mask above its extrusion, then lifts the same text
+        # above itself a second time.
+        top = max((point.z for name, points in measured.items() if points
+                   and name not in participant_names
                    and _intersects((x0, y0, x1, y1),
                                    _bounds([(p.x * 1000, p.y * 1000) for p in points]))
                    for point in points), default=0.0)

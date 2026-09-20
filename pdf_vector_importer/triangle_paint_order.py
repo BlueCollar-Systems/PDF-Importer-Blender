@@ -19,7 +19,7 @@ from .image_paint_order import (
     _ulp32,
 )
 from .opaque_rectangle_order import _same_cycle
-from .opaque_rectangle_proof import _clip_excludes_region, _source_path_row
+from .opaque_rectangle_proof import _clip_excludes_region, _source_path_row, _segments_intersect
 from .nontext_composite import _source_group_declarations
 from .pdf_paint_proof import _rgb
 
@@ -484,6 +484,10 @@ def _later_stroke_plan(order, raw, raw_strokes, svg_rows, primitives, model, fac
         return None
     return {'primitive_id': primitive.id, 'source_draw_order': order, 'closed': closed,
             'points_mm': [tuple(p) for p in primitive.points], 'rgb': list(source['color']),
+            'source_points_pdf': points,
+            'source_point_errors_pdf': [tuple(abs(v-r)+e+4*_ulp32(r) for v, r, e in zip(p, q, errors, strict=True))
+                                        for p, q, errors in zip(match['points'], points, match['point_errors'], strict=True)],
+            'source_width_pdf': max(match['width'], source['width']),
             'width_mm': match['width']*factor, 'source_bounds_pdf': region,
             'paint_bounds_mm': _bounds([model((region[0], region[1])), model((region[2], region[3]))]),
             'svg_paint_ordinal': match['paint_ordinal']}
@@ -826,6 +830,46 @@ def _verify_evaluated_fill_disjoint(obj, graph, region):
         evaluated.to_mesh_clear()
 
 
+def _cohesive_same_color_plan(plan):
+    """A connected opaque paint union needs no invented internal depth order.
+
+    Qualification already closes over all intervening/later source paint.
+    Here contact is actual centerline/fill intersection, never bbox contact.
+    An unconnected or differently colored participant retains separate order.
+    """
+    outline = plan.get('outline')
+    if (not outline or plan.get('later_unowned_paint_absent') is not True
+            or tuple(outline['rgb']) != tuple(plan['fill_rgb'])):
+        return False
+    polygon = [tuple(p) for p in plan['points_mm']]
+    if polygon[0] == polygon[-1]:
+        polygon.pop()
+    if len(polygon) != 3:
+        return False
+    edges = [(polygon[i], polygon[(i+1) % 3]) for i in range(3)]
+
+    def inside(point):
+        values = [(b[0]-a[0])*(point[1]-a[1])-(b[1]-a[1])*(point[0]-a[0])
+                  for a, b in edges[:3]]
+        return all(v >= 0 for v in values) or all(v <= 0 for v in values)
+
+    remaining = []
+    for stroke in plan.get('later_strokes', ()):
+        points = stroke['points_mm']
+        if (stroke['closed'] or len(points) != 2
+                or tuple(stroke['rgb']) != tuple(plan['fill_rgb'])):
+            return False
+        remaining.append(tuple(tuple(p) for p in points))
+    while remaining:
+        attached = [line for line in remaining if any(inside(p) for p in line)
+                    or any(_segments_intersect(*line, a, b) for a, b in edges)]
+        if not attached:
+            return False
+        edges.extend(attached)
+        remaining = [line for line in remaining if line not in attached]
+    return True
+
+
 def apply_terminal_triangles(plans, collection, config):
     """Raise retained source meshes only after exact native compound ownership."""
     import bpy
@@ -839,11 +883,15 @@ def apply_terminal_triangles(plans, collection, config):
     fills = config.get('_source_fill_objects', ())
     compounds = config.get('_source_compound_fill_objects', ())
     result = []
+    followers = [s['primitive_id'] for plan in plans for s in plan.get('later_strokes', ())]
     for plan in plans:
         if plan.get('later_unowned_paint_absent') is not True:
             raise ValueError('Terminal triangle has no unowned later-paint absence proof')
         row = {'page': plan['page'], 'primitive_id': plan['primitive_id'],
                'source_draw_order': plan['source_draw_order'], 'status': 'unqualified'}
+        if any(followers.count(s['primitive_id']) != 1 for s in plan.get('later_strokes', ())):
+            result.append(dict(row, reason='later_stroke_shared_by_triangle_plans'))
+            continue
         selected = [s for s in fills if s['primitive_id'] == plan['primitive_id']]
         if len(selected) != 1:
             row['reason'] = 'native_triangle_fill_not_uniquely_owned'
@@ -1005,15 +1053,73 @@ def apply_terminal_triangles(plans, collection, config):
             row['reason'] = 'native_earlier_compound_contours_incomplete'
             result.append(row)
             continue
-        top = max(p.z for p in corners)
+        cohesive = _cohesive_same_color_plan(plan)
+        cohort = ([spec['object'], outline, *(obj for _, obj, _, _ in later_objects)]
+                  if cohesive else [spec['object']])
+        top = -math.inf
         for member in members:
-            if (member.hide_render or same_native_object(member, spec['object'])
+            if (member.hide_render or any(same_native_object(member, own) for own in cohort)
                     or any(same_native_object(member, excluded_obj) for excluded_obj in disjoint_objects)):
                 continue
             evaluated = _world_corners(member, graph)
             if evaluated and _intersects(region, _bounds([(p.x, p.y) for p in evaluated])):
                 top = max(top, max(p.z for p in evaluated))
+        if not math.isfinite(top):
+            top = 0.0
         obj = spec['object']
+        if cohesive:
+            # Source PDF fill and its same-color outline occupy one plane.
+            # Remove only the builder's decorative fill setback, then give
+            # the entire verified union one translation. Tubes keep their
+            # actual radius; their centerline is not stacked above each other.
+            from mathutils import Vector
+            ordered = [(outline, outline_before),
+                       *((following, original) for _, following, original, _ in later_objects)]
+            planes = []
+            for member, _ in ordered:
+                line = [member.matrix_world @ Vector(tuple(p.co)[:3])
+                        for p in member.data.splines[0].points]
+                planes.append(line[0].z)
+            if not _close(planes, [planes[0]]*len(planes)):
+                raise ValueError('Connected triangle source centerlines no longer share a plane')
+            before = [(member, geometry, _world_corners(member, graph))
+                      for member, geometry in ordered]
+            fill_plane = min(p.z for p in corners)
+            alignment = planes[0]-fill_plane
+            bottom = min(planes[0], *(p.z for _, _, paint in before for p in paint))
+            common_delta = max(0.0, top+.00005-bottom)
+            moves = [(obj, local, corners, alignment+common_delta),
+                     *((member, geometry, paint, common_delta) for member, geometry, paint in before)]
+            for member, _, _, offset in moves:
+                _move_display_z(member, float(member.location.z)+offset)
+            bpy.context.view_layer.update()
+            graph = bpy.context.evaluated_depsgraph_get()
+            for member, geometry, paint, offset in moves:
+                actual = _world_corners(member, graph)
+                if (_local_geometry(member) != geometry or not actual
+                        or min(p.z for p in actual) <= top
+                        or not _close(_bounds((p.x, p.y) for p in paint),
+                                      _bounds((p.x, p.y) for p in actual))):
+                    raise ValueError('Triangle cohesive plane changed geometry or failed earlier-paint clearance')
+                member['bcs_terminal_triangle_display_z_offset_m'] = offset
+            target = planes[0]+common_delta
+            actual_fill = _world_corners(obj, graph)
+            if not _close([p.z for p in actual_fill], [target]*len(actual_fill)):
+                raise ValueError('Triangle cohesive fill failed source centerplane alignment')
+            obj['bcs_terminal_triangle_source_proof'] = json.dumps(plan, sort_keys=True)
+            row.update(status='applied', native_object=obj.name, native_outline=outline.name,
+                       display_policy='connected_opaque_same_color_source_plane',
+                       original_local_geometry_unchanged=True, source_xy_unchanged=True,
+                       display_z_offset_m=alignment+common_delta,
+                       outline_display_z_offset_m=common_delta, source_plane_display_z_m=target,
+                       later_native_strokes=[{'source_draw_order': proof['source_draw_order'],
+                           'primitive_id': proof['primitive_id'], 'native_object': following.name,
+                           'display_z_offset_m': common_delta}
+                           for proof, following, _, _ in later_objects],
+                       earlier_compound_contours=sorted(required),
+                       disjoint_compound_readbacks=disjoint_readbacks)
+            result.append(row)
+            continue
         delta = top + .00005 - min(p.z for p in corners)
         _move_display_z(obj, float(obj.location.z) + delta)
         bpy.context.view_layer.update()

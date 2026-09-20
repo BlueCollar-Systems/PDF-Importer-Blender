@@ -187,11 +187,15 @@ def native_case(tmp_path, monkeypatch):
         ),
     )
     item = next(iter(plan["later_text_items"].values()))
-    crop = {
+    crop_values = {
         "pdf_raster_source_item_id": f"page:1:text:{item}",
         "pdf_raster_final_page_composite": True,
     }
-    crop = type("Crop", (dict,), {"type": "EMPTY"})(crop)
+    x0, y0, x1, y1 = plan['later_text_crop_bounds_mm'][item]
+    crop = Object('Later source pixels', 'MESH', NS(
+        vertices=[NS(co=Vec((x*.001,y*.001,0.))) for x,y in ((x0,y0),(x1,y0),(x1,y1),(x0,y1))],
+        edges=[],polygons=[],uv_layers=NS(active=None)))
+    crop.update(crop_values)
     collection = NS(all_objects=[plane, stroke, older, crop])
     bpy = NS(
         context=NS(
@@ -239,6 +243,23 @@ def test_source_image_and_later_stroke_clear_earlier_3d_without_geometry_changes
     assert order._local_geometry(case.stroke) == old_stroke
     assert case.plane.location[:2] == case.stroke.location[:2] == [0.0, 0.0]
     assert case.older.location == [0.0, 0.0, 0.0]
+
+
+def test_distant_tall_geometry_does_not_lift_source_image(native_case):
+    case = native_case
+    distant = Object('distant-title', 'MESH', NS(vertices=[NS(co=Vec((2., 2., .100)))],
+        edges=[], polygons=[], uv_layers=NS(active=None)))
+    case.collection.all_objects.append(distant)
+    assert apply(case)['status'] == 'applied'
+    assert case.plane.location.z == pytest.approx(.01005)
+
+
+def test_image_future_owned_stroke_is_not_counted_as_earlier_paint(native_case):
+    case = native_case
+    case.stroke.location.z = .250
+    assert apply(case)['status'] == 'applied'
+    assert case.plane.location.z == pytest.approx(.01005)
+    assert max(p.z for p in order._world_corners(case.stroke, None)) < .012
 
 
 def test_default_radius_cached_bounds_cannot_reject_source_stroke(native_case):
@@ -342,6 +363,15 @@ def test_missing_later_final_pixels_retains_existing_objects(native_case):
     row = apply(case)
     assert row["status"] == "unqualified"
     assert row["reason"] == "later_text_is_not_a_verified_final_page_pixel_crop"
+    assert case.plane.location.z == case.stroke.location.z == 0
+
+
+def test_actual_later_crop_outside_certified_dependency_prevents_every_move(native_case):
+    case = native_case
+    case.crop.data.vertices[0].co[0] += 1.
+    row = apply(case)
+    assert row['status'] == 'unqualified'
+    assert row['reason'] == 'owned_native_paint_exceeds_source_dependency_bounds'
     assert case.plane.location.z == case.stroke.location.z == 0
 
 

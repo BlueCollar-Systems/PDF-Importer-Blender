@@ -41,6 +41,26 @@ def test_exact_opaque_image_binds_pixels_affine_occurrence_and_paint_order():
     doc.close()
 
 
+def test_later_text_extending_outside_image_expands_complete_dependency():
+    doc, page = fixture_page()
+    page.insert_text((110, 50), 'LONG LABEL', fontsize=12)
+    plans = plan_opaque_images(page, extract_page(page, 1, detect_arcs=False))
+    assert len(plans) == 1
+    plan = plans[0]
+    crop = next(iter(plan['later_text_crop_bounds_mm'].values()))
+    assert crop[2] > 120*25.4/72
+    assert plan['dependency_bounds_mm'][2] >= crop[2]
+    doc.close()
+
+
+def test_paint_outside_image_but_over_extending_later_text_blocks_movement():
+    doc, page = fixture_page()
+    page.insert_text((110, 50), 'LONG LABEL', fontsize=12)
+    page.draw_rect((145, 40, 160, 52), color=None, fill=(1, 0, 0))
+    assert plan_opaque_images(page, extract_page(page, 1, detect_arcs=False)) == []
+    doc.close()
+
+
 def test_later_stroke_and_text_are_obligations_not_erased():
     doc, p = fixture_page()
     p.draw_rect((25, 25, 115, 90), color=(1, 0, 0), fill=(1, 1, 1), fill_opacity=0)

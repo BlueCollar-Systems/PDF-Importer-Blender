@@ -652,6 +652,7 @@ def write_import_report(
         "opaque_fill_depth_order": stats.get("opaque_fill_depth_order", []),
         "opaque_rectangle_paint_order": stats.get("opaque_rectangle_paint_order", []),
         "terminal_triangle_paint_order": stats.get("terminal_triangle_paint_order", []),
+        "compound_fill_paint_order": stats.get("compound_fill_paint_order", []),
         "display_aids": stats.get("display_aids", []),
         "scale_hints": stats.get("scale_hints"),
         "fallback_attempted": bool(fallback_attempted),
@@ -3445,7 +3446,9 @@ def import_pdf(
                 page_idx = page_indices[0]
                 page_num = page_idx + 1
                 page = doc.load_page(page_idx)
+                t_extract = time.perf_counter()
                 page_data = extract_page(page, page_num, **extract_kwargs)
+                _add_phase_ms('source_extraction_ms', t_extract)
                 yield 0, page_idx, page_num, page, page_data
 
         for i, _page_idx, page_num, page, page_data in _iter_pages_for_import():
@@ -3518,12 +3521,14 @@ def import_pdf(
 
             prepared_capsules = []
             if import_mode != "raster":
+                t_capsule_plan = time.perf_counter()
                 prepared_capsules, unresolved_capsules = prepare_capsules(
                     page, page_data, source_sha256=source_sha256, page_number=page_num,
                     user_scale=import_cfg.user_scale, flip_y=import_cfg.flip_y,
                     used_pixels=int(total_stats.get('nontext_composite_pixels', 0)),
                 )
                 total_stats.setdefault('source_capsule_footprints', []).extend(unresolved_capsules)
+                _add_phase_ms('source_capsule_plan_ms', t_capsule_plan)
 
             # 9c. Geometry cleanup (remove micro-segments)
             if import_cfg.cleanup_level != "conservative" or import_cfg.min_seg_len > 0:
@@ -3592,31 +3597,49 @@ def import_pdf(
             image_order_plans = []
             rectangle_order_plans = []
             triangle_order_plans = []
+            compound_order_plans = []
             if import_mode != "raster":
                 page_builder_config = dict(builder_config)
                 from .opaque_rectangle_proof import plan_opaque_rectangles
                 from .opaque_rectangle_order import bind_rectangle_plans
 
+                t_rectangle_plan = time.perf_counter()
                 rectangle_order_plans, unqualified_masks = bind_rectangle_plans(
                     plan_opaque_rectangles(page, source_sha256), page_data, page.rect,
                     user_scale=import_cfg.user_scale, flip_y=import_cfg.flip_y,
                 )
                 total_stats.setdefault('opaque_rectangle_paint_order', []).extend(unqualified_masks)
+                _add_phase_ms('source_rectangle_plan_ms', t_rectangle_plan)
                 from .triangle_paint_order import plan_terminal_triangles
 
+                t_triangle_plan = time.perf_counter()
                 triangle_order_plans, unqualified_triangles = plan_terminal_triangles(
                     page, page_data, source_sha256,
                     user_scale=import_cfg.user_scale, flip_y=import_cfg.flip_y,
                 )
                 total_stats.setdefault('terminal_triangle_paint_order', []).extend(unqualified_triangles)
+                _add_phase_ms('source_triangle_plan_ms', t_triangle_plan)
+                from .compound_paint_order import plan_compound_fills
+
+                t_compound_plan = time.perf_counter()
+                compound_order_plans, unqualified_compounds = plan_compound_fills(
+                    page, page_data, source_sha256,
+                    user_scale=import_cfg.user_scale, flip_y=import_cfg.flip_y,
+                    later_rectangle_plans=rectangle_order_plans,
+                )
+                total_stats.setdefault('compound_fill_paint_order', []).extend(unqualified_compounds)
+                _add_phase_ms('source_compound_plan_ms', t_compound_plan)
                 if not import_cfg.ignore_images:
                     from .image_paint_order import plan_opaque_images
 
+                    t_image_plan = time.perf_counter()
                     image_order_plans = plan_opaque_images(
                         page, page_data, user_scale=import_cfg.user_scale, flip_y=import_cfg.flip_y,
+                        raster_dpi=import_cfg.raster_dpi,
                     )
                     for image_plan in image_order_plans:
                         image_plan['source_pdf_sha256'] = source_sha256
+                    _add_phase_ms('source_image_plan_ms', t_image_plan)
                     page_builder_config['_image_order_isolated_stroke_ids'] = {
                         primitive_id for plan in image_order_plans for primitive_id in plan['later_strokes'].values()
                     }
@@ -3631,6 +3654,9 @@ def import_pdf(
                 )
                 page_builder_config['_image_order_isolated_stroke_ids'].update(
                     stroke['primitive_id'] for plan in triangle_order_plans for stroke in plan['later_strokes']
+                )
+                page_builder_config['_image_order_isolated_stroke_ids'].update(
+                    stroke['primitive_id'] for plan in compound_order_plans for stroke in plan['later_strokes']
                 )
                 try:
                     from .pdfcadcore.model3d_intent import analyze_model3d_intent
@@ -3665,6 +3691,10 @@ def import_pdf(
                         page_col, page_builder_config.get('_source_fill_objects', ()),
                     )
                     total_stats.setdefault('opaque_fill_depth_order', []).extend(fill_orders)
+                    from .compound_paint_order import apply_compound_fills
+
+                    total_stats.setdefault('compound_fill_paint_order', []).extend(
+                        apply_compound_fills(compound_order_plans, page_col, page_builder_config))
                     from .triangle_paint_order import apply_terminal_triangles
 
                     total_stats.setdefault('terminal_triangle_paint_order', []).extend(
@@ -3678,7 +3708,11 @@ def import_pdf(
                         {'page': page_num, 'primitive_id': plan['primitive_id'],
                          'source_draw_order': plan['source_draw_order'],
                          'status': 'unqualified', 'reason': 'model_geometry_is_extruded'}
-                        for plan in triangle_order_plans)
+                          for plan in triangle_order_plans)
+                    total_stats.setdefault('compound_fill_paint_order', []).extend(
+                        {'page': page_num, 'source_draw_order': plan['source_draw_order'],
+                         'status': 'unqualified', 'reason': 'model_geometry_is_extruded'}
+                        for plan in compound_order_plans)
                     total_stats.setdefault('opaque_rectangle_paint_order', []).extend(
                         {'page': page_num, 'primitive_id': plan['primitive_id'],
                          'source_draw_order': plan['source_proof']['source_draw_order'],
@@ -3868,24 +3902,35 @@ def import_pdf(
             if rectangle_order_plans:
                 from .opaque_rectangle_order import apply_rectangle_order
 
+                t_rectangle_order = time.perf_counter()
                 mask_orders = apply_rectangle_order(
                     rectangle_order_plans, page_col, page_builder_config,
                     getattr(import_cfg, '_text_delivery_records', ()),
                 )
+                from .compound_paint_order import verify_required_later_masks
+
+                verify_required_later_masks(page_builder_config, mask_orders)
                 total_stats.setdefault('opaque_rectangle_paint_order', []).extend(mask_orders)
+                _add_phase_ms('native_rectangle_order_ms', t_rectangle_order)
             if image_order_plans:
                 from .image_paint_order import apply_opaque_image_order
 
+                t_image_order = time.perf_counter()
                 image_orders = apply_opaque_image_order(
                     image_order_plans, page_col, native_image_placements, page_builder_config,
                 )
                 total_stats.setdefault('opaque_image_paint_order', []).extend(image_orders)
+                _add_phase_ms('native_image_order_ms', t_image_order)
+            t_final_crops = time.perf_counter()
             position_final_page_crops(page_col)
+            _add_phase_ms('final_crop_position_ms', t_final_crops)
             if import_mode != "raster":
                 from .late_paint import apply_final_rectangles
 
+                t_final_rectangles = time.perf_counter()
                 late_paints = apply_final_rectangles(page, page_data, page_col, page_builder_config)
                 total_stats.setdefault("final_transparent_annotations", []).extend(late_paints)
+                _add_phase_ms('final_transparent_rectangle_ms', t_final_rectangles)
 
             if prepared_capsules:
                 from .bl_source_capsules import apply_capsules
@@ -3894,6 +3939,7 @@ def import_pdf(
                 if not image_dir:
                     image_dir = tempfile.mkdtemp(prefix='bc_bl_pdf_images_')
                     image_dir_owned = True
+                t_capsule_display = time.perf_counter()
                 capsule_records = apply_capsules(
                     page, prepared_capsules, page_col, page_builder_config,
                     source_path=filepath, image_dir=image_dir,
@@ -3905,15 +3951,18 @@ def import_pdf(
                 total_stats['nontext_composite_pixels'] = int(total_stats.get('nontext_composite_pixels', 0)) + sum(
                     pixel_count(spec['recipe']) for spec in prepared_capsules
                 )
+                _add_phase_ms('capsule_geometry_and_pixels_ms', t_capsule_display)
 
             from .page_background import add_page_background
 
+            t_background = time.perf_counter()
             page_background = add_page_background(
                 page_col, page_data.width, page_data.height,
                 enabled=bool(config.get('white_page_background', True)), style=visual_style,
             )
             if page_background is not None:
                 total_stats.setdefault('display_aids', []).append(page_background)
+            _add_phase_ms('page_background_ms', t_background)
 
             # 9j. Multi-page stacking: shift this page's collection downward
             if len(requested_page_indices) > 1 and _page_stack_offset_m != 0.0:

@@ -338,17 +338,19 @@ def native_outline_case(monkeypatch):
     collection.all_objects.append(outline)
     config['_image_order_stroke_objects'] = {'arrow': [outline]}
     plan['outline'] = {'rgb': [0., 0., 0.], 'width_mm': .04, 'points_mm': points}
-    xs, ys = zip(*points)
+    xs, ys = zip(*points, strict=True)
     plan['dependency_bounds_mm'] = [min(xs)-.02, min(ys)-.02, max(xs)+.02, max(ys)+.02]
     return collection, arrow, outline, plan, config
 
 
-def test_native_combined_outline_moves_after_fill_without_rebuilding_source(monkeypatch):
+def test_native_combined_outline_and_fill_share_source_plane_without_rebuilding(monkeypatch):
     collection, arrow, outline, plan, config = native_outline_case(monkeypatch)
     before = [tuple(p.co) for p in outline.data.splines[0].points]
     result = apply_terminal_triangles([plan], collection, config)
     assert result[0]['status'] == 'applied' and result[0]['native_outline'] == outline.name
-    assert outline.location.z - outline.data.bevel_depth > arrow['object'].location.z-.0004
+    assert result[0]['display_policy'] == 'connected_opaque_same_color_source_plane'
+    assert outline.location.z == pytest.approx(arrow['object'].location.z-.0004)
+    assert outline.location.z-outline.data.bevel_depth > 0
     assert [tuple(p.co) for p in outline.data.splines[0].points] == before
 
 
@@ -392,11 +394,55 @@ def test_source_owned_following_line_keeps_geometry_and_finishes_above_arrow(mon
     assert [tuple(p.co) for p in line.data.splines[0].points] == before
 
 
+def test_connected_same_color_leader_shares_arrow_plane_at_nonzero_initial_depth(monkeypatch):
+    from test_image_paint_order_native import Object, Vec
+    collection, arrow, outline, plan, config = native_outline_case(monkeypatch)
+    points = [(2., 2.), (6., 6.)]
+    line = Object('connected-line', 'CURVE', NS(dimensions='3D', bevel_depth=.00002, extrude=0.,
+        materials=outline.data.materials, splines=[NS(type='POLY', use_cyclic_u=False,
+        bezier_points=[], points=[NS(co=Vec((x*.001, y*.001, 0., 1.))) for x, y in points])]))
+    line['pdf_image_order_primitive_id'] = 'connected'
+    line.location.z = outline.location.z = .0003
+    arrow['object'].location.z = .00015
+    collection.all_objects.append(line)
+    config['_image_order_stroke_objects']['connected'] = [line]
+    plan['later_strokes'] = [{'primitive_id': 'connected', 'source_draw_order': 12,
+        'points_mm': points, 'rgb': [0., 0., 0.], 'width_mm': .04, 'closed': False,
+        'paint_bounds_mm': [1.98, 1.98, 6.02, 6.02]}]
+    plan['dependency_bounds_mm'] = [1.98, 1.98, 6.02, 6.02]
+    original = [tuple(v.co) for v in arrow['object'].data.vertices]
+    result = apply_terminal_triangles([plan], collection, config)[0]
+    assert result['display_policy'] == 'connected_opaque_same_color_source_plane'
+    assert line.location.z == pytest.approx(outline.location.z)
+    assert arrow['object'].location.z-.0004 == pytest.approx(line.location.z)
+    assert [tuple(v.co) for v in arrow['object'].data.vertices] == original
+    assert line.location.z == pytest.approx(.0003)  # No invented internal separation.
+
+
+@pytest.mark.parametrize('change', ['color', 'disconnected', 'closed', 'unknown_paint'])
+def test_only_connected_proven_same_color_paint_can_share_a_plane(change):
+    from pdf_vector_importer.triangle_paint_order import _cohesive_same_color_plan
+    plan = {'points_mm': [(0., 0.), (2., 0.), (1., 2.)], 'fill_rgb': [0., 0., 0.],
+            'outline': {'rgb': [0., 0., 0.]}, 'later_unowned_paint_absent': True,
+            'later_strokes': [{'closed': False, 'rgb': [0., 0., 0.],
+                               'points_mm': [(1., 1.), (5., 1.)]}]}
+    assert _cohesive_same_color_plan(plan)
+    if change == 'color':
+        plan['later_strokes'][0]['rgb'] = [1., 0., 0.]
+    elif change == 'disconnected':
+        plan['later_strokes'][0]['points_mm'] = [(3., 3.), (5., 3.)]
+    elif change == 'closed':
+        plan['later_strokes'][0]['closed'] = True
+    else:
+        plan['later_unowned_paint_absent'] = False
+    assert not _cohesive_same_color_plan(plan)
+
+
 def compound_hole_source():
     outer = [(0., 0.), (10., 0.), (10., 10.), (0., 10.), (0., 0.)]
     inner = [(1., 1.), (9., 1.), (9., 9.), (1., 9.), (1., 1.)]
     clip = {'even_odd': True, 'items': [('l', a, b) for loop in (outer, inner)
-                                      for a, b in zip(loop, loop[1:])]}
+                                      for a, b in zip(loop, loop[1:], strict=False)]}
     original = {'seqno': 20, 'type': 'f', 'fill_opacity': 1., 'fill': (0., 0., 0.)}
     group = [NS(id=f'frame{i}', source_draw_order=20, fill_opacity=1.,
                 source_fill_color=(0., 0., 0.), fill_color=(0., 0., 0.),
@@ -427,7 +473,7 @@ def test_incomplete_or_painted_source_hole_cannot_exclude_compound(change):
         clips.append(clip)
     elif change == 'island':
         loop = [(2.5, 2.5), (3., 2.5), (3., 3.), (2.5, 3.), (2.5, 2.5)]
-        clip['items'] += [('l', a, b) for a, b in zip(loop, loop[1:])]
+        clip['items'] += [('l', a, b) for a, b in zip(loop, loop[1:], strict=False)]
         group.append(NS(**{**vars(group[0]), 'id': 'island', 'points': loop}))
     elif change == 'order':
         group[1].source_draw_order = 21

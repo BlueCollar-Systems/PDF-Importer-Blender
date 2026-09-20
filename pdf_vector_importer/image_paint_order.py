@@ -264,7 +264,7 @@ def _text_item_for_trace(trace, items):
     return matches[0] if len(matches) == 1 else None
 
 
-def plan_opaque_images(page, page_data, *, user_scale=1.0, flip_y=True):
+def plan_opaque_images(page, page_data, *, user_scale=1.0, flip_y=True, raster_dpi=300):
     """Return source-only plans; native crop/ownership checks happen separately."""
     from .pdfcadcore.fitz_loader import import_fitz
 
@@ -298,6 +298,19 @@ def plan_opaque_images(page, page_data, *, user_scale=1.0, flip_y=True):
     prims = {}
     for primitive in page_data.primitives:
         prims.setdefault(primitive.source_draw_order, []).append(primitive)
+    from .raster_geometry import source_raster_bounds
+    dpi = int(max(36, raster_dpi or 300))
+    text_crop_bounds = {}
+    for item in page_data.text_items:
+        box = source_raster_bounds(item)
+        if box is not None:
+            # The renderer rounds outward to its pixel lattice. Keep one full
+            # device pixel outside each source boundary conservatively; native
+            # crop containment is checked again before any display movement.
+            step = 72.0/dpi
+            text_crop_bounds[item.id] = (
+                math.floor(box[0]/step)*step-step, math.floor(box[1]/step)*step-step,
+                math.ceil(box[2]/step)*step+step, math.ceil(box[3]/step)*step+step)
     traces = {r["seqno"]: r for r in page.get_texttrace()}
     nonnormal = [
         r
@@ -349,10 +362,13 @@ def plan_opaque_images(page, page_data, *, user_scale=1.0, flip_y=True):
                     item = _text_item_for_trace(
                         traces.get(seq, {}), page_data.text_items
                     )
-                    if item is None or kind != "fill-text":
+                    if item is None or kind != "fill-text" or item not in text_crop_bounds:
                         eligible = False
                         break
                     later_text[seq] = item
+                    text_box = text_crop_bounds[item]
+                    region = (min(region[0], text_box[0]), min(region[1], text_box[1]),
+                              max(region[2], text_box[2]), max(region[3], text_box[3]))
                     continue
                 source = raw.get(seq) or raw.get(seq - 1)
                 source_order = source.get("seqno") if source else None
@@ -417,10 +433,15 @@ def plan_opaque_images(page, page_data, *, user_scale=1.0, flip_y=True):
                 source_transform_pdf=list(info["transform"]),
                 source_paint_order=order,
                 model_quad_mm=model_quad,
+                dependency_bounds_mm=_bounds((model_point((region[0], region[1])),
+                                              model_point((region[2], region[3])))),
                 page_number=int(page_data.page_number),
                 later_strokes=later_strokes,
                 later_stroke_specs=stroke_specs,
                 later_text_items=later_text,
+                later_text_crop_bounds_mm={item: _bounds((model_point((text_crop_bounds[item][0], text_crop_bounds[item][1])),
+                                                         model_point((text_crop_bounds[item][2], text_crop_bounds[item][3]))))
+                                           for item in later_text.values()},
                 source_svg_sha256=hashlib.sha256(svg.encode("utf-8")).hexdigest(),
             )
         )
@@ -720,12 +741,33 @@ def apply_opaque_image_order(plans, collection, native_images, builder_config):
         def top_of(obj, graph=depsgraph):
             return max((p.z for p in _world_corners(obj, graph)), default=-math.inf)
 
+        dependency = tuple(value*.001 for value in _box(plan['dependency_bounds_mm']))
+        participants = [image, *(obj for _, obj in strokes),
+                        *(obj for item in plan['later_text_items'].values()
+                          for obj in crops[f"page:{plan['page_number']}:text:{item}"])]
+        x0, y0, x1, y1 = dependency
+        for obj in participants:
+            points = _world_corners(obj, depsgraph)
+            if not points or not _contains(((x0,y0),(x1,y0),(x1,y1),(x0,y1)),
+                                           [(p.x,p.y) for p in points]):
+                record['reason'] = 'owned_native_paint_exceeds_source_dependency_bounds'
+                break
+        if record.get('reason'):
+            continue
+        def preceding_points(participants=participants, depsgraph=depsgraph, dependency=dependency):
+            from .fill_paint_order import same_native_object
+            for obj in collection.all_objects:
+                if (obj.type not in {'FONT', 'CURVE', 'MESH'} or obj.hide_render
+                        or any(same_native_object(obj, owned_obj) for owned_obj in participants)):
+                    continue
+                points = _world_corners(obj, depsgraph)
+                if points and _intersects(dependency, _bounds((p.x, p.y) for p in points)):
+                    yield from points
+
+        # A distant title must not lift this image. The complete dependency
+        # region was closed over every later owned stroke in original source.
         top = max(
-            (
-                top_of(obj)
-                for obj in collection.all_objects
-                if obj.type in {"FONT", "CURVE", "MESH"} and not obj.hide_render
-            ),
+            (point.z for point in preceding_points()),
             default=0.0,
         )
 
