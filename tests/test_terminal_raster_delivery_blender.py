@@ -30,6 +30,18 @@ except ImportError:  # pragma: no cover
     import fitz  # type: ignore
 
 
+@pytest.fixture(autouse=True)
+def _isolate_unrelated_paint_order_and_paper_seams(monkeypatch):
+    # This module's engine doubles exercise delivery/failure accounting, not
+    # original drawing extraction or Blender scene construction. Those seams
+    # have separate real-PDF and native-contract tests.
+    from pdf_vector_importer import opaque_rectangle_proof, triangle_paint_order, page_background
+    monkeypatch.setattr(opaque_rectangle_proof, 'plan_opaque_rectangles', lambda *_a, **_k: [])
+    monkeypatch.setattr(triangle_paint_order, 'plan_terminal_triangles', lambda *_a, **_k: ([], []))
+    monkeypatch.setattr(triangle_paint_order, 'apply_terminal_triangles', lambda *_a, **_k: [])
+    monkeypatch.setattr(page_background, 'add_page_background', lambda *_a, **_k: None)
+
+
 class _Children:
     def __init__(self):
         self.items = []
@@ -70,7 +82,16 @@ class _FakeBpy:
 
 
 class _Page:
-    rect = types.SimpleNamespace(width=72.0, height=72.0)
+    rect = fitz.Rect(0.0, 0.0, 72.0, 72.0)
+    rotation = 0
+
+    def get_drawings(self, **_kwargs):
+        return []
+
+    def get_image_info(self, **_kwargs):
+        # These delivery tests supply image placements separately and do not
+        # claim a source-bound image paint-order plan.
+        return []
 
 
 class _Document:

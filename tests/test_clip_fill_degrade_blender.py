@@ -101,6 +101,7 @@ def _install_blender_stubs(monkeypatch: pytest.MonkeyPatch):
     fake_bpy.context = types.SimpleNamespace(
         scene=types.SimpleNamespace(collection=types.SimpleNamespace(children=_Links())),
         view_layer=types.SimpleNamespace(update=lambda: None),
+        evaluated_depsgraph_get=lambda: None,
     )
     monkeypatch.setitem(sys.modules, "bpy", fake_bpy)
     monkeypatch.setitem(sys.modules, "bmesh", types.SimpleNamespace())
@@ -200,6 +201,7 @@ class _FakeHost:
         class Page:
             rect = fitz.Rect(0, 0, 100, 100)
             mediabox = fitz.Rect(0, 0, 100, 100)
+            rotation = 0
 
             def __init__(self, rows):
                 self.rows = rows
@@ -228,6 +230,17 @@ class _FakeHost:
         monkeypatch.setattr(engine, "recognition", types.SimpleNamespace(run=lambda *_a, **_k: None))
         monkeypatch.setattr(engine, "cleanup_primitives", lambda *_a, **_k: {})
         if pdf is None:
+            # Synthetic drawing rows exercise the real resolver/extractor and
+            # builder, but do not carry PDF dictionary/SVG paint-order evidence.
+            # Keep those independently tested planners out of this fixture.
+            for module_name, function_name, result in (
+                ("opaque_rectangle_proof", "plan_opaque_rectangles", []),
+                ("triangle_paint_order", "plan_terminal_triangles", ([], [])),
+                ("compound_paint_order", "plan_compound_fills", ([], [])),
+            ):
+                module = importlib.import_module(f"pdf_vector_importer.{module_name}")
+                monkeypatch.setattr(module, function_name, lambda *_a, _result=result, **_k: _result)
+        if pdf is None:
             monkeypatch.setattr(fitz_loader, "import_fitz", lambda **_kwargs: object())
             monkeypatch.setattr(fitz_loader, "safe_open", lambda _path: Document())
         monkeypatch.setitem(engine.extract_page.__globals__, "_extract_text", lambda *_a, **_k: [])
@@ -236,6 +249,19 @@ class _FakeHost:
         builder = engine.build_page.__globals__
         self.batched_strokes = []
         self.faces = []
+        self.build_configs = []
+        compound_order = importlib.import_module("pdf_vector_importer.compound_paint_order")
+        real_apply_compounds = compound_order.apply_compound_fills
+
+        def record_compound_ownership(plans, collection, config):
+            self.build_configs.append(config)
+            return real_apply_compounds(plans, collection, config)
+
+        monkeypatch.setattr(compound_order, "apply_compound_fills", record_compound_ownership)
+        # Face construction below intentionally returns an identity-only fake;
+        # evaluated native mesh/depth checks have their own host doubles.
+        fill_order = importlib.import_module("pdf_vector_importer.fill_paint_order")
+        monkeypatch.setattr(fill_order, "apply_fill_depths", lambda *_a, **_k: [])
 
         def face_mesh(name, *_args, **_kwargs):
             # The exactly resolved rectangle takes the ordinary fill path.
@@ -267,6 +293,9 @@ class _FakeHost:
             "ignore_images": True,
             "auto_focus_view": False,
             "auto_hide_default_cube": False,
+            # This fixture verifies source-fill construction/reporting, not the
+            # separately tested optional native display-aid plane.
+            "white_page_background": False,
             "import_report_path": str(self.report_path),
             "resume_checkpoint_path": str(self.checkpoint),
         }
@@ -293,6 +322,14 @@ def test_unresolvable_and_unbuildable_fills_are_left_out_and_the_page_still_impo
     built = host.clip_fill_objects()
     assert [obj["bcs_clip_fill_group_id"] for obj in built] == ["clip-fill:7"]
     assert built[0]["bcs_clip_fill_contour_count"] == 2
+    owned = host.build_configs[0]["_source_compound_fill_objects"]
+    assert len(owned) == 1 and owned[0]["object"] is built[0]
+    assert owned[0]["source_draw_order"] == 7
+    assert owned[0]["fill_opacity"] == 1.0 and owned[0]["fill_rgb"] == (0.0, 1.0, 0.0)
+    assert owned[0]["even_odd"] is True
+    assert len(owned[0]["primitive_ids"]) == len(set(owned[0]["primitive_ids"])) == 2
+    assert len(owned[0]["contours_mm"]) == 2
+    assert [row["source_draw_order"] for row in owned] == [7]  # Dropped seqnos 3/5 are never owned.
     # Nothing half-built is left behind for the fill the builder refused.
     assert host.bpy.data.curves.removed == [] and host.bpy.data.objects.removed == []
     assert len(host.bpy.data.curves.made) == 1
@@ -646,7 +683,7 @@ def test_operator_emits_one_clip_fill_warning_line_per_import(
     for name in ("mode", "pages", "text_mode", "visual_style", "page_arrangement", "model3d_mode"):
         setattr(operator, name, "")
     for name in ("show_advanced", "resume_interrupted", "import_text", "group_by_color", "auto_focus_view",
-                 "keep_selection_after_focus", "auto_hide_default_cube"):
+                 "keep_selection_after_focus", "auto_hide_default_cube", "white_page_background"):
         setattr(operator, name, False)
     for name in ("line_z_offset_mm", "text_z_offset_mm", "image_z_offset_mm", "page_gap_ratio", "model3d_depth_mm"):
         setattr(operator, name, 0.0)

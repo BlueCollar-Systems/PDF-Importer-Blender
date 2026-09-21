@@ -194,6 +194,12 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
         default="blueprint",
     )
 
+    white_page_background: BoolProperty(  # type: ignore[assignment]
+        name="White page background",
+        description="Source Accurate only: add a separately hideable white display background behind the drawing",
+        default=True,
+    )
+
     line_z_offset_mm: FloatProperty(  # type: ignore[assignment]
         name="Line Z Offset (mm)",
         description="Small Z offset applied to vector curves to reduce z-fighting",
@@ -304,6 +310,7 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
             "text_mode": self.text_mode,
             "group_by_color": self.group_by_color,
             "visual_style": self.visual_style,
+            "white_page_background": self.white_page_background,
             "line_z_offset_mm": self.line_z_offset_mm,
             "text_z_offset_mm": self.text_z_offset_mm,
             "image_z_offset_mm": self.image_z_offset_mm,
@@ -499,6 +506,9 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
         box = layout.box()
         box.label(text="View & Readability", icon="SHADING_RENDERED")
         box.prop(self, "visual_style")
+        paper = box.row()
+        paper.enabled = self.visual_style == "source"
+        paper.prop(self, "white_page_background")
         box.prop(self, "auto_focus_view")
         box.prop(self, "keep_selection_after_focus")
         box.prop(self, "auto_hide_default_cube")

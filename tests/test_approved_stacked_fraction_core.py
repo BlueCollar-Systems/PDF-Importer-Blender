@@ -26,6 +26,9 @@ from pdfcadcore import primitive_extractor  # noqa: E402
 # recovered font-metric shear is rejected by anisotropic/sheared source tests.
 # September 17: a single filled contour with an exactly repeated endpoint is
 # closed even without h; no tolerance-based closure or compound-hole changes.
+# September 19: a literal single open unfilled line retains both exact source
+# endpoints, including zero-length and sub-cleanup-tolerance round-cap strokes.
+# Source font metrics, fraction layout and all other cleanup routes are unchanged.
 # September 20: six lines on the text path call glyph_code_recovery before
 # anything derives from the text dictionary. A span whose raw glyph codes are
 # not proven is left byte for byte as MuPDF delivered it, so no fraction
@@ -34,7 +37,7 @@ from pdfcadcore import primitive_extractor  # noqa: E402
 # port. It deliberately does not claim that these combined bytes were approved
 # independently before the merge review.
 REVIEWED_COMBINED_SUCCESSOR_SHA256 = (
-    "1d110a7ee0f510db162f0fa21ad33ef1955f1d3a1c4004a16a5730ad96909aad"
+    "5794cccfbf93a81d892969f667ca8cab85a6b343991c439adeb434c738b07a16"
 )
 
 
