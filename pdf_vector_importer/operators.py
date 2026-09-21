@@ -450,6 +450,17 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
                 f"{clip_fill_warning}. Everything else was imported; review "
                 f"extra.clip_fill_delivery in {report_path or 'the import report'}.",
             )
+        # Text a font delivered as raw glyph codes. A recovered character was
+        # matched against an installed reference face rather than read from the
+        # file, and an unproven span is still on the sheet as raw codes; the
+        # operator is the one who has to know either way.
+        glyph_code_warning = str(stats.get("text_glyph_code_warning") or "").strip()
+        if glyph_code_warning:
+            self.report(
+                {"WARNING"},
+                f"{glyph_code_warning} Review extra.text_glyph_codes in "
+                f"{report_path or 'the import report'}.",
+            )
 
         prefs = _addon_prefs(context)
         if prefs is not None and bool(getattr(prefs, "remember_last_directory", True)):

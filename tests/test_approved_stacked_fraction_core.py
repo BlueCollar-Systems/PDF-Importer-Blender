@@ -29,11 +29,15 @@ from pdfcadcore import primitive_extractor  # noqa: E402
 # September 19: a literal single open unfilled line retains both exact source
 # endpoints, including zero-length and sub-cleanup-tolerance round-cap strokes.
 # Source font metrics, fraction layout and all other cleanup routes are unchanged.
+# September 20: six lines on the text path call glyph_code_recovery before
+# anything derives from the text dictionary. A span whose raw glyph codes are
+# not proven is left byte for byte as MuPDF delivered it, so no fraction
+# predicate, layout rule or source-character proof changed here.
 # This is the reviewed integration output: current main plus the fraction-core
 # port. It deliberately does not claim that these combined bytes were approved
 # independently before the merge review.
 REVIEWED_COMBINED_SUCCESSOR_SHA256 = (
-    "8a2956d7174db158200d10e5f536dc913b773ccefab5050b324c0625bd7954d3"
+    "5794cccfbf93a81d892969f667ca8cab85a6b343991c439adeb434c738b07a16"
 )
 
 
