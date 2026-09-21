@@ -241,7 +241,8 @@ def test_the_operator_tells_the_shop_user_what_the_report_says(
     for name in ("mode", "pages", "text_mode", "visual_style", "page_arrangement", "model3d_mode"):
         setattr(operator, name, "")
     for name in ("show_advanced", "resume_interrupted", "import_text", "group_by_color",
-                 "auto_focus_view", "keep_selection_after_focus", "auto_hide_default_cube"):
+                 "auto_focus_view", "keep_selection_after_focus", "auto_hide_default_cube",
+                 "white_page_background"):
         setattr(operator, name, False)
     for name in ("line_z_offset_mm", "text_z_offset_mm", "image_z_offset_mm",
                  "page_gap_ratio", "model3d_depth_mm"):
