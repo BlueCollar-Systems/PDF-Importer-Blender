@@ -26,11 +26,15 @@ from pdfcadcore import primitive_extractor  # noqa: E402
 # recovered font-metric shear is rejected by anisotropic/sheared source tests.
 # September 17: a single filled contour with an exactly repeated endpoint is
 # closed even without h; no tolerance-based closure or compound-hole changes.
+# September 20: six lines on the text path call glyph_code_recovery before
+# anything derives from the text dictionary. A span whose raw glyph codes are
+# not proven is left byte for byte as MuPDF delivered it, so no fraction
+# predicate, layout rule or source-character proof changed here.
 # This is the reviewed integration output: current main plus the fraction-core
 # port. It deliberately does not claim that these combined bytes were approved
 # independently before the merge review.
 REVIEWED_COMBINED_SUCCESSOR_SHA256 = (
-    "60c1ce7648f7fb5d36e9580666d18071dd468a09f9c1f7452249213e4a4e00cb"
+    "1d110a7ee0f510db162f0fa21ad33ef1955f1d3a1c4004a16a5730ad96909aad"
 )
 
 
