@@ -41,7 +41,8 @@ from .pdfcadcore.drawing_clips import (
 from .pdfcadcore.glyph_code_recovery import (
     glyph_code_delivery_block,
     glyph_code_issues as core_glyph_code_issues,
-    summarize_glyph_code_issues,
+    merge_glyph_code_blocks,
+    summarize_glyph_code_block,
 )
 from .pdfcadcore.primitive_extractor import (
     _page_rotation_transform,
@@ -564,28 +565,40 @@ def _record_clip_fill_issues(stats: Dict, page_num: int, core_issues, build_drop
             tally["issues_truncated"] = True
 
 
+_GLYPH_CODE_ISSUE_CAP = 200
+
+
 def _record_glyph_code_issues(stats: Dict, page_num: int, issues) -> None:
-    """Keep one page's glyph-code recovery records for the import report.
+    """Tally one page's glyph-code records into stats["text_glyph_codes"].
 
     The shared core records every span a font delivered as raw glyph codes:
     those whose characters it proved (with the route that proved them) and
     those it left exactly as the PDF delivered them. Never a failure - a sheet
     with unproven spans still imports and still draws identically.
+
+    A page of nothing but raw glyph codes produces one record per span, and the
+    whole tally is rewritten into the resume checkpoint after every page, so
+    what is kept is a merged block capped like the clipped-fill tally beside
+    it. The counts stay exact; only the listed records are bounded.
     """
-    kept = stats.get("glyph_code_issues")
-    if not isinstance(kept, list):
-        kept = stats["glyph_code_issues"] = []
-    for issue in list(issues or []):
-        if isinstance(issue, dict):
-            kept.append(dict(issue, page=int(page_num)))
-
-
-def _glyph_code_records(stats: Dict) -> List[Dict[str, Any]]:
-    return [
-        issue
-        for issue in list(stats.get("glyph_code_issues") or [])
+    rows = [
+        dict(issue, page=int(page_num))
+        for issue in list(issues or [])
         if isinstance(issue, dict)
     ]
+    page_block = glyph_code_delivery_block(rows, item_limit=_GLYPH_CODE_ISSUE_CAP)
+    if not page_block["spans_examined"]:
+        return
+    kept = stats.get("text_glyph_codes")
+    stats["text_glyph_codes"] = merge_glyph_code_blocks(
+        ([kept] if isinstance(kept, dict) else []) + [page_block],
+        item_limit=_GLYPH_CODE_ISSUE_CAP,
+    )
+
+
+def _glyph_code_delivery(stats: Dict) -> Dict[str, Any]:
+    block = stats.get("text_glyph_codes")
+    return block if isinstance(block, dict) else merge_glyph_code_blocks(())
 
 
 def _clip_fill_warning_line(tally: Any) -> str:
@@ -885,7 +898,7 @@ def write_import_report(
         clip_fill_warnings = clip_fill_delivery["dropped"] + clip_fill_delivery["approximated"]
     # Text a font delivered as raw glyph codes: recovered spans name the route
     # that proved them, unproven spans name the font, the page and the codes.
-    glyph_code_delivery = glyph_code_delivery_block(_glyph_code_records(stats))
+    glyph_code_delivery = _glyph_code_delivery(stats)
     glyph_code_warnings = 0
     if glyph_code_delivery["spans_examined"]:
         extra["text_glyph_codes"] = glyph_code_delivery
@@ -4194,8 +4207,8 @@ def import_pdf(
         total_stats["clip_fill_warning"] = _clip_fill_warning_line(
             total_stats.get("clip_fill_delivery")
         )
-        total_stats["text_glyph_code_warning"] = summarize_glyph_code_issues(
-            _glyph_code_records(total_stats),
+        total_stats["text_glyph_code_warning"] = summarize_glyph_code_block(
+            _glyph_code_delivery(total_stats),
             "See text_glyph_codes in the import report.",
         )
         try:

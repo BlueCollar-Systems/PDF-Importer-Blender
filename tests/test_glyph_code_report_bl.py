@@ -138,22 +138,43 @@ def test_the_tally_keeps_the_page_each_record_came_from(engine):
     engine._record_glyph_code_issues(stats, 2, [unproven(page=2)])
     engine._record_glyph_code_issues(stats, 2, [None, "not a record"])
 
-    records = engine._glyph_code_records(stats)
+    block = engine._glyph_code_delivery(stats)
 
-    assert [record["page"] for record in records] == [1, 2]
-    block = engine.glyph_code_delivery_block(records)
+    # Unproven first, so the item cap never hides one.
+    assert [item["page"] for item in block["items"]] == [2, 1]
     assert block["pages"] == [1, 2]
     json.dumps(block, allow_nan=False)
 
 
 def test_a_tally_restored_from_a_damaged_checkpoint_does_not_raise(engine, tmp_path):
     stats = base_stats()
-    stats["glyph_code_issues"] = "not a list"
+    stats["text_glyph_codes"] = "not a block"
     engine._record_glyph_code_issues(stats, 1, [unproven()])
 
     report = written(engine, tmp_path, stats)
 
     assert report["extra"]["text_glyph_codes"]["unproven"] == 1
+
+
+def test_the_tally_is_bounded_so_the_resume_checkpoint_does_not_grow_with_it(engine):
+    # _current_resume_state copies every JSON-serialisable key of total_stats
+    # into the checkpoint and rewrites it after every page. A sheet of nothing
+    # but raw glyph codes produces one record per span, so what is kept is a
+    # merged block capped like the clipped-fill tally beside it: the counts
+    # stay exact, only the listed records are bounded.
+    stats = base_stats()
+    for page in range(1, 6):
+        engine._record_glyph_code_issues(stats, page, [
+            unproven(page=page, bbox=(float(index), 90.0, 240.0, 104.0))
+            for index in range(300)
+        ])
+
+    block = engine._glyph_code_delivery(stats)
+
+    assert block["unproven"] == 1500
+    assert len(block["items"]) == engine._GLYPH_CODE_ISSUE_CAP
+    assert block["items_truncated"] is True
+    assert len(json.dumps(block)) < 200000
 
 
 def test_one_operator_line_per_import_states_recovery_and_warns_on_unproven(engine):
@@ -162,14 +183,81 @@ def test_one_operator_line_per_import_states_recovery_and_warns_on_unproven(engi
     mixed = base_stats()
     engine._record_glyph_code_issues(mixed, 1, [recovered(), unproven()])
 
-    clean_line = engine.summarize_glyph_code_issues(
-        engine._glyph_code_records(recovered_only), "See text_glyph_codes in the import report."
+    clean_line = engine.summarize_glyph_code_block(
+        engine._glyph_code_delivery(recovered_only),
+        "See text_glyph_codes in the import report.",
     )
-    mixed_line = engine.summarize_glyph_code_issues(
-        engine._glyph_code_records(mixed), "See text_glyph_codes in the import report."
+    mixed_line = engine.summarize_glyph_code_block(
+        engine._glyph_code_delivery(mixed), "See text_glyph_codes in the import report."
     )
 
     assert "outline_identity" in clean_line and "could not be proven" not in clean_line
     assert "could not be proven" in mixed_line and "SampleGothic" in mixed_line
     assert "\n" not in mixed_line
-    assert engine.summarize_glyph_code_issues([], "") == ""
+    assert engine.summarize_glyph_code_block(engine._glyph_code_delivery({}), "") == ""
+
+
+@pytest.fixture
+def operators_module(monkeypatch: pytest.MonkeyPatch):
+    fake_bpy = _install_blender_stubs(monkeypatch)
+    props = types.ModuleType("bpy.props")
+    for name in ("BoolProperty", "EnumProperty", "FloatProperty", "StringProperty"):
+        setattr(props, name, lambda **_kwargs: None)
+    io_utils = types.ModuleType("bpy_extras.io_utils")
+    io_utils.ImportHelper = type("ImportHelper", (), {})
+    bpy_extras = types.ModuleType("bpy_extras")
+    bpy_extras.io_utils = io_utils
+    monkeypatch.setitem(sys.modules, "bpy.props", props)
+    monkeypatch.setitem(sys.modules, "bpy_extras", bpy_extras)
+    monkeypatch.setitem(sys.modules, "bpy_extras.io_utils", io_utils)
+    engine = importlib.import_module("pdf_vector_importer.bl_import_engine")
+    previous = sys.modules.pop("pdf_vector_importer.operators", None)
+    try:
+        yield importlib.import_module("pdf_vector_importer.operators"), engine, fake_bpy
+    finally:
+        sys.modules.pop("pdf_vector_importer.operators", None)
+        if previous is not None:
+            sys.modules["pdf_vector_importer.operators"] = previous
+
+
+@pytest.mark.parametrize("warning,expected", [
+    ("1 text span(s) use an embedded font with no usable Unicode map; their "
+     "characters could not be proven and are shown as the PDF's raw glyph codes "
+     "(font SampleGothic, page 1).", 1),
+    ("", 0),
+])
+def test_the_operator_tells_the_shop_user_what_the_report_says(
+    monkeypatch: pytest.MonkeyPatch, operators_module, warning: str, expected: int
+) -> None:
+    # The add-on surfaces every sibling warning. A character matched against an
+    # installed reference face rather than read from the file, or a span still
+    # showing raw codes, is the one a shop user most needs to hear about.
+    operators, engine, _fake_bpy = operators_module
+    monkeypatch.setattr(engine, "import_pdf", lambda *_a, **_k: {
+        "primitives": 12, "pages_imported": 1, "text_glyph_code_warning": warning,
+        "import_report_path": "D042_import_report.json",
+    })
+    operator = operators.IMPORT_OT_pdf_vector()
+    for name in ("mode", "pages", "text_mode", "visual_style", "page_arrangement", "model3d_mode"):
+        setattr(operator, name, "")
+    for name in ("show_advanced", "resume_interrupted", "import_text", "group_by_color",
+                 "auto_focus_view", "keep_selection_after_focus", "auto_hide_default_cube"):
+        setattr(operator, name, False)
+    for name in ("line_z_offset_mm", "text_z_offset_mm", "image_z_offset_mm",
+                 "page_gap_ratio", "model3d_depth_mm"):
+        setattr(operator, name, 0.0)
+    operator.filepath = "D042.pdf"
+    reports = []
+    operator.report = lambda level, message: reports.append((level, message))
+    context = types.SimpleNamespace(
+        preferences=types.SimpleNamespace(addons={}), workspace=None,
+    )
+
+    assert operator.execute(context) == {"FINISHED"}
+
+    warnings = [message for level, message in reports if level == {"WARNING"}]
+    assert len(warnings) == expected
+    if expected:
+        assert warnings[0].startswith(warning)
+        assert "extra.text_glyph_codes in D042_import_report.json" in warnings[0]
+    assert not [message for level, message in reports if level == {"ERROR"}]
