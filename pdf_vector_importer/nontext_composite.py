@@ -30,17 +30,25 @@ def _source_group_declarations(page):
     doc, records = page.parent, []
     for xref in range(1, doc.xref_length()):
         prefixes = []
-        if doc.xref_get_key(xref, "Group")[0] != "null":
-            prefixes.append("Group/")
-        if doc.xref_get_key(xref, "S") == ("name", "/Transparency"):
-            prefixes.append("")
+        try:
+            if doc.xref_get_key(xref, "Group")[0] != "null":
+                prefixes.append("Group/")
+            if doc.xref_get_key(xref, "S") == ("name", "/Transparency"):
+                prefixes.append("")
+        except Exception:
+            continue
         for prefix in prefixes:
-            knockout = doc.xref_get_key(xref, prefix + "K")
-            if knockout not in (("null", "null"), ("bool", "false")):
-                raise ValueError("Original PDF declares unsupported knockout transparency")
-            records.append([xref, prefix, knockout,
-                            doc.xref_get_key(xref, prefix + "S"),
-                            doc.xref_get_key(xref, prefix + "I")])
+            try:
+                knockout = doc.xref_get_key(xref, prefix + "K")
+                if knockout not in (("null", "null"), ("bool", "false")):
+                    raise ValueError("Original PDF declares unsupported knockout transparency")
+                records.append([xref, prefix, knockout,
+                                doc.xref_get_key(xref, prefix + "S"),
+                                doc.xref_get_key(xref, prefix + "I")])
+            except ValueError:
+                raise
+            except Exception:
+                continue
     return records
 
 
