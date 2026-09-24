@@ -289,16 +289,6 @@ def _styled_text_color(
     return preview_color(base, _normalize_style(style))
 
 
-def _should_center_anchor(
-    text_item: NormalizedText,
-    *,
-    strict_text_fidelity: bool = True,
-) -> bool:
-    del text_item, strict_text_fidelity
-    # Source insertion is a PDF baseline anchor. Re-centering changes identity.
-    return False
-
-
 def _get_or_create_text_material(
     style: str,
     source_color: Optional[Tuple[float, float, float]] = None,
