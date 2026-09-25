@@ -27,6 +27,7 @@ markers = [
 ]
 testpaths = ["tests"]
 pythonpath = ["."]
+cache_dir = "C:/TMP/pytest_cache/blender"
 norecursedirs = [
   "dist",
   "build",
