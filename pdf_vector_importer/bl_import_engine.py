@@ -25,6 +25,7 @@ import bpy
 
 from .dependency_manager import check_pymupdf, ensure_lib_path
 from .packed_assets import pack_and_verify_bytes
+from .image_soft_mask import combine_image_soft_mask
 from .pdfcadcore import (
     ImportConfig, extract_page, iter_pages, recognition, reset_ids,
     classify_page_content, drawings_need_text_counts, tag_hatch_primitives,
@@ -75,6 +76,10 @@ class IncompleteImportError(RuntimeError):
             + "."
             + report_hint
         )
+
+
+class EmbeddedImageDeliveryError(RuntimeError):
+    """An embedded image cannot be decoded with its required transparency."""
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -860,6 +865,7 @@ def write_import_report(
         "final_transparent_annotations": stats.get("final_transparent_annotations", []),
         "source_capsule_footprints": stats.get("source_capsule_footprints", []),
         "opaque_image_paint_order": stats.get("opaque_image_paint_order", []),
+        "image_soft_mask_alignments": stats.get("image_soft_mask_alignments", []),
         "opaque_fill_depth_order": stats.get("opaque_fill_depth_order", []),
         "opaque_rectangle_paint_order": stats.get("opaque_rectangle_paint_order", []),
         "terminal_triangle_paint_order": stats.get("terminal_triangle_paint_order", []),
@@ -1700,6 +1706,8 @@ def _extract_image_placements(doc, page, page_num: int, import_cfg, image_dir: s
 
     for img_info in page.get_images(full=True):
         xref = int(img_info[0])
+        smask = int(img_info[1] or 0)
+        soft_mask_alignment = None
         if xref in seen_xrefs:
             continue
         seen_xrefs.add(xref)
@@ -1716,15 +1724,32 @@ def _extract_image_placements(doc, page, page_num: int, import_cfg, image_dir: s
             if needs_rgb:
                 pix = fitz.Pixmap(fitz.csRGB, pix)
 
-            smask = int(img_info[1] or 0)
             if smask:
                 if pix.alpha:
                     pix = fitz.Pixmap(pix, 0)
-                pix = fitz.Pixmap(pix, fitz.Pixmap(doc, smask))
+                mask = fitz.Pixmap(doc, smask)
+                source_size = [pix.width, pix.height]
+                mask_size = [mask.width, mask.height]
+                pix = combine_image_soft_mask(fitz, doc, xref, smask, pix, mask)
+                if source_size != mask_size:
+                    soft_mask_alignment = {
+                        "method": "exact_common_sample_grid",
+                        "source_size": source_size, "mask_size": mask_size,
+                        "output_size": [pix.width, pix.height],
+                        "source_samples_preserved": True,
+                        "interpolate": False,
+                    }
             image_path = os.path.join(image_dir, f"page_{page_num:03d}_xref_{xref}.png")
             pix.save(image_path)
-        except (RuntimeError, OSError, ValueError, TypeError):
-            continue
+        except Exception as error:
+            if smask:
+                raise EmbeddedImageDeliveryError(
+                    f"page {page_num} image xref {xref} soft-mask {smask} "
+                    f"could not be extracted faithfully: {error}"
+                ) from error
+            if isinstance(error, (RuntimeError, OSError, ValueError, TypeError)):
+                continue
+            raise
 
         try:
             image_rects = page.get_image_rects(xref, transform=True)
@@ -1780,6 +1805,7 @@ def _extract_image_placements(doc, page, page_num: int, import_cfg, image_dir: s
                     "xref": xref,
                     "page_number": page_num,
                     "source_kind": "xobject",
+                    **({"soft_mask_alignment": soft_mask_alignment} if soft_mask_alignment else {}),
                 }
             )
 
@@ -2582,6 +2608,8 @@ def _set_image_plane_metadata(
         placement.get("source_image_number", -1) or 0
     )
     obj["pdf_image_source_digest"] = str(placement.get("source_digest") or "")
+    if placement.get("soft_mask_alignment"):
+        obj["pdf_image_soft_mask_alignment"] = json.dumps(placement["soft_mask_alignment"], sort_keys=True)
     obj["pdf_image_composition"] = str(placement.get("composition") or "")
     obj["pdf_image_source_content_sha256"] = str(
         placement.get("source_content_sha256") or ""
@@ -4083,7 +4111,16 @@ def import_pdf(
                             f"Raster delivery failed on page {page_num}; see import report.",
                         )
                 else:
-                    placements = _extract_image_placements(doc, page, page_num, import_cfg, image_dir)
+                    try:
+                        placements = _extract_image_placements(doc, page, page_num, import_cfg, image_dir)
+                    except EmbeddedImageDeliveryError as error:
+                        _record_raster_delivery_failure(
+                            total_stats["raster_delivery_failures"], page_num=page_num,
+                            stage="embedded_image", reason=str(error),
+                        )
+                        _add_phase_ms("images_ms", t_phase)
+                        _discard_page_collection(page_col)
+                        break
                     if (
                         import_cfg.raster_fallback
                         and not placements
@@ -4140,6 +4177,11 @@ def import_pdf(
                             or 0
                         )
                         total_stats["image_source_instances"] += source_image_count
+                        if placement.get("soft_mask_alignment"):
+                            total_stats.setdefault("image_soft_mask_alignments", []).append({
+                                "page": page_num, "xref": placement.get("xref"),
+                                **placement["soft_mask_alignment"],
+                            })
                         total_stats["inline_image_source_instances"] += source_inline_count
                         if (
                             placement.get("composition")
