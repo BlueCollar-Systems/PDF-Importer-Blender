@@ -146,7 +146,14 @@ def apply_fill_depths(collection, owned):
     native_members = list(collection.all_objects)
     for spec in owned:
         obj = spec["object"]
-        world, points, corners = validate_source_fill(spec, native_members, graph)
+        try:
+            world, points, corners = validate_source_fill(spec, native_members, graph)
+        except ValueError as error:
+            # Zero-area / collinear PDF fills are legal paint with nothing to
+            # depth-sort. Leave them out of ordering; do not abort the page.
+            if str(error) != "Opaque fill polygon has no finite projected area":
+                raise
+            continue
         bounds = (min(p.x for p in world), min(p.y for p in world),
                   max(p.x for p in world), max(p.y for p in world))
         record = {"id": spec["primitive_id"], "seqno": spec["source_draw_order"],

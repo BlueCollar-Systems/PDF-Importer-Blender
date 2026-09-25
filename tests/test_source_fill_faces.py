@@ -93,9 +93,19 @@ def host():
         for node in ast.parse(SOURCE.read_text(encoding="utf-8")).body
         if isinstance(node, ast.FunctionDef) and node.name == "_create_face_mesh"
     )
+    polygon_area = next(
+        node
+        for node in ast.parse(SOURCE.read_text(encoding="utf-8")).body
+        if isinstance(node, ast.FunctionDef) and node.name == "_polygon_area"
+    )
     env = {"bpy": bpy, "bmesh": NS(new=BMesh), "math": math, "MM_TO_M": 0.001}
     exec(
-        compile(ast.Module(body=[function], type_ignores=[]), str(SOURCE), "exec"), env
+        compile(
+            ast.Module(body=[polygon_area, function], type_ignores=[]),
+            str(SOURCE),
+            "exec",
+        ),
+        env,
     )
     state.create = lambda points: env["_create_face_mesh"](
         "fill", points, NS(objects=NS(link=state.linked.append)), object()

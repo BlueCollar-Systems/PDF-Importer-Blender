@@ -499,7 +499,8 @@ def _terminal_import_failures(config: Dict, stats: Dict, provenance_opts: Any) -
         issue
         for issue in list(stats.get("geometry_delivery_issues") or [])
         if isinstance(issue, dict)
-        and str(issue.get("status") or "").strip().lower() != "verified"
+        and str(issue.get("status") or "").strip().lower()
+        not in {"verified", "skipped"}
     ]
     if geometry_failures:
         failures.append(f"geometry delivery failed ({len(geometry_failures)} primitive(s))")
@@ -750,7 +751,8 @@ def write_import_report(
     geometry_delivery_failures = [
         record
         for record in geometry_delivery_issues
-        if str(record.get("status") or "").strip().lower() != "verified"
+        if str(record.get("status") or "").strip().lower()
+        not in {"verified", "skipped"}
     ]
     if (
         raster_delivery_failures

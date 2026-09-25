@@ -718,6 +718,45 @@ def _create_nurbs_circle(
 
 # ── Mesh face builder ────────────────────────────────────────────────
 
+# PDF fills may be collinear, open after closure strip, or otherwise have no
+# drawable face area. _create_face_mesh still refuses to deliver those as
+# meshes; build_page turns the same refusals into per-fill skips so the page
+# (and its text) still imports. Unrelated geometry errors keep aborting.
+_SKIPPABLE_SOURCE_FILL_ERRORS = frozenset(
+    {
+        "Source fill lacks a finite native face boundary",
+        "Native source fill has no positive face area",
+        "Native source fill mesh has no positive face area",
+    }
+)
+
+
+def _is_skippable_source_fill_error(error: BaseException) -> bool:
+    return isinstance(error, ValueError) and str(error) in _SKIPPABLE_SOURCE_FILL_ERRORS
+
+
+def _record_skipped_source_fill(stats: dict, page_data: PageData, prim: Primitive, error: BaseException) -> None:
+    """Non-fatal diagnostic: one source fill had no deliverable face area."""
+    detail = type(error).__name__
+    try:
+        detail = f"{type(error).__name__}: {error}"
+    except Exception:
+        pass
+    stats.setdefault("geometry_delivery_issues", []).append(
+        {
+            "page": int(page_data.page_number),
+            "primitive_id": int(prim.id),
+            "requested_type": "source_fill",
+            "source_primitive_type": str(prim.type or ""),
+            "delivered_type": None,
+            "status": "skipped",
+            "reason": "zero_area_or_degenerate_source_fill",
+            "verification": "no_positive_face_area",
+            "detail": detail,
+        }
+    )
+
+
 def _create_face_mesh(
     name: str,
     points: list,
@@ -737,6 +776,11 @@ def _create_face_mesh(
         for point in boundary
     ) or not math.isfinite(z_offset_m):
         raise ValueError("Source fill lacks a finite native face boundary")
+    # Blender mesh area can be a tiny positive float for collinear or bowtie
+    # loops whose XY shoelace is exactly zero; refuse those before ownership.
+    planar_area = _polygon_area(boundary)
+    if not math.isfinite(planar_area) or planar_area <= 0.0:
+        raise ValueError("Native source fill has no positive face area")
 
     mesh = obj = bm = None
     try:
@@ -770,6 +814,29 @@ def _create_face_mesh(
     finally:
         if bm is not None:
             bm.free()
+
+
+def _try_create_source_fill_face(
+    name: str,
+    points: list,
+    collection: bpy.types.Collection,
+    material: bpy.types.Material,
+    *,
+    z_offset_m: float,
+    stats: dict,
+    page_data: PageData,
+    prim: Primitive,
+) -> Optional[bpy.types.Object]:
+    """Create a source fill face, or skip a zero-area/degenerate PDF fill."""
+    try:
+        return _create_face_mesh(
+            name, points, collection, material, z_offset_m=z_offset_m
+        )
+    except ValueError as error:
+        if not _is_skippable_source_fill_error(error):
+            raise
+        _record_skipped_source_fill(stats, page_data, prim, error)
+        return None
 
 
 def _polygon_area(points: list) -> float:
@@ -1261,15 +1328,19 @@ def build_page(
                         material_cache,
                         style=visual_style,
                     )
-                    face_obj = _create_face_mesh(
+                    face_obj = _try_create_source_fill_face(
                         obj_name + "_face",
                         circle_points,
                         target_col,
                         fill_mat,
                         z_offset_m=fill_face_z,
+                        stats=stats,
+                        page_data=page_data,
+                        prim=prim,
                     )
-                    _own_source_fill(face_obj, circle_points)
-                    stats["meshes"] += 1
+                    if face_obj is not None:
+                        _own_source_fill(face_obj, circle_points)
+                        stats["meshes"] += 1
                 if _model3d_should_extrude(prim, page_area, has_fill, config, circle_points):
                     solid_mat = _get_or_create_material(
                         prim.fill_color or prim.stroke_color,
@@ -1306,15 +1377,19 @@ def build_page(
                         material_cache,
                         style=visual_style,
                     )
-                    face_obj = _create_face_mesh(
+                    face_obj = _try_create_source_fill_face(
                         obj_name + "_face",
                         prim.points,
                         target_col,
                         fill_mat,
                         z_offset_m=fill_face_z,
+                        stats=stats,
+                        page_data=page_data,
+                        prim=prim,
                     )
-                    _own_source_fill(face_obj, prim.points)
-                    stats["meshes"] += 1
+                    if face_obj is not None:
+                        _own_source_fill(face_obj, prim.points)
+                        stats["meshes"] += 1
                 if _model3d_should_extrude(prim, page_area, has_fill, config, prim.points):
                     solid_mat = _get_or_create_material(
                         prim.fill_color or prim.stroke_color,
@@ -1372,27 +1447,38 @@ def build_page(
                         z_offset_m=line_z_offset_m,
                         use_tubes=use_line_tubes,
                     )
-                face_obj = _create_face_mesh(
-                    obj_name + "_face", prim.points, target_col, face_mat, z_offset_m=face_z,
+                face_obj = _try_create_source_fill_face(
+                    obj_name + "_face",
+                    prim.points,
+                    target_col,
+                    face_mat,
+                    z_offset_m=face_z,
+                    stats=stats,
+                    page_data=page_data,
+                    prim=prim,
                 )
-                _own_source_fill(face_obj, prim.points)
-                _own_image_order_stroke(outline_obj)
-                if 0.0 < prim.fill_opacity < 1.0:
-                    config.setdefault("_source_paint_objects", {})[prim.id] = (face_obj, outline_obj)
+                if face_obj is not None:
+                    _own_source_fill(face_obj, prim.points)
+                    if 0.0 < prim.fill_opacity < 1.0:
+                        config.setdefault("_source_paint_objects", {})[prim.id] = (
+                            face_obj,
+                            outline_obj,
+                        )
+                    stats["meshes"] += 1
+                    if _model3d_should_extrude(prim, page_area, has_fill, config, prim.points):
+                        if _create_extruded_mesh(
+                            obj_name + "_solid",
+                            prim.points,
+                            target_col,
+                            face_mat,
+                            float(config.get("model3d_depth_m", 0.0) or 0.0),
+                            z_offset_m=face_z,
+                        ):
+                            stats["meshes"] += 1
+                            stats["model3d_solids"] += 1
                 if create_outline:
+                    _own_image_order_stroke(outline_obj)
                     stats["curves"] += 1
-                stats["meshes"] += 1
-                if _model3d_should_extrude(prim, page_area, has_fill, config, prim.points):
-                    if _create_extruded_mesh(
-                        obj_name + "_solid",
-                        prim.points,
-                        target_col,
-                        face_mat,
-                        float(config.get("model3d_depth_m", 0.0) or 0.0),
-                        z_offset_m=face_z,
-                    ):
-                        stats["meshes"] += 1
-                        stats["model3d_solids"] += 1
             elif create_outline:
                 outline_obj = _create_poly_curve(
                     obj_name, prim.points, True, target_col,

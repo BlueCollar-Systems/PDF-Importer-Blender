@@ -432,7 +432,8 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
             geometry_failures = sum(
                 1
                 for issue in geometry_issues
-                if str(issue.get("status") or "").strip().lower() != "verified"
+                if str(issue.get("status") or "").strip().lower()
+                not in {"verified", "skipped"}
             )
             severity = {"ERROR"} if geometry_failures else {"WARNING"}
             self.report(
