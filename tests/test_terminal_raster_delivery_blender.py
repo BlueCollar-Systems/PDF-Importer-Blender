@@ -2625,3 +2625,64 @@ def test_vector_text_delivery_keeps_the_solid_viewport(monkeypatch, tmp_path):
     assert _run_text_import_and_capture_focus(
         monkeypatch, tmp_path, final_representation="text"
     ) is False
+
+
+@pytest.mark.parametrize("fail_extraction", [False, True])
+def test_embedded_soft_mask_delivery_accounting_and_failure_report(monkeypatch, tmp_path, fail_extraction):
+    """Source control-flow check; native object/appearance acceptance is separate."""
+    input_pdf = tmp_path / "input.pdf"
+    input_pdf.write_bytes(b"%PDF-1.7\n")
+    image_dir = tmp_path / "images"
+    image_dir.mkdir()
+    alignment = {"method": "exact_common_sample_grid", "source_size": [2, 1],
+                 "mask_size": [3, 1], "output_size": [6, 1],
+                 "source_samples_preserved": True, "interpolate": False}
+    placement = {"path": str(image_dir / "masked.png"), "xref": 17, "page_number": 1,
+                 "source_kind": "xobject", "width_mm": 12, "height_mm": 3,
+                 "soft_mask_alignment": alignment}
+    monkeypatch.setattr(bl_import_engine, "bpy", _FakeBpy())
+    monkeypatch.setattr(bl_import_engine, "check_pymupdf", lambda: True)
+    monkeypatch.setattr(bl_import_engine, "ensure_lib_path", lambda: None)
+    monkeypatch.setattr(fitz_loader, "import_fitz", lambda **_kwargs: object())
+    monkeypatch.setattr(fitz_loader, "safe_open", lambda _path: _Document())
+    monkeypatch.setattr(bl_import_engine, "extract_page", lambda *_args, **_kwargs: _page_data())
+    monkeypatch.setattr(bl_import_engine, "build_page", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(bl_import_engine, "build_all_text", lambda *_args, **_kwargs: 0)
+    monkeypatch.setattr(bl_import_engine.tempfile, "mkdtemp", lambda **_kwargs: str(image_dir))
+    discarded, planes, reports = [], [], []
+    monkeypatch.setattr(bl_import_engine, "_discard_page_collection", discarded.append)
+
+    def extract(*_args):
+        if fail_extraction:
+            raise bl_import_engine.EmbeddedImageDeliveryError("page 1 image xref 17 unsupported soft mask")
+        return [placement]
+
+    def plane(value, *_args, **_kwargs):
+        planes.append(value)
+        return object()
+
+    def report(_path, _config, stats, **_kwargs):
+        reports.append(stats)
+        return str(tmp_path / "import_report.json")
+
+    monkeypatch.setattr(bl_import_engine, "_extract_image_placements", extract)
+    monkeypatch.setattr(bl_import_engine, "_create_image_plane", plane)
+    monkeypatch.setattr(bl_import_engine, "write_import_report", report)
+    config = {"mode": "vector", "pages": "1", "import_text": False,
+              "auto_focus_view": False, "auto_hide_default_cube": False}
+    if fail_extraction:
+        with pytest.raises(bl_import_engine.IncompleteImportError) as raised:
+            bl_import_engine.import_pdf(str(input_pdf), config=config)
+        stats = raised.value.stats
+        assert stats["pages_imported"] == stats["images"] == stats["image_source_instances"] == 0
+        assert len(discarded) == 1 and not planes
+        assert stats["raster_delivery_failures"] == [{
+            "page": 1, "stage": "embedded_image", "reason": "page 1 image xref 17 unsupported soft mask",
+        }]
+        assert raised.value.report_path.endswith("import_report.json")
+    else:
+        stats = bl_import_engine.import_pdf(str(input_pdf), config=config)
+        assert stats["pages_imported"] == stats["images"] == stats["image_source_instances"] == 1
+        assert planes == [placement] and not discarded
+        assert stats["image_soft_mask_alignments"] == [{"page": 1, "xref": 17, **alignment}]
+    assert reports == [stats]
