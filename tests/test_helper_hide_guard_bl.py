@@ -35,7 +35,6 @@ for path in (str(REPO), str(REPO / "pdf_vector_importer")):
 
 def _load_hide_helper():
     """Import just the guard, without pulling bpy in."""
-    import importlib.util
 
     source = (REPO / "pdf_vector_importer" / "bl_text_builder.py").read_text(
         encoding="utf-8"

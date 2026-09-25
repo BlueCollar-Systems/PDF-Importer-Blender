@@ -78,24 +78,6 @@ def _should_exclude(path: Path) -> bool:
     return is_excluded_package_member(path)
 
 
-def _write_deterministic_file(
-    zf: ZipFile,
-    source_path: Path,
-    archive_name: str,
-) -> None:
-    """Write one file with checkout-independent ZIP metadata."""
-    info = ZipInfo(archive_name, date_time=_ZIP_TIMESTAMP)
-    info.compress_type = ZIP_DEFLATED
-    info.create_system = 3
-    info.external_attr = _ZIP_FILE_MODE << 16
-    zf.writestr(
-        info,
-        source_path.read_bytes(),
-        compress_type=ZIP_DEFLATED,
-        compresslevel=9,
-    )
-
-
 def _write_deterministic_bytes(zf: ZipFile, data: bytes, archive_name: str) -> None:
     info = ZipInfo(archive_name, date_time=_ZIP_TIMESTAMP)
     info.compress_type = ZIP_DEFLATED

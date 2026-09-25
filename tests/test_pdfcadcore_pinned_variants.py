@@ -1,6 +1,5 @@
 from pathlib import Path
 import importlib.util
-import hashlib
 
 
 def test_specialized_core_is_hash_checked_and_never_replaced_by_canonical(tmp_path, monkeypatch):
