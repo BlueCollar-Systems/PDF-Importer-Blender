@@ -60,6 +60,7 @@ _AUTO_RECOGNITION_PRIMITIVE_LIMIT = 20_000
 _AUTO_RECOGNITION_TEXT_LIMIT = 3_000
 _AUTO_RECOGNITION_PAGE_AREA_MM2_LIMIT = 12_000_000.0
 _INLINE_IMAGE_COMPOSITE_THRESHOLD = 256
+_IMAGES_ONLY_COMPOSITE_MAX_PIXELS = 16_000_000
 
 
 class IncompleteImportError(RuntimeError):
@@ -1916,6 +1917,42 @@ def _extract_image_placements(doc, page, page_num: int, import_cfg, image_dir: s
     return placements
 
 
+def images_only_composite_dpi(page_width: float, page_height: float,
+                              requested_dpi: int) -> int:
+    """Keep an images-only composite inside the pixel budget.
+
+    The composite is the page's images, not a substitute for vector geometry.
+    A 42 by 30 inch sheet at 300 DPI would allocate a raster of the whole
+    sheet; this lowers DPI until the image fits, and never below 36 DPI.
+    """
+
+    requested = max(36, int(requested_dpi or 300))
+    width = float(page_width)
+    height = float(page_height)
+    if width <= 0.0 or height <= 0.0:
+        return requested
+
+    def pixels(dpi: int) -> int:
+        return (
+            max(1, int(math.ceil(width * dpi / 72.0)))
+            * max(1, int(math.ceil(height * dpi / 72.0)))
+        )
+
+    if pixels(requested) <= _IMAGES_ONLY_COMPOSITE_MAX_PIXELS:
+        return requested
+    best = 36
+    low = 36
+    high = requested
+    while low <= high:
+        mid = (low + high) // 2
+        if pixels(mid) <= _IMAGES_ONLY_COMPOSITE_MAX_PIXELS:
+            best = mid
+            low = mid + 1
+        else:
+            high = mid - 1
+    return best
+
+
 def _render_images_only_composite(
     page,
     page_num: int,
@@ -2008,7 +2045,11 @@ def _render_images_only_composite(
         image_dir,
         f"page_{page_num:03d}_images_only_{digest[:16]}.png",
     )
-    dpi = int(max(36, getattr(import_cfg, "raster_dpi", 300) or 300))
+    dpi = images_only_composite_dpi(
+        page_width,
+        page_height,
+        getattr(import_cfg, "raster_dpi", 300),
+    )
     try:
         svg_document = fitz.open(stream=svg, filetype="svg")
         try:

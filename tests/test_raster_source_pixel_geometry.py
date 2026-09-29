@@ -1,4 +1,5 @@
 """A source PDF crop must occupy its actual rendered pixel rectangle."""
+import math
 import types
 import sys
 from dataclasses import replace
@@ -16,6 +17,7 @@ if "bmesh" not in sys.modules:
     sys.modules["bmesh"] = types.SimpleNamespace()
 
 from pdf_vector_importer import bl_import_engine
+from pdf_vector_importer.bl_import_engine import images_only_composite_dpi
 from pdf_vector_importer.pdfcadcore.primitive_extractor import extract_page
 from pdf_vector_importer.raster_geometry import source_bbox_to_model, source_raster_bounds
 
@@ -84,6 +86,14 @@ def test_short_font_bbox_does_not_trim_real_glyph_ink(tmp_path, monkeypatch):
         assert saved.samples==expected.samples
         rows_above_crop=int(145*300/72)-expected.y
         assert any(value<128 for value in expected.samples[:rows_above_crop*expected.stride])
+
+
+def test_sheet_sized_images_only_composite_drops_dpi_without_replacing_vectors():
+    dpi = images_only_composite_dpi(3024.0, 2160.0, 300)
+    pixels = math.ceil(3024.0 * dpi / 72.0) * math.ceil(2160.0 * dpi / 72.0)
+    assert dpi < 300
+    assert pixels <= bl_import_engine._IMAGES_ONLY_COMPOSITE_MAX_PIXELS
+    assert images_only_composite_dpi(220.0, 160.0, 144) == 144
 
 
 def test_source_coverage_rejects_nonfinite_original_quad():
