@@ -32,6 +32,7 @@ from .pdfcadcore import (
     cleanup_primitives,
 )
 from .bl_geometry_builder import build_page
+from .sheet_view import orthographic_fit_distance
 from .bl_text_builder import build_all_text, cleanup_delivery_outcome, text_stage_timings
 from .pdfcadcore.drawing_clips import (
     ClipAwareDrawings,
@@ -1170,6 +1171,27 @@ def _curve_spline_local_points(curve_data):
                     continue
 
 
+
+def _orthographic_sheet_distance(min_v, max_v, region, space) -> float:
+    """Face-on ortho distance for this viewport, using the sheet spans."""
+    span_x = abs(float(max_v.x) - float(min_v.x))
+    span_y = abs(float(max_v.y) - float(min_v.y))
+    aspect = 1.0
+    try:
+        width = float(getattr(region, "width", 0) or 0)
+        height = float(getattr(region, "height", 0) or 0)
+        if width > 0.0 and height > 0.0:
+            aspect = width / height
+    except (TypeError, ValueError, ZeroDivisionError):
+        aspect = 1.0
+    lens = 50.0
+    try:
+        lens = float(getattr(space, "lens", 50.0) or 50.0)
+    except (TypeError, ValueError):
+        lens = 50.0
+    return orthographic_fit_distance(span_x, span_y, region_aspect=aspect, lens=lens)
+
+
 def _sheet_view_radius(min_v, max_v) -> float:
     """Frame from sheet XY. A Z fence must not send the camera to infinity."""
     span_x = abs(float(max_v.x) - float(min_v.x))
@@ -1562,9 +1584,10 @@ def _focus_view_on_import(
                             rv3d.view_perspective = "ORTHO"
                             if min_v is not None and max_v is not None:
                                 center = (min_v + max_v) * 0.5
-                                radius = _sheet_view_radius(min_v, max_v)
                                 rv3d.view_location = center
-                                rv3d.view_distance = max(radius * 1.35, 0.4)
+                                rv3d.view_distance = _orthographic_sheet_distance(
+                                    min_v, max_v, region, space
+                                )
                         if prefer_material_preview:
                             try:
                                 space.shading.type = "MATERIAL"
@@ -1621,9 +1644,10 @@ def _focus_view_on_import(
                                 rv3d.view_perspective = "ORTHO"
                                 if min_v is not None and max_v is not None:
                                     center = (min_v + max_v) * 0.5
-                                    radius = _sheet_view_radius(min_v, max_v)
                                     rv3d.view_location = center
-                                    rv3d.view_distance = max(radius * 1.35, 0.4)
+                                    rv3d.view_distance = _orthographic_sheet_distance(
+                                        min_v, max_v, region, space
+                                    )
                             if prefer_material_preview:
                                 try:
                                     space.shading.type = "MATERIAL"
