@@ -217,3 +217,4 @@ def pixmap_copy(pm, src, n):
 
 def ll_JM_color_count(pm, clip):
     return _extra.ll_JM_color_count(pm, clip)
+

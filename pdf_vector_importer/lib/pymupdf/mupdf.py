@@ -1201,6 +1201,216 @@ class vector_fz_point(object):
 
 # Register vector_fz_point in _mupdf:
 _mupdf.vector_fz_point_swigregister(vector_fz_point)
+class vector_fz_rect(object):
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+
+    def iterator(self):
+        return _mupdf.vector_fz_rect_iterator(self)
+    def __iter__(self):
+        return self.iterator()
+
+    def __nonzero__(self):
+        return _mupdf.vector_fz_rect___nonzero__(self)
+
+    def __bool__(self):
+        return _mupdf.vector_fz_rect___bool__(self)
+
+    def __len__(self):
+        return _mupdf.vector_fz_rect___len__(self)
+
+    def __getslice__(self, i, j):
+        return _mupdf.vector_fz_rect___getslice__(self, i, j)
+
+    def __setslice__(self, *args):
+        return _mupdf.vector_fz_rect___setslice__(self, *args)
+
+    def __delslice__(self, i, j):
+        return _mupdf.vector_fz_rect___delslice__(self, i, j)
+
+    def __delitem__(self, *args):
+        return _mupdf.vector_fz_rect___delitem__(self, *args)
+
+    def __getitem__(self, *args):
+        return _mupdf.vector_fz_rect___getitem__(self, *args)
+
+    def __setitem__(self, *args):
+        return _mupdf.vector_fz_rect___setitem__(self, *args)
+
+    def pop(self):
+        return _mupdf.vector_fz_rect_pop(self)
+
+    def append(self, x):
+        return _mupdf.vector_fz_rect_append(self, x)
+
+    def empty(self):
+        return _mupdf.vector_fz_rect_empty(self)
+
+    def size(self):
+        return _mupdf.vector_fz_rect_size(self)
+
+    def swap(self, v):
+        return _mupdf.vector_fz_rect_swap(self, v)
+
+    def begin(self):
+        return _mupdf.vector_fz_rect_begin(self)
+
+    def end(self):
+        return _mupdf.vector_fz_rect_end(self)
+
+    def rbegin(self):
+        return _mupdf.vector_fz_rect_rbegin(self)
+
+    def rend(self):
+        return _mupdf.vector_fz_rect_rend(self)
+
+    def clear(self):
+        return _mupdf.vector_fz_rect_clear(self)
+
+    def get_allocator(self):
+        return _mupdf.vector_fz_rect_get_allocator(self)
+
+    def pop_back(self):
+        return _mupdf.vector_fz_rect_pop_back(self)
+
+    def erase(self, *args):
+        return _mupdf.vector_fz_rect_erase(self, *args)
+
+    def __init__(self, *args):
+        _mupdf.vector_fz_rect_swiginit(self, _mupdf.new_vector_fz_rect(*args))
+
+    def push_back(self, x):
+        return _mupdf.vector_fz_rect_push_back(self, x)
+
+    def front(self):
+        return _mupdf.vector_fz_rect_front(self)
+
+    def back(self):
+        return _mupdf.vector_fz_rect_back(self)
+
+    def assign(self, n, x):
+        return _mupdf.vector_fz_rect_assign(self, n, x)
+
+    def resize(self, *args):
+        return _mupdf.vector_fz_rect_resize(self, *args)
+
+    def insert(self, *args):
+        return _mupdf.vector_fz_rect_insert(self, *args)
+
+    def reserve(self, n):
+        return _mupdf.vector_fz_rect_reserve(self, n)
+
+    def capacity(self):
+        return _mupdf.vector_fz_rect_capacity(self)
+    __swig_destroy__ = _mupdf.delete_vector_fz_rect
+
+# Register vector_fz_rect in _mupdf:
+_mupdf.vector_fz_rect_swigregister(vector_fz_rect)
+class vector_fz_stext_grid_divider(object):
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+
+    def iterator(self):
+        return _mupdf.vector_fz_stext_grid_divider_iterator(self)
+    def __iter__(self):
+        return self.iterator()
+
+    def __nonzero__(self):
+        return _mupdf.vector_fz_stext_grid_divider___nonzero__(self)
+
+    def __bool__(self):
+        return _mupdf.vector_fz_stext_grid_divider___bool__(self)
+
+    def __len__(self):
+        return _mupdf.vector_fz_stext_grid_divider___len__(self)
+
+    def __getslice__(self, i, j):
+        return _mupdf.vector_fz_stext_grid_divider___getslice__(self, i, j)
+
+    def __setslice__(self, *args):
+        return _mupdf.vector_fz_stext_grid_divider___setslice__(self, *args)
+
+    def __delslice__(self, i, j):
+        return _mupdf.vector_fz_stext_grid_divider___delslice__(self, i, j)
+
+    def __delitem__(self, *args):
+        return _mupdf.vector_fz_stext_grid_divider___delitem__(self, *args)
+
+    def __getitem__(self, *args):
+        return _mupdf.vector_fz_stext_grid_divider___getitem__(self, *args)
+
+    def __setitem__(self, *args):
+        return _mupdf.vector_fz_stext_grid_divider___setitem__(self, *args)
+
+    def pop(self):
+        return _mupdf.vector_fz_stext_grid_divider_pop(self)
+
+    def append(self, x):
+        return _mupdf.vector_fz_stext_grid_divider_append(self, x)
+
+    def empty(self):
+        return _mupdf.vector_fz_stext_grid_divider_empty(self)
+
+    def size(self):
+        return _mupdf.vector_fz_stext_grid_divider_size(self)
+
+    def swap(self, v):
+        return _mupdf.vector_fz_stext_grid_divider_swap(self, v)
+
+    def begin(self):
+        return _mupdf.vector_fz_stext_grid_divider_begin(self)
+
+    def end(self):
+        return _mupdf.vector_fz_stext_grid_divider_end(self)
+
+    def rbegin(self):
+        return _mupdf.vector_fz_stext_grid_divider_rbegin(self)
+
+    def rend(self):
+        return _mupdf.vector_fz_stext_grid_divider_rend(self)
+
+    def clear(self):
+        return _mupdf.vector_fz_stext_grid_divider_clear(self)
+
+    def get_allocator(self):
+        return _mupdf.vector_fz_stext_grid_divider_get_allocator(self)
+
+    def pop_back(self):
+        return _mupdf.vector_fz_stext_grid_divider_pop_back(self)
+
+    def erase(self, *args):
+        return _mupdf.vector_fz_stext_grid_divider_erase(self, *args)
+
+    def __init__(self, *args):
+        _mupdf.vector_fz_stext_grid_divider_swiginit(self, _mupdf.new_vector_fz_stext_grid_divider(*args))
+
+    def push_back(self, x):
+        return _mupdf.vector_fz_stext_grid_divider_push_back(self, x)
+
+    def front(self):
+        return _mupdf.vector_fz_stext_grid_divider_front(self)
+
+    def back(self):
+        return _mupdf.vector_fz_stext_grid_divider_back(self)
+
+    def assign(self, n, x):
+        return _mupdf.vector_fz_stext_grid_divider_assign(self, n, x)
+
+    def resize(self, *args):
+        return _mupdf.vector_fz_stext_grid_divider_resize(self, *args)
+
+    def insert(self, *args):
+        return _mupdf.vector_fz_stext_grid_divider_insert(self, *args)
+
+    def reserve(self, n):
+        return _mupdf.vector_fz_stext_grid_divider_reserve(self, n)
+
+    def capacity(self):
+        return _mupdf.vector_fz_stext_grid_divider_capacity(self)
+    __swig_destroy__ = _mupdf.delete_vector_fz_stext_grid_divider
+
+# Register vector_fz_stext_grid_divider in _mupdf:
+_mupdf.vector_fz_stext_grid_divider_swigregister(vector_fz_stext_grid_divider)
 
 def new_bytes(nelements):
     return _mupdf.new_bytes(nelements)
@@ -1233,7 +1443,6 @@ r"""This file was auto-generated by mupdfwrap.py."""
 FZ_VERSION_MAJOR = _mupdf.FZ_VERSION_MAJOR
 FZ_VERSION_MINOR = _mupdf.FZ_VERSION_MINOR
 FZ_VERSION_PATCH = _mupdf.FZ_VERSION_PATCH
-TOFU_CJK_EXT = _mupdf.TOFU_CJK_EXT
 FZ_ENABLE_SPOT_RENDERING = _mupdf.FZ_ENABLE_SPOT_RENDERING
 r"""
     Enable the following for spot (and hence overprint/overprint
@@ -1295,6 +1504,7 @@ FZ_ENABLE_SVG = _mupdf.FZ_ENABLE_SVG
 FZ_ENABLE_CBZ = _mupdf.FZ_ENABLE_CBZ
 FZ_ENABLE_IMG = _mupdf.FZ_ENABLE_IMG
 FZ_ENABLE_HTML = _mupdf.FZ_ENABLE_HTML
+FZ_ENABLE_MD = _mupdf.FZ_ENABLE_MD
 FZ_ENABLE_EPUB = _mupdf.FZ_ENABLE_EPUB
 FZ_ENABLE_FB2 = _mupdf.FZ_ENABLE_FB2
 FZ_ENABLE_MOBI = _mupdf.FZ_ENABLE_MOBI
@@ -1703,6 +1913,9 @@ FZ_LOCK_GLYPHCACHE = _mupdf.FZ_LOCK_GLYPHCACHE
 FZ_LOCK_MAX = _mupdf.FZ_LOCK_MAX
 FZ_STORE_UNLIMITED = _mupdf.FZ_STORE_UNLIMITED
 FZ_STORE_DEFAULT = _mupdf.FZ_STORE_DEFAULT
+FZ_IMAGE_RENDERING_BALANCE = _mupdf.FZ_IMAGE_RENDERING_BALANCE
+FZ_IMAGE_RENDERING_QUALITY = _mupdf.FZ_IMAGE_RENDERING_QUALITY
+FZ_IMAGE_RENDERING_SPEED = _mupdf.FZ_IMAGE_RENDERING_SPEED
 class fz_string(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
@@ -1794,7 +2007,6 @@ class fz_context(object):
     aa = property(_mupdf.fz_context_aa_get, _mupdf.fz_context_aa_set)
     seed48 = property(_mupdf.fz_context_seed48_get, _mupdf.fz_context_seed48_set)
     icc_enabled = property(_mupdf.fz_context_icc_enabled_get, _mupdf.fz_context_icc_enabled_set)
-    throw_on_repair = property(_mupdf.fz_context_throw_on_repair_get, _mupdf.fz_context_throw_on_repair_set)
     handler = property(_mupdf.fz_context_handler_get, _mupdf.fz_context_handler_set)
     archive = property(_mupdf.fz_context_archive_get, _mupdf.fz_context_archive_set)
     style = property(_mupdf.fz_context_style_get, _mupdf.fz_context_style_set)
@@ -1890,6 +2102,50 @@ class fz_output(object):
 
 # Register fz_output in _mupdf:
 _mupdf.fz_output_swigregister(fz_output)
+class fz_option_enums(object):
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+    key = property(_mupdf.fz_option_enums_key_get, _mupdf.fz_option_enums_key_set)
+    val = property(_mupdf.fz_option_enums_val_get, _mupdf.fz_option_enums_val_set)
+
+    def __init__(self):
+        _mupdf.fz_option_enums_swiginit(self, _mupdf.new_fz_option_enums())
+    __swig_destroy__ = _mupdf.delete_fz_option_enums
+
+# Register fz_option_enums in _mupdf:
+_mupdf.fz_option_enums_swigregister(fz_option_enums)
+class fz_option(object):
+    r"""
+    Implementation details: subject to change. Only public for
+    SWIG built wrappers.
+    """
+
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+    flags = property(_mupdf.fz_option_flags_get, _mupdf.fz_option_flags_set)
+    key = property(_mupdf.fz_option_key_get, _mupdf.fz_option_key_set)
+    val = property(_mupdf.fz_option_val_get, _mupdf.fz_option_val_set)
+    next = property(_mupdf.fz_option_next_get, _mupdf.fz_option_next_set)
+
+    def __init__(self):
+        _mupdf.fz_option_swiginit(self, _mupdf.new_fz_option())
+    __swig_destroy__ = _mupdf.delete_fz_option
+
+# Register fz_option in _mupdf:
+_mupdf.fz_option_swigregister(fz_option)
+class fz_options(object):
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+    refs = property(_mupdf.fz_options_refs_get, _mupdf.fz_options_refs_set)
+    pool = property(_mupdf.fz_options_pool_get, _mupdf.fz_options_pool_set)
+    head = property(_mupdf.fz_options_head_get, _mupdf.fz_options_head_set)
+
+    def __init__(self):
+        _mupdf.fz_options_swiginit(self, _mupdf.new_fz_options())
+    __swig_destroy__ = _mupdf.delete_fz_options
+
+# Register fz_options in _mupdf:
+_mupdf.fz_options_swigregister(fz_options)
 class fz_md5(object):
     r"""
     Structure definition is public to enable stack
@@ -2247,6 +2503,7 @@ class fz_color_params(object):
 # Register fz_color_params in _mupdf:
 _mupdf.fz_color_params_swigregister(fz_color_params)
 FZ_MAX_COLORS = _mupdf.FZ_MAX_COLORS
+FZ_MAX_SAMPLES = _mupdf.FZ_MAX_SAMPLES
 FZ_COLORSPACE_IS_DEVICE = _mupdf.FZ_COLORSPACE_IS_DEVICE
 FZ_COLORSPACE_IS_ICC = _mupdf.FZ_COLORSPACE_IS_ICC
 FZ_COLORSPACE_HAS_CMYK = _mupdf.FZ_COLORSPACE_HAS_CMYK
@@ -2388,6 +2645,7 @@ class fz_font(object):
     t3doc = property(_mupdf.fz_font_t3doc_get, _mupdf.fz_font_t3doc_set)
     t3run = property(_mupdf.fz_font_t3run_get, _mupdf.fz_font_t3run_set)
     t3freeres = property(_mupdf.fz_font_t3freeres_get, _mupdf.fz_font_t3freeres_set)
+    t3loading = property(_mupdf.fz_font_t3loading_get, _mupdf.fz_font_t3loading_set)
     bbox = property(_mupdf.fz_font_bbox_get, _mupdf.fz_font_bbox_set)
     ascender = property(_mupdf.fz_font_ascender_get, _mupdf.fz_font_ascender_set)
     descender = property(_mupdf.fz_font_descender_get, _mupdf.fz_font_descender_set)
@@ -2733,6 +2991,7 @@ class fz_image(object):
     colorspace = property(_mupdf.fz_image_colorspace_get, _mupdf.fz_image_colorspace_set)
     drop_image = property(_mupdf.fz_image_drop_image_get, _mupdf.fz_image_drop_image_set)
     get_pixmap = property(_mupdf.fz_image_get_pixmap_get, _mupdf.fz_image_get_pixmap_set)
+    get_digest = property(_mupdf.fz_image_get_digest_get, _mupdf.fz_image_get_digest_set)
     get_size = property(_mupdf.fz_image_get_size_get, _mupdf.fz_image_get_size_set)
     colorkey = property(_mupdf.fz_image_colorkey_get, _mupdf.fz_image_colorkey_set)
     decode = property(_mupdf.fz_image_decode_get, _mupdf.fz_image_decode_set)
@@ -2998,6 +3257,7 @@ class fz_device(object):
     container_len = property(_mupdf.fz_device_container_len_get, _mupdf.fz_device_container_len_set)
     container_cap = property(_mupdf.fz_device_container_cap_get, _mupdf.fz_device_container_cap_set)
     container = property(_mupdf.fz_device_container_get, _mupdf.fz_device_container_set)
+    passthrough = property(_mupdf.fz_device_passthrough_get, _mupdf.fz_device_passthrough_set)
 
     def __init__(self):
         _mupdf.fz_device_swiginit(self, _mupdf.new_fz_device())
@@ -3008,6 +3268,7 @@ _mupdf.fz_device_swigregister(fz_device)
 FZ_DONT_INTERPOLATE_IMAGES = _mupdf.FZ_DONT_INTERPOLATE_IMAGES
 FZ_NO_CACHE = _mupdf.FZ_NO_CACHE
 FZ_DONT_DECODE_IMAGES = _mupdf.FZ_DONT_DECODE_IMAGES
+FZ_NO_TILING = _mupdf.FZ_NO_TILING
 class fz_cookie(object):
     r"""
     Cookie support - simple communication channel between app/library.
@@ -3067,6 +3328,31 @@ class fz_cookie(object):
 _mupdf.fz_cookie_swigregister(fz_cookie)
 FZ_TEST_OPT_IMAGES = _mupdf.FZ_TEST_OPT_IMAGES
 FZ_TEST_OPT_SHADINGS = _mupdf.FZ_TEST_OPT_SHADINGS
+class fz_culling_options(object):
+    r"""
+    Options for the culling device.
+
+    cull_gylph is called when the cull device needs a decision
+    about whether a given glyph should be culled or not. Return 0
+    to keep, 1 to cull, all other values reserved.
+
+    drop is called when the culling device is closed.
+    """
+
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+    opaque = property(_mupdf.fz_culling_options_opaque_get, _mupdf.fz_culling_options_opaque_set)
+    cull_glyph = property(_mupdf.fz_culling_options_cull_glyph_get, _mupdf.fz_culling_options_cull_glyph_set)
+    cull_fill_path = property(_mupdf.fz_culling_options_cull_fill_path_get, _mupdf.fz_culling_options_cull_fill_path_set)
+    cull_stroke_path = property(_mupdf.fz_culling_options_cull_stroke_path_get, _mupdf.fz_culling_options_cull_stroke_path_set)
+    drop = property(_mupdf.fz_culling_options_drop_get, _mupdf.fz_culling_options_drop_set)
+
+    def __init__(self):
+        _mupdf.fz_culling_options_swiginit(self, _mupdf.new_fz_culling_options())
+    __swig_destroy__ = _mupdf.delete_fz_culling_options
+
+# Register fz_culling_options in _mupdf:
+_mupdf.fz_culling_options_swigregister(fz_culling_options)
 class fz_draw_options(object):
     r"""
     struct fz_draw_options: Options for creating a pixmap and draw
@@ -3313,12 +3599,15 @@ FZ_STEXT_BLOCK_VECTOR = _mupdf.FZ_STEXT_BLOCK_VECTOR
 FZ_STEXT_BLOCK_GRID = _mupdf.FZ_STEXT_BLOCK_GRID
 FZ_STEXT_TEXT_JUSTIFY_UNKNOWN = _mupdf.FZ_STEXT_TEXT_JUSTIFY_UNKNOWN
 FZ_STEXT_TEXT_JUSTIFY_LEFT = _mupdf.FZ_STEXT_TEXT_JUSTIFY_LEFT
-FZ_STEXT_TEXT_JUSTIFY_CENTRE = _mupdf.FZ_STEXT_TEXT_JUSTIFY_CENTRE
+FZ_STEXT_TEXT_JUSTIFY_CENTER = _mupdf.FZ_STEXT_TEXT_JUSTIFY_CENTER
 FZ_STEXT_TEXT_JUSTIFY_RIGHT = _mupdf.FZ_STEXT_TEXT_JUSTIFY_RIGHT
 FZ_STEXT_TEXT_JUSTIFY_FULL = _mupdf.FZ_STEXT_TEXT_JUSTIFY_FULL
 FZ_STEXT_VECTOR_IS_STROKED = _mupdf.FZ_STEXT_VECTOR_IS_STROKED
 FZ_STEXT_VECTOR_IS_RECTANGLE = _mupdf.FZ_STEXT_VECTOR_IS_RECTANGLE
 FZ_STEXT_VECTOR_CONTINUES = _mupdf.FZ_STEXT_VECTOR_CONTINUES
+FZ_STEXT_VECTOR_IS_HIGHLIGHT = _mupdf.FZ_STEXT_VECTOR_IS_HIGHLIGHT
+FZ_STEXT_VECTOR_IS_UNDERLINE = _mupdf.FZ_STEXT_VECTOR_IS_UNDERLINE
+FZ_STEXT_VECTOR_IS_STRIKEOUT = _mupdf.FZ_STEXT_VECTOR_IS_STRIKEOUT
 FZ_STEXT_GRID_H_CROSSED = _mupdf.FZ_STEXT_GRID_H_CROSSED
 FZ_STEXT_GRID_V_CROSSED = _mupdf.FZ_STEXT_GRID_V_CROSSED
 FZ_STEXT_GRID_L_BORDER = _mupdf.FZ_STEXT_GRID_L_BORDER
@@ -3411,6 +3700,7 @@ FZ_STEXT_CLIPPED = _mupdf.FZ_STEXT_CLIPPED
 FZ_STEXT_UNICODE_IS_CID = _mupdf.FZ_STEXT_UNICODE_IS_CID
 FZ_STEXT_UNICODE_IS_GID = _mupdf.FZ_STEXT_UNICODE_IS_GID
 FZ_STEXT_SYNTHETIC_LARGE = _mupdf.FZ_STEXT_SYNTHETIC_LARGE
+FZ_STEXT_HIGHLIGHT = _mupdf.FZ_STEXT_HIGHLIGHT
 class fz_stext_struct(object):
     r"""
     When we are collecting the structure information from
@@ -3438,11 +3728,27 @@ class fz_stext_struct(object):
 
 # Register fz_stext_struct in _mupdf:
 _mupdf.fz_stext_struct_swigregister(fz_stext_struct)
+class fz_stext_grid_divider(object):
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+    reinforcement = property(_mupdf.fz_stext_grid_divider_reinforcement_get, _mupdf.fz_stext_grid_divider_reinforcement_set)
+    pos = property(_mupdf.fz_stext_grid_divider_pos_get, _mupdf.fz_stext_grid_divider_pos_set)
+    min = property(_mupdf.fz_stext_grid_divider_min_get, _mupdf.fz_stext_grid_divider_min_set)
+    max = property(_mupdf.fz_stext_grid_divider_max_get, _mupdf.fz_stext_grid_divider_max_set)
+    uncertainty = property(_mupdf.fz_stext_grid_divider_uncertainty_get, _mupdf.fz_stext_grid_divider_uncertainty_set)
+
+    def __init__(self):
+        _mupdf.fz_stext_grid_divider_swiginit(self, _mupdf.new_fz_stext_grid_divider())
+    __swig_destroy__ = _mupdf.delete_fz_stext_grid_divider
+
+# Register fz_stext_grid_divider in _mupdf:
+_mupdf.fz_stext_grid_divider_swigregister(fz_stext_grid_divider)
 class fz_stext_grid_positions(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
     len = property(_mupdf.fz_stext_grid_positions_len_get, _mupdf.fz_stext_grid_positions_len_set)
     max_uncertainty = property(_mupdf.fz_stext_grid_positions_max_uncertainty_get, _mupdf.fz_stext_grid_positions_max_uncertainty_set)
+    list = property(_mupdf.fz_stext_grid_positions_list_get, _mupdf.fz_stext_grid_positions_list_set)
 
     def __init__(self):
         _mupdf.fz_stext_grid_positions_swiginit(self, _mupdf.new_fz_stext_grid_positions())
@@ -3450,9 +3756,26 @@ class fz_stext_grid_positions(object):
 
 # Register fz_stext_grid_positions in _mupdf:
 _mupdf.fz_stext_grid_positions_swigregister(fz_stext_grid_positions)
+FZ_STEXT_XML_FLAGS_CHARS = _mupdf.FZ_STEXT_XML_FLAGS_CHARS
+FZ_STEXT_XML_FLAGS_POINTERS = _mupdf.FZ_STEXT_XML_FLAGS_POINTERS
 FZ_SELECT_CHARS = _mupdf.FZ_SELECT_CHARS
 FZ_SELECT_WORDS = _mupdf.FZ_SELECT_WORDS
 FZ_SELECT_LINES = _mupdf.FZ_SELECT_LINES
+class fz_table_hunt_options(object):
+    r"""Options for controlling table hunt."""
+
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+    vertically_collapse_bordered_cells = property(_mupdf.fz_table_hunt_options_vertically_collapse_bordered_cells_get, _mupdf.fz_table_hunt_options_vertically_collapse_bordered_cells_set)
+
+    def __init__(self):
+        _mupdf.fz_table_hunt_options_swiginit(self, _mupdf.new_fz_table_hunt_options())
+    __swig_destroy__ = _mupdf.delete_fz_table_hunt_options
+
+# Register fz_table_hunt_options in _mupdf:
+_mupdf.fz_table_hunt_options_swigregister(fz_table_hunt_options)
+FZ_TABLE_HUNT_VERTICAL_COLLAPSE_NO = _mupdf.FZ_TABLE_HUNT_VERTICAL_COLLAPSE_NO
+FZ_TABLE_HUNT_VERTICAL_COLLAPSE_YES = _mupdf.FZ_TABLE_HUNT_VERTICAL_COLLAPSE_YES
 class fz_stext_options(object):
     r"""Options for creating structured text."""
 
@@ -3461,6 +3784,7 @@ class fz_stext_options(object):
     flags = property(_mupdf.fz_stext_options_flags_get, _mupdf.fz_stext_options_flags_set)
     scale = property(_mupdf.fz_stext_options_scale_get, _mupdf.fz_stext_options_scale_set)
     clip = property(_mupdf.fz_stext_options_clip_get, _mupdf.fz_stext_options_clip_set)
+    table_hunt_options = property(_mupdf.fz_stext_options_table_hunt_options_get, _mupdf.fz_stext_options_table_hunt_options_set)
 
     def __init__(self):
         _mupdf.fz_stext_options_swiginit(self, _mupdf.new_fz_stext_options())
@@ -3478,20 +3802,18 @@ FZ_SEARCH_KEEP_HYPHENS = _mupdf.FZ_SEARCH_KEEP_HYPHENS
 FZ_SEARCH_MORE_INPUT = _mupdf.FZ_SEARCH_MORE_INPUT
 FZ_SEARCH_MATCH = _mupdf.FZ_SEARCH_MATCH
 FZ_SEARCH_COMPLETE = _mupdf.FZ_SEARCH_COMPLETE
-class fz_match_quad(object):
+class fz_search_quad(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
-    quad = property(_mupdf.fz_match_quad_quad_get, _mupdf.fz_match_quad_quad_set)
-    seq = property(_mupdf.fz_match_quad_seq_get, _mupdf.fz_match_quad_seq_set)
-    chapter_num = property(_mupdf.fz_match_quad_chapter_num_get, _mupdf.fz_match_quad_chapter_num_set)
-    page_num = property(_mupdf.fz_match_quad_page_num_get, _mupdf.fz_match_quad_page_num_set)
+    seq = property(_mupdf.fz_search_quad_seq_get, _mupdf.fz_search_quad_seq_set)
+    quad = property(_mupdf.fz_search_quad_quad_get, _mupdf.fz_search_quad_quad_set)
 
     def __init__(self):
-        _mupdf.fz_match_quad_swiginit(self, _mupdf.new_fz_match_quad())
-    __swig_destroy__ = _mupdf.delete_fz_match_quad
+        _mupdf.fz_search_quad_swiginit(self, _mupdf.new_fz_search_quad())
+    __swig_destroy__ = _mupdf.delete_fz_search_quad
 
-# Register fz_match_quad in _mupdf:
-_mupdf.fz_match_quad_swigregister(fz_match_quad)
+# Register fz_search_quad in _mupdf:
+_mupdf.fz_search_quad_swigregister(fz_search_quad)
 class fz_stext_position(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
@@ -3507,20 +3829,22 @@ class fz_stext_position(object):
 
 # Register fz_stext_position in _mupdf:
 _mupdf.fz_stext_position_swigregister(fz_stext_position)
-class fz_search_result_details(object):
+class fz_search_match(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
-    num_quads = property(_mupdf.fz_search_result_details_num_quads_get, _mupdf.fz_search_result_details_num_quads_set)
-    quads = property(_mupdf.fz_search_result_details_quads_get, _mupdf.fz_search_result_details_quads_set)
-    begin = property(_mupdf.fz_search_result_details_begin_get, _mupdf.fz_search_result_details_begin_set)
-    end = property(_mupdf.fz_search_result_details_end_get, _mupdf.fz_search_result_details_end_set)
+    num_quads = property(_mupdf.fz_search_match_num_quads_get, _mupdf.fz_search_match_num_quads_set)
+    quads = property(_mupdf.fz_search_match_quads_get, _mupdf.fz_search_match_quads_set)
+    begin = property(_mupdf.fz_search_match_begin_get, _mupdf.fz_search_match_begin_set)
+    end = property(_mupdf.fz_search_match_end_get, _mupdf.fz_search_match_end_set)
+    begin_seq = property(_mupdf.fz_search_match_begin_seq_get, _mupdf.fz_search_match_begin_seq_set)
+    end_seq = property(_mupdf.fz_search_match_end_seq_get, _mupdf.fz_search_match_end_seq_set)
 
     def __init__(self):
-        _mupdf.fz_search_result_details_swiginit(self, _mupdf.new_fz_search_result_details())
-    __swig_destroy__ = _mupdf.delete_fz_search_result_details
+        _mupdf.fz_search_match_swiginit(self, _mupdf.new_fz_search_match())
+    __swig_destroy__ = _mupdf.delete_fz_search_match
 
-# Register fz_search_result_details in _mupdf:
-_mupdf.fz_search_result_details_swigregister(fz_search_result_details)
+# Register fz_search_match in _mupdf:
+_mupdf.fz_search_match_swigregister(fz_search_match)
 class fz_search_result(object):
     r"""Structure used to represent the 'result' of a search."""
 
@@ -3540,6 +3864,7 @@ class fz_stext_page_block_iterator(object):
     page = property(_mupdf.fz_stext_page_block_iterator_page_get, _mupdf.fz_stext_page_block_iterator_page_set)
     parent = property(_mupdf.fz_stext_page_block_iterator_parent_get, _mupdf.fz_stext_page_block_iterator_parent_set)
     block = property(_mupdf.fz_stext_page_block_iterator_block_get, _mupdf.fz_stext_page_block_iterator_block_set)
+    top = property(_mupdf.fz_stext_page_block_iterator_top_get, _mupdf.fz_stext_page_block_iterator_top_set)
 
     def __init__(self):
         _mupdf.fz_stext_page_block_iterator_swiginit(self, _mupdf.new_fz_stext_page_block_iterator())
@@ -3775,6 +4100,11 @@ FZ_LAYOUT_A5_EM = _mupdf.FZ_LAYOUT_A5_EM
 FZ_DEFAULT_LAYOUT_W = _mupdf.FZ_DEFAULT_LAYOUT_W
 FZ_DEFAULT_LAYOUT_H = _mupdf.FZ_DEFAULT_LAYOUT_H
 FZ_DEFAULT_LAYOUT_EM = _mupdf.FZ_DEFAULT_LAYOUT_EM
+FZ_STYLE_NEEDS_DEFAULT = _mupdf.FZ_STYLE_NEEDS_DEFAULT
+FZ_STYLE_NEEDS_UPDATE = _mupdf.FZ_STYLE_NEEDS_UPDATE
+FZ_STYLE_APPLIED = _mupdf.FZ_STYLE_APPLIED
+FZ_LAYOUT_NEEDS_UPDATE = _mupdf.FZ_LAYOUT_NEEDS_UPDATE
+FZ_LAYOUT_APPLIED = _mupdf.FZ_LAYOUT_APPLIED
 FZ_PERMISSION_PRINT = _mupdf.FZ_PERMISSION_PRINT
 FZ_PERMISSION_COPY = _mupdf.FZ_PERMISSION_COPY
 FZ_PERMISSION_EDIT = _mupdf.FZ_PERMISSION_EDIT
@@ -3847,6 +4177,7 @@ class fz_document(object):
     has_permission = property(_mupdf.fz_document_has_permission_get, _mupdf.fz_document_has_permission_set)
     load_outline = property(_mupdf.fz_document_load_outline_get, _mupdf.fz_document_load_outline_set)
     outline_iterator = property(_mupdf.fz_document_outline_iterator_get, _mupdf.fz_document_outline_iterator_set)
+    style = property(_mupdf.fz_document_style_get, _mupdf.fz_document_style_set)
     layout = property(_mupdf.fz_document_layout_get, _mupdf.fz_document_layout_set)
     make_bookmark = property(_mupdf.fz_document_make_bookmark_get, _mupdf.fz_document_make_bookmark_set)
     lookup_bookmark = property(_mupdf.fz_document_lookup_bookmark_get, _mupdf.fz_document_lookup_bookmark_set)
@@ -3862,9 +4193,15 @@ class fz_document(object):
     output_accelerator = property(_mupdf.fz_document_output_accelerator_get, _mupdf.fz_document_output_accelerator_set)
     run_structure = property(_mupdf.fz_document_run_structure_get, _mupdf.fz_document_run_structure_set)
     as_pdf = property(_mupdf.fz_document_as_pdf_get, _mupdf.fz_document_as_pdf_set)
-    did_layout = property(_mupdf.fz_document_did_layout_get, _mupdf.fz_document_did_layout_set)
     is_reflowable = property(_mupdf.fz_document_is_reflowable_get, _mupdf.fz_document_is_reflowable_set)
     id = property(_mupdf.fz_document_id_get, _mupdf.fz_document_id_set)
+    did_style = property(_mupdf.fz_document_did_style_get, _mupdf.fz_document_did_style_set)
+    publisher_css = property(_mupdf.fz_document_publisher_css_get, _mupdf.fz_document_publisher_css_set)
+    user_css = property(_mupdf.fz_document_user_css_get, _mupdf.fz_document_user_css_set)
+    did_layout = property(_mupdf.fz_document_did_layout_get, _mupdf.fz_document_did_layout_set)
+    layout_w = property(_mupdf.fz_document_layout_w_get, _mupdf.fz_document_layout_w_set)
+    layout_h = property(_mupdf.fz_document_layout_h_get, _mupdf.fz_document_layout_h_set)
+    layout_em = property(_mupdf.fz_document_layout_em_get, _mupdf.fz_document_layout_em_set)
     open = property(_mupdf.fz_document_open_get, _mupdf.fz_document_open_set)
 
     def __init__(self):
@@ -4279,6 +4616,7 @@ PDF_ENUM_NAME_CheckSum = _mupdf.PDF_ENUM_NAME_CheckSum
 PDF_ENUM_NAME_Circle = _mupdf.PDF_ENUM_NAME_Circle
 PDF_ENUM_NAME_ClosedArrow = _mupdf.PDF_ENUM_NAME_ClosedArrow
 PDF_ENUM_NAME_Code = _mupdf.PDF_ENUM_NAME_Code
+PDF_ENUM_NAME_ColSpan = _mupdf.PDF_ENUM_NAME_ColSpan
 PDF_ENUM_NAME_Collection = _mupdf.PDF_ENUM_NAME_Collection
 PDF_ENUM_NAME_ColorSpace = _mupdf.PDF_ENUM_NAME_ColorSpace
 PDF_ENUM_NAME_ColorTransform = _mupdf.PDF_ENUM_NAME_ColorTransform
@@ -4377,6 +4715,7 @@ PDF_ENUM_NAME_Fields = _mupdf.PDF_ENUM_NAME_Fields
 PDF_ENUM_NAME_Figure = _mupdf.PDF_ENUM_NAME_Figure
 PDF_ENUM_NAME_FileAttachment = _mupdf.PDF_ENUM_NAME_FileAttachment
 PDF_ENUM_NAME_FileSize = _mupdf.PDF_ENUM_NAME_FileSize
+PDF_ENUM_NAME_FileSpec = _mupdf.PDF_ENUM_NAME_FileSpec
 PDF_ENUM_NAME_Filespec = _mupdf.PDF_ENUM_NAME_Filespec
 PDF_ENUM_NAME_Filter = _mupdf.PDF_ENUM_NAME_Filter
 PDF_ENUM_NAME_Final = _mupdf.PDF_ENUM_NAME_Final
@@ -4506,6 +4845,7 @@ PDF_ENUM_NAME_Locked = _mupdf.PDF_ENUM_NAME_Locked
 PDF_ENUM_NAME_Luminosity = _mupdf.PDF_ENUM_NAME_Luminosity
 PDF_ENUM_NAME_M = _mupdf.PDF_ENUM_NAME_M
 PDF_ENUM_NAME_MCID = _mupdf.PDF_ENUM_NAME_MCID
+PDF_ENUM_NAME_MCR = _mupdf.PDF_ENUM_NAME_MCR
 PDF_ENUM_NAME_MK = _mupdf.PDF_ENUM_NAME_MK
 PDF_ENUM_NAME_ML = _mupdf.PDF_ENUM_NAME_ML
 PDF_ENUM_NAME_MMType1 = _mupdf.PDF_ENUM_NAME_MMType1
@@ -4522,6 +4862,7 @@ PDF_ENUM_NAME_Movie = _mupdf.PDF_ENUM_NAME_Movie
 PDF_ENUM_NAME_Msg = _mupdf.PDF_ENUM_NAME_Msg
 PDF_ENUM_NAME_Multiply = _mupdf.PDF_ENUM_NAME_Multiply
 PDF_ENUM_NAME_N = _mupdf.PDF_ENUM_NAME_N
+PDF_ENUM_NAME_NM = _mupdf.PDF_ENUM_NAME_NM
 PDF_ENUM_NAME_Name = _mupdf.PDF_ENUM_NAME_Name
 PDF_ENUM_NAME_Named = _mupdf.PDF_ENUM_NAME_Named
 PDF_ENUM_NAME_Names = _mupdf.PDF_ENUM_NAME_Names
@@ -4539,6 +4880,7 @@ PDF_ENUM_NAME_Note = _mupdf.PDF_ENUM_NAME_Note
 PDF_ENUM_NAME_NumSections = _mupdf.PDF_ENUM_NAME_NumSections
 PDF_ENUM_NAME_Nums = _mupdf.PDF_ENUM_NAME_Nums
 PDF_ENUM_NAME_O = _mupdf.PDF_ENUM_NAME_O
+PDF_ENUM_NAME_OBJR = _mupdf.PDF_ENUM_NAME_OBJR
 PDF_ENUM_NAME_OC = _mupdf.PDF_ENUM_NAME_OC
 PDF_ENUM_NAME_OCG = _mupdf.PDF_ENUM_NAME_OCG
 PDF_ENUM_NAME_OCGs = _mupdf.PDF_ENUM_NAME_OCGs
@@ -4631,9 +4973,11 @@ PDF_ENUM_NAME_Registry = _mupdf.PDF_ENUM_NAME_Registry
 PDF_ENUM_NAME_RelativeColorimetric = _mupdf.PDF_ENUM_NAME_RelativeColorimetric
 PDF_ENUM_NAME_ResetForm = _mupdf.PDF_ENUM_NAME_ResetForm
 PDF_ENUM_NAME_Resources = _mupdf.PDF_ENUM_NAME_Resources
+PDF_ENUM_NAME_RichMedia = _mupdf.PDF_ENUM_NAME_RichMedia
 PDF_ENUM_NAME_RoleMap = _mupdf.PDF_ENUM_NAME_RoleMap
 PDF_ENUM_NAME_Root = _mupdf.PDF_ENUM_NAME_Root
 PDF_ENUM_NAME_Rotate = _mupdf.PDF_ENUM_NAME_Rotate
+PDF_ENUM_NAME_RowSpan = _mupdf.PDF_ENUM_NAME_RowSpan
 PDF_ENUM_NAME_Rows = _mupdf.PDF_ENUM_NAME_Rows
 PDF_ENUM_NAME_Ruby = _mupdf.PDF_ENUM_NAME_Ruby
 PDF_ENUM_NAME_RunLengthDecode = _mupdf.PDF_ENUM_NAME_RunLengthDecode
@@ -4672,11 +5016,13 @@ PDF_ENUM_NAME_StmF = _mupdf.PDF_ENUM_NAME_StmF
 PDF_ENUM_NAME_StrF = _mupdf.PDF_ENUM_NAME_StrF
 PDF_ENUM_NAME_StrikeOut = _mupdf.PDF_ENUM_NAME_StrikeOut
 PDF_ENUM_NAME_Strong = _mupdf.PDF_ENUM_NAME_Strong
+PDF_ENUM_NAME_StructElem = _mupdf.PDF_ENUM_NAME_StructElem
 PDF_ENUM_NAME_StructParent = _mupdf.PDF_ENUM_NAME_StructParent
 PDF_ENUM_NAME_StructParents = _mupdf.PDF_ENUM_NAME_StructParents
 PDF_ENUM_NAME_StructTreeRoot = _mupdf.PDF_ENUM_NAME_StructTreeRoot
 PDF_ENUM_NAME_Sub = _mupdf.PDF_ENUM_NAME_Sub
 PDF_ENUM_NAME_SubFilter = _mupdf.PDF_ENUM_NAME_SubFilter
+PDF_ENUM_NAME_Subj = _mupdf.PDF_ENUM_NAME_Subj
 PDF_ENUM_NAME_Subject = _mupdf.PDF_ENUM_NAME_Subject
 PDF_ENUM_NAME_Subtype = _mupdf.PDF_ENUM_NAME_Subtype
 PDF_ENUM_NAME_Subtype2 = _mupdf.PDF_ENUM_NAME_Subtype2
@@ -4937,6 +5283,8 @@ class pdf_document(object):
     repair_attempted = property(_mupdf.pdf_document_repair_attempted_get, _mupdf.pdf_document_repair_attempted_set)
     repair_in_progress = property(_mupdf.pdf_document_repair_in_progress_get, _mupdf.pdf_document_repair_in_progress_set)
     non_structural_change = property(_mupdf.pdf_document_non_structural_change_get, _mupdf.pdf_document_non_structural_change_set)
+    struct_tree_repaired = property(_mupdf.pdf_document_struct_tree_repaired_get, _mupdf.pdf_document_struct_tree_repaired_set)
+    struct_tree_result = property(_mupdf.pdf_document_struct_tree_result_get, _mupdf.pdf_document_struct_tree_result_set)
     file_reading_linearly = property(_mupdf.pdf_document_file_reading_linearly_get, _mupdf.pdf_document_file_reading_linearly_set)
     file_length = property(_mupdf.pdf_document_file_length_get, _mupdf.pdf_document_file_length_set)
     linear_page_count = property(_mupdf.pdf_document_linear_page_count_get, _mupdf.pdf_document_linear_page_count_set)
@@ -4969,6 +5317,7 @@ class pdf_document(object):
     orphans = property(_mupdf.pdf_document_orphans_get, _mupdf.pdf_document_orphans_set)
     xfa = property(_mupdf.pdf_document_xfa_get, _mupdf.pdf_document_xfa_set)
     journal = property(_mupdf.pdf_document_journal_get, _mupdf.pdf_document_journal_set)
+    throw_on_repair = property(_mupdf.pdf_document_throw_on_repair_get, _mupdf.pdf_document_throw_on_repair_set)
 
     def __init__(self):
         _mupdf.pdf_document_swiginit(self, _mupdf.new_pdf_document())
@@ -5007,6 +5356,7 @@ class pdf_write_options(object):
     do_use_objstms = property(_mupdf.pdf_write_options_do_use_objstms_get, _mupdf.pdf_write_options_do_use_objstms_set)
     compression_effort = property(_mupdf.pdf_write_options_compression_effort_get, _mupdf.pdf_write_options_compression_effort_set)
     do_labels = property(_mupdf.pdf_write_options_do_labels_get, _mupdf.pdf_write_options_do_labels_set)
+    reproducible = property(_mupdf.pdf_write_options_reproducible_get, _mupdf.pdf_write_options_reproducible_set)
 
     def __init__(self):
         _mupdf.pdf_write_options_swiginit(self, _mupdf.new_pdf_write_options())
@@ -5014,6 +5364,14 @@ class pdf_write_options(object):
 
 # Register pdf_write_options in _mupdf:
 _mupdf.pdf_write_options_swigregister(pdf_write_options)
+PDF_STRUCT_NOT_PRESENT = _mupdf.PDF_STRUCT_NOT_PRESENT
+PDF_STRUCT_PRESENT = _mupdf.PDF_STRUCT_PRESENT
+PDF_STRUCT_BROKEN = _mupdf.PDF_STRUCT_BROKEN
+PDF_STRUCT_FIXED = _mupdf.PDF_STRUCT_FIXED
+PDF_STRUCT_HAS_ATTRIBUTES = _mupdf.PDF_STRUCT_HAS_ATTRIBUTES
+PDF_STRUCT_HAS_TABLE_ATTRIBUTES = _mupdf.PDF_STRUCT_HAS_TABLE_ATTRIBUTES
+PDF_STRUCT_HAS_TABLE_SPAN_ATTRIBUTES = _mupdf.PDF_STRUCT_HAS_TABLE_SPAN_ATTRIBUTES
+PDF_STRUCT_HAS_CYCLE = _mupdf.PDF_STRUCT_HAS_CYCLE
 PDF_TOK_ERROR = _mupdf.PDF_TOK_ERROR
 PDF_TOK_EOF = _mupdf.PDF_TOK_EOF
 PDF_TOK_OPEN_ARRAY = _mupdf.PDF_TOK_OPEN_ARRAY
@@ -5078,6 +5436,7 @@ class pdf_xref(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
     num_objects = property(_mupdf.pdf_xref_num_objects_get, _mupdf.pdf_xref_num_objects_set)
+    num_subsecs = property(_mupdf.pdf_xref_num_subsecs_get, _mupdf.pdf_xref_num_subsecs_set)
     subsec = property(_mupdf.pdf_xref_subsec_get, _mupdf.pdf_xref_subsec_set)
     trailer = property(_mupdf.pdf_xref_trailer_get, _mupdf.pdf_xref_trailer_set)
     pre_repair_trailer = property(_mupdf.pdf_xref_pre_repair_trailer_get, _mupdf.pdf_xref_pre_repair_trailer_set)
@@ -5244,7 +5603,6 @@ class pdf_font_desc(object):
     dvmtx = property(_mupdf.pdf_font_desc_dvmtx_get, _mupdf.pdf_font_desc_dvmtx_set)
     vmtx = property(_mupdf.pdf_font_desc_vmtx_get, _mupdf.pdf_font_desc_vmtx_set)
     is_embedded = property(_mupdf.pdf_font_desc_is_embedded_get, _mupdf.pdf_font_desc_is_embedded_set)
-    t3loading = property(_mupdf.pdf_font_desc_t3loading_get, _mupdf.pdf_font_desc_t3loading_set)
 
     def __init__(self):
         _mupdf.pdf_font_desc_swiginit(self, _mupdf.new_pdf_font_desc())
@@ -5284,6 +5642,27 @@ class pdf_colorspace_resource_key(object):
 
 # Register pdf_colorspace_resource_key in _mupdf:
 _mupdf.pdf_colorspace_resource_key_swigregister(pdf_colorspace_resource_key)
+class pdf_image_resource_key(object):
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+    w = property(_mupdf.pdf_image_resource_key_w_get, _mupdf.pdf_image_resource_key_w_set)
+    h = property(_mupdf.pdf_image_resource_key_h_get, _mupdf.pdf_image_resource_key_h_set)
+    decode = property(_mupdf.pdf_image_resource_key_decode_get, _mupdf.pdf_image_resource_key_decode_set)
+    bpc = property(_mupdf.pdf_image_resource_key_bpc_get, _mupdf.pdf_image_resource_key_bpc_set)
+    n = property(_mupdf.pdf_image_resource_key_n_get, _mupdf.pdf_image_resource_key_n_set)
+    imagemask = property(_mupdf.pdf_image_resource_key_imagemask_get, _mupdf.pdf_image_resource_key_imagemask_set)
+    use_colorkey = property(_mupdf.pdf_image_resource_key_use_colorkey_get, _mupdf.pdf_image_resource_key_use_colorkey_set)
+    use_decode = property(_mupdf.pdf_image_resource_key_use_decode_get, _mupdf.pdf_image_resource_key_use_decode_set)
+    local_xref = property(_mupdf.pdf_image_resource_key_local_xref_get, _mupdf.pdf_image_resource_key_local_xref_set)
+    mask = property(_mupdf.pdf_image_resource_key_mask_get, _mupdf.pdf_image_resource_key_mask_set)
+    digest = property(_mupdf.pdf_image_resource_key_digest_get, _mupdf.pdf_image_resource_key_digest_set)
+
+    def __init__(self):
+        _mupdf.pdf_image_resource_key_swiginit(self, _mupdf.new_pdf_image_resource_key())
+    __swig_destroy__ = _mupdf.delete_pdf_image_resource_key
+
+# Register pdf_image_resource_key in _mupdf:
+_mupdf.pdf_image_resource_key_swigregister(pdf_image_resource_key)
 class pdf_pattern(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
@@ -5297,6 +5676,7 @@ class pdf_pattern(object):
     resources = property(_mupdf.pdf_pattern_resources_get, _mupdf.pdf_pattern_resources_set)
     contents = property(_mupdf.pdf_pattern_contents_get, _mupdf.pdf_pattern_contents_set)
     id = property(_mupdf.pdf_pattern_id_get, _mupdf.pdf_pattern_id_set)
+    uses_blending = property(_mupdf.pdf_pattern_uses_blending_get, _mupdf.pdf_pattern_uses_blending_set)
 
     def __init__(self):
         _mupdf.pdf_pattern_swiginit(self, _mupdf.new_pdf_pattern())
@@ -5551,6 +5931,7 @@ _mupdf.pdf_text_state_swigregister(pdf_text_state)
 class pdf_text_object_state(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
+    clip_text = property(_mupdf.pdf_text_object_state_clip_text_get, _mupdf.pdf_text_object_state_clip_text_set)
     text = property(_mupdf.pdf_text_object_state_text_get, _mupdf.pdf_text_object_state_text_set)
     text_bbox = property(_mupdf.pdf_text_object_state_text_bbox_get, _mupdf.pdf_text_object_state_text_bbox_set)
     tlm = property(_mupdf.pdf_text_object_state_tlm_get, _mupdf.pdf_text_object_state_tlm_set)
@@ -6034,6 +6415,13 @@ def ll_fz_absi(i):
     r"""Low-level wrapper for `::fz_absi()`."""
     return _mupdf.ll_fz_absi(i)
 
+def ll_fz_access_option_by_index(options, i):
+    r"""
+    Low-level wrapper for `::fz_access_option_by_index()`.
+    Mark a given option index as being accessed.
+    """
+    return _mupdf.ll_fz_access_option_by_index(options, i)
+
 def ll_fz_add_layout_char(block, x, w, p):
     r"""
     Low-level wrapper for `::fz_add_layout_char()`.
@@ -6224,6 +6612,79 @@ def ll_fz_append_rune(buf, c):
 def ll_fz_append_string(buf, data):
     r"""Low-level wrapper for `::fz_append_string()`."""
     return _mupdf.ll_fz_append_string(buf, data)
+
+def ll_fz_append_uint16_be(buf, x):
+    r"""Low-level wrapper for `::fz_append_uint16_be()`."""
+    return _mupdf.ll_fz_append_uint16_be(buf, x)
+
+def ll_fz_append_uint16_le(buf, x):
+    r"""Low-level wrapper for `::fz_append_uint16_le()`."""
+    return _mupdf.ll_fz_append_uint16_le(buf, x)
+
+def ll_fz_append_uint32_be(buf, x):
+    r"""Low-level wrapper for `::fz_append_uint32_be()`."""
+    return _mupdf.ll_fz_append_uint32_be(buf, x)
+
+def ll_fz_append_uint32_le(buf, x):
+    r"""Low-level wrapper for `::fz_append_uint32_le()`."""
+    return _mupdf.ll_fz_append_uint32_le(buf, x)
+
+def ll_fz_apply_draw_options(draw_options, options):
+    r"""
+    Low-level wrapper for `::fz_apply_draw_options()`.
+    Parse draw device options from an fz_options structure.
+
+    This assumes that the draw_options struct has been initialised already.
+    """
+    return _mupdf.ll_fz_apply_draw_options(draw_options, options)
+
+def ll_fz_apply_pcl_options(opts, args):
+    r"""Low-level wrapper for `::fz_apply_pcl_options()`."""
+    return _mupdf.ll_fz_apply_pcl_options(opts, args)
+
+def ll_fz_apply_pclm_options(opts, args):
+    r"""Low-level wrapper for `::fz_apply_pclm_options()`."""
+    return _mupdf.ll_fz_apply_pclm_options(opts, args)
+
+def ll_fz_apply_pdfocr_options(opts, options):
+    r"""Low-level wrapper for `::fz_apply_pdfocr_options()`."""
+    return _mupdf.ll_fz_apply_pdfocr_options(opts, options)
+
+def ll_fz_apply_pwg_options(opts, args):
+    r"""
+    Low-level wrapper for `::fz_apply_pwg_options()`.
+    Apply the given options to an initialised pwg options struct.
+    """
+    return _mupdf.ll_fz_apply_pwg_options(opts, args)
+
+def ll_fz_apply_search_options(options, opts):
+    r"""
+     Low-level wrapper for `::fz_apply_search_options()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`ll_fz_apply_search_options(::fz_options *opts)` => ::fz_search_options options
+    """
+    return _mupdf.ll_fz_apply_search_options(options, opts)
+
+def ll_fz_apply_stext_options(opts, options):
+    r"""
+    Low-level wrapper for `::fz_apply_stext_options()`.
+    Parse stext device options from an fz_options struct
+    into an already initialised opts structure.
+    """
+    return _mupdf.ll_fz_apply_stext_options(opts, options)
+
+def ll_fz_apply_svg_device_options(opts, options):
+    r"""Low-level wrapper for `::fz_apply_svg_device_options()`."""
+    return _mupdf.ll_fz_apply_svg_device_options(opts, options)
+
+def ll_fz_apply_table_hunt_options(opts, options):
+    r"""
+    Low-level wrapper for `::fz_apply_table_hunt_options()`.
+    Parse table hunt device options from an fz_options struct
+    into an already initialised opts structure.
+    """
+    return _mupdf.ll_fz_apply_table_hunt_options(opts, options)
 
 def ll_fz_arc4_encrypt(state, dest, src, len):
     r"""
@@ -7305,18 +7766,6 @@ def ll_fz_convert_separation_pixmap_to_base(src):
     """
     return _mupdf.ll_fz_convert_separation_pixmap_to_base(src)
 
-def ll_fz_copy_option(val, dest, maxlen):
-    r"""
-    Low-level wrapper for `::fz_copy_option()`.
-    Copy an option (val) into a destination buffer (dest), of maxlen
-    bytes.
-
-    Returns the number of bytes (including terminator) that did not
-    fit. If val is maxlen or greater bytes in size, it will be left
-    unterminated.
-    """
-    return _mupdf.ll_fz_copy_option(val, dest, maxlen)
-
 def ll_fz_copy_pixmap_rect(dest, src, r, default_cs):
     r"""Low-level wrapper for `::fz_copy_pixmap_rect()`."""
     return _mupdf.ll_fz_copy_pixmap_rect(dest, src, r, default_cs)
@@ -7377,6 +7826,13 @@ def ll_fz_count_chapters(doc):
     At least 1.
     """
     return _mupdf.ll_fz_count_chapters(doc)
+
+def ll_fz_count_options(options):
+    r"""
+    Low-level wrapper for `::fz_count_options()`.
+    Count the number of options in an options structure.
+    """
+    return _mupdf.ll_fz_count_options(options)
 
 def ll_fz_count_pages(doc):
     r"""
@@ -7467,6 +7923,13 @@ def ll_fz_curvetoy(path, x0, y0, x2, y2):
     modify a packed path.
     """
     return _mupdf.ll_fz_curvetoy(path, x0, y0, x2, y2)
+
+def ll_fz_debug_stext_page(page, id):
+    r"""
+    Low-level wrapper for `::fz_debug_stext_page()`.
+    Convenience function to call the above.
+    """
+    return _mupdf.ll_fz_debug_stext_page(page, id)
 
 def ll_fz_debug_store(out):
     r"""
@@ -8290,27 +8753,27 @@ def ll_fz_drop_image_store_key(image):
     """
     return _mupdf.ll_fz_drop_image_store_key(image)
 
-def ll_fz_drop_imp(p, refs):
+def ll_fz_drop_imp16_aux(p, refs):
     r"""
-     Low-level wrapper for `::fz_drop_imp()`.
+     Low-level wrapper for `::fz_drop_imp16_aux()`.
 
     This function has out-params. Python/C# wrappers look like:
-    	`ll_fz_drop_imp(void *p)` => `(int, int refs)`
+    	`ll_fz_drop_imp16_aux(void *p)` => `(int, int16_t refs)`
     """
-    return _mupdf.ll_fz_drop_imp(p, refs)
+    return _mupdf.ll_fz_drop_imp16_aux(p, refs)
 
-def ll_fz_drop_imp16(p, refs):
+def ll_fz_drop_imp8_aux(p, refs):
+    r"""Low-level wrapper for `::fz_drop_imp8_aux()`."""
+    return _mupdf.ll_fz_drop_imp8_aux(p, refs)
+
+def ll_fz_drop_imp_aux(p, refs):
     r"""
-     Low-level wrapper for `::fz_drop_imp16()`.
+     Low-level wrapper for `::fz_drop_imp_aux()`.
 
     This function has out-params. Python/C# wrappers look like:
-    	`ll_fz_drop_imp16(void *p)` => `(int, int16_t refs)`
+    	`ll_fz_drop_imp_aux(void *p)` => `(int, int refs)`
     """
-    return _mupdf.ll_fz_drop_imp16(p, refs)
-
-def ll_fz_drop_imp8(p, refs):
-    r"""Low-level wrapper for `::fz_drop_imp8()`."""
-    return _mupdf.ll_fz_drop_imp8(p, refs)
+    return _mupdf.ll_fz_drop_imp_aux(p, refs)
 
 def ll_fz_drop_jbig2_globals(globals):
     r"""
@@ -8372,6 +8835,13 @@ def ll_fz_drop_link(link):
     freed by just dropping the head.
     """
     return _mupdf.ll_fz_drop_link(link)
+
+def ll_fz_drop_options(opts):
+    r"""
+    Low-level wrapper for `::fz_drop_options()`.
+    Drop an fz_options object.
+    """
+    return _mupdf.ll_fz_drop_options(opts)
 
 def ll_fz_drop_outline(outline):
     r"""
@@ -8739,10 +9209,6 @@ def ll_fz_end_structure(dev):
     r"""Low-level wrapper for `::fz_end_structure()`."""
     return _mupdf.ll_fz_end_structure(dev)
 
-def ll_fz_end_throw_on_repair():
-    r"""Low-level wrapper for `::fz_end_throw_on_repair()`."""
-    return _mupdf.ll_fz_end_throw_on_repair()
-
 def ll_fz_end_tile(dev):
     r"""Low-level wrapper for `::fz_end_tile()`."""
     return _mupdf.ll_fz_end_tile(dev)
@@ -8897,7 +9363,7 @@ def ll_fz_find_item(drop, key, type):
     """
     return _mupdf.ll_fz_find_item(drop, key, type)
 
-def ll_fz_find_table_within_bounds(page, bounds):
+def ll_fz_find_table_within_bounds(page, bounds, opts):
     r"""
     Low-level wrapper for `::fz_find_table_within_bounds()`.
     Interpret the bounded contents of a given stext page as
@@ -8914,7 +9380,38 @@ def ll_fz_find_table_within_bounds(page, bounds):
     Returns the stext_block list that contains the content of
     the table.
     """
-    return _mupdf.ll_fz_find_table_within_bounds(page, bounds)
+    return _mupdf.ll_fz_find_table_within_bounds(page, bounds, opts)
+
+def ll_fz_find_table_within_grid(page, xpos, ypos, limit, opts):
+    r"""
+    Low-level wrapper for `::fz_find_table_within_grid()`.
+    Interpret the contents of a given stext page that fall within
+    a given grid as a table.
+
+    The page contents will be rewritten to contain a Table
+    structure with the identified content in it.
+
+    This uses the same logic as for fz_table_hunt, without the
+    actual hunting, and the grid detection phase. fz_table_hunt
+    hunts to find possible bounds for multiple tables on the
+    page; this routine just finds a single table contained within
+    the given rectangle. The grid detection phase is skipped, and
+    we just use the grid as given to us. We still perform the
+    cell analysis stage though, so the grid can be refined.
+
+    Returns the stext_block list that contains the content of
+    the table, or NULL if no table is found that scores below
+    limit.
+    """
+    return _mupdf.ll_fz_find_table_within_grid(page, xpos, ypos, limit, opts)
+
+def ll_fz_find_table_within_grid_dividers(page, xs, ys, limit, opts):
+    r"""Low-level wrapper for `::fz_find_table_within_grid_dividers()`."""
+    return _mupdf.ll_fz_find_table_within_grid_dividers(page, xs, ys, limit, opts)
+
+def ll_fz_find_table_within_grid_floats(page, xs, ys, limit, opts):
+    r"""Low-level wrapper for `::fz_find_table_within_grid_floats()`.  Swig-friendly wrapper for fz_find_table_within_grid()."""
+    return _mupdf.ll_fz_find_table_within_grid_floats(page, xs, ys, limit, opts)
 
 def ll_fz_flotilla_raft_area(flot, i):
     r"""Low-level wrapper for `::fz_flotilla_raft_area()`."""
@@ -9188,6 +9685,17 @@ def ll_fz_get_glyph_name2(font, glyph):
     """
     return _mupdf.ll_fz_get_glyph_name2(font, glyph)
 
+def ll_fz_get_option_by_index(options, i, val):
+    r"""
+     Low-level wrapper for `::fz_get_option_by_index()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`ll_fz_get_option_by_index(::fz_options *options, int i)` => `(const char *, const char *val)`
+
+    	Get an option by index.
+    """
+    return _mupdf.ll_fz_get_option_by_index(options, i, val)
+
 def ll_fz_get_pixmap_from_image(image, subarea, ctm, w, h):
     r"""
      Low-level wrapper for `::fz_get_pixmap_from_image()`.
@@ -9403,18 +9911,6 @@ def ll_fz_has_archive_entry(arch, name):
     """
     return _mupdf.ll_fz_has_archive_entry(arch, name)
 
-def ll_fz_has_option(opts, key, val):
-    r"""
-     Low-level wrapper for `::fz_has_option()`.
-
-    This function has out-params. Python/C# wrappers look like:
-    	`ll_fz_has_option(const char *opts, const char *key)` => `(int, const char *val)`
-
-    	Look for a given option (key) in the opts string. Return 1 if
-    	it has it, and update *val to point to the value within opts.
-    """
-    return _mupdf.ll_fz_has_option(opts, key, val)
-
 def ll_fz_has_permission(doc, p):
     r"""
     Low-level wrapper for `::fz_has_permission()`.
@@ -9514,6 +10010,13 @@ def ll_fz_ignore_text(dev, text, ctm):
     r"""Low-level wrapper for `::fz_ignore_text()`."""
     return _mupdf.ll_fz_ignore_text(dev, text, ctm)
 
+def ll_fz_image_digest(img, digest):
+    r"""
+    Low-level wrapper for `::fz_image_digest()`.
+    Compute a checksum for the image.
+    """
+    return _mupdf.ll_fz_image_digest(img, digest)
+
 def ll_fz_image_orientation(image):
     r"""
     Low-level wrapper for `::fz_image_orientation()`.
@@ -9585,6 +10088,92 @@ def ll_fz_include_point_in_rect(r, p):
     the points before including the others.
     """
     return _mupdf.ll_fz_include_point_in_rect(r, p)
+
+def ll_fz_init_draw_options(draw_options):
+    r"""
+    Low-level wrapper for `::fz_init_draw_options()`.
+    Initialise a draw_options struct to sensible values.
+    """
+    return _mupdf.ll_fz_init_draw_options(draw_options)
+
+def ll_fz_init_pcl_options(opts):
+    r"""
+    Low-level wrapper for `::fz_init_pcl_options()`.
+    Parse PCL options.
+
+    Currently defined options and values are as follows:
+
+    	preset=X	Either "generic" or one of the presets as for fz_pcl_preset.
+    	spacing=0	No vertical spacing capability
+    	spacing=1	PCL 3 spacing (<ESC>*p+<n>Y)
+    	spacing=2	PCL 4 spacing (<ESC>*b<n>Y)
+    	spacing=3	PCL 5 spacing (<ESC>*b<n>Y and clear seed row)
+    	mode2		Disable/Enable mode 2 graphics compression
+    	mode3		Disable/Enable mode 3 graphics compression
+    	eog_reset	End of graphics (<ESC>*rB) resets all parameters
+    	has_duplex	Duplex supported (<ESC>&l<duplex>S)
+    	has_papersize	Papersize setting supported (<ESC>&l<sizecode>A)
+    	has_copies	Number of copies supported (<ESC>&l<copies>X)
+    	is_ljet4pjl	Disable/Enable HP 4PJL model-specific output
+    	is_oce9050	Disable/Enable Oce 9050 model-specific output
+    """
+    return _mupdf.ll_fz_init_pcl_options(opts)
+
+def ll_fz_init_pclm_options(opts):
+    r"""
+    Low-level wrapper for `::fz_init_pclm_options()`.
+    Parse PCLm options.
+
+    Currently defined options and values are as follows:
+
+    	compression=none: No compression
+    	compression=flate: Flate compression
+    	strip-height=n: Strip height (default 16)
+    """
+    return _mupdf.ll_fz_init_pclm_options(opts)
+
+def ll_fz_init_pdfocr_options(opts):
+    r"""
+    Low-level wrapper for `::fz_init_pdfocr_options()`.
+    Parse PDFOCR options.
+
+    Currently defined options and values are as follows:
+
+    	compression=none: No compression
+    	compression=flate: Flate compression
+    	strip-height=n: Strip height (default 16)
+    	ocr-language=<lang>: OCR Language (default eng)
+    	ocr-datadir=<datadir>: OCR data path (default rely on TESSDATA_PREFIX)
+    """
+    return _mupdf.ll_fz_init_pdfocr_options(opts)
+
+def ll_fz_init_pwg_options(opts):
+    r"""
+    Low-level wrapper for `::fz_init_pwg_options()`.
+    Init pwg options to a sensible default.
+    """
+    return _mupdf.ll_fz_init_pwg_options(opts)
+
+def ll_fz_init_search_options(options):
+    r"""
+     Low-level wrapper for `::fz_init_search_options()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`ll_fz_init_search_options()` => ::fz_search_options options
+    """
+    return _mupdf.ll_fz_init_search_options(options)
+
+def ll_fz_init_stext_options(opts):
+    r"""Low-level wrapper for `::fz_init_stext_options()`."""
+    return _mupdf.ll_fz_init_stext_options(opts)
+
+def ll_fz_init_svg_device_options(opts):
+    r"""Low-level wrapper for `::fz_init_svg_device_options()`."""
+    return _mupdf.ll_fz_init_svg_device_options(opts)
+
+def ll_fz_init_table_hunt_options(opts):
+    r"""Low-level wrapper for `::fz_init_table_hunt_options()`."""
+    return _mupdf.ll_fz_init_table_hunt_options(opts)
 
 def ll_fz_init_text_decoder(dec, encoding):
     r"""Low-level wrapper for `::fz_init_text_decoder()`."""
@@ -10318,40 +10907,40 @@ def ll_fz_keep_image_store_key(image):
     """
     return _mupdf.ll_fz_keep_image_store_key(image)
 
-def ll_fz_keep_imp(p, refs):
+def ll_fz_keep_imp16_aux(p, refs):
     r"""
-     Low-level wrapper for `::fz_keep_imp()`.
+     Low-level wrapper for `::fz_keep_imp16_aux()`.
 
     This function has out-params. Python/C# wrappers look like:
-    	`ll_fz_keep_imp(void *p)` => `(void *, int refs)`
+    	`ll_fz_keep_imp16_aux(void *p)` => `(void *, int16_t refs)`
     """
-    return _mupdf.ll_fz_keep_imp(p, refs)
+    return _mupdf.ll_fz_keep_imp16_aux(p, refs)
 
-def ll_fz_keep_imp16(p, refs):
+def ll_fz_keep_imp8_aux(p, refs):
+    r"""Low-level wrapper for `::fz_keep_imp8_aux()`."""
+    return _mupdf.ll_fz_keep_imp8_aux(p, refs)
+
+def ll_fz_keep_imp8_locked_aux(p, refs):
+    r"""Low-level wrapper for `::fz_keep_imp8_locked_aux()`."""
+    return _mupdf.ll_fz_keep_imp8_locked_aux(p, refs)
+
+def ll_fz_keep_imp_aux(p, refs):
     r"""
-     Low-level wrapper for `::fz_keep_imp16()`.
+     Low-level wrapper for `::fz_keep_imp_aux()`.
 
     This function has out-params. Python/C# wrappers look like:
-    	`ll_fz_keep_imp16(void *p)` => `(void *, int16_t refs)`
+    	`ll_fz_keep_imp_aux(void *p)` => `(void *, int refs)`
     """
-    return _mupdf.ll_fz_keep_imp16(p, refs)
+    return _mupdf.ll_fz_keep_imp_aux(p, refs)
 
-def ll_fz_keep_imp8(p, refs):
-    r"""Low-level wrapper for `::fz_keep_imp8()`."""
-    return _mupdf.ll_fz_keep_imp8(p, refs)
-
-def ll_fz_keep_imp8_locked(p, refs):
-    r"""Low-level wrapper for `::fz_keep_imp8_locked()`."""
-    return _mupdf.ll_fz_keep_imp8_locked(p, refs)
-
-def ll_fz_keep_imp_locked(p, refs):
+def ll_fz_keep_imp_locked_aux(p, refs):
     r"""
-     Low-level wrapper for `::fz_keep_imp_locked()`.
+     Low-level wrapper for `::fz_keep_imp_locked_aux()`.
 
     This function has out-params. Python/C# wrappers look like:
-    	`ll_fz_keep_imp_locked(void *p)` => `(void *, int refs)`
+    	`ll_fz_keep_imp_locked_aux(void *p)` => `(void *, int refs)`
     """
-    return _mupdf.ll_fz_keep_imp_locked(p, refs)
+    return _mupdf.ll_fz_keep_imp_locked_aux(p, refs)
 
 def ll_fz_keep_jbig2_globals(globals):
     r"""
@@ -10391,6 +10980,13 @@ def ll_fz_keep_link(link):
     Never throws exceptions.
     """
     return _mupdf.ll_fz_keep_link(link)
+
+def ll_fz_keep_options(opts):
+    r"""
+    Low-level wrapper for `::fz_keep_options()`.
+    Take a new reference to the options struct.
+    """
+    return _mupdf.ll_fz_keep_options(opts)
 
 def ll_fz_keep_outline(outline):
     r"""
@@ -11027,6 +11623,110 @@ def ll_fz_lookup_noto_symbol2_font(len):
     """
     return _mupdf.ll_fz_lookup_noto_symbol2_font(len)
 
+def ll_fz_lookup_option(options, key, val):
+    r"""
+     Low-level wrapper for `::fz_lookup_option()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`ll_fz_lookup_option(::fz_options *options, const char *key)` => `(int, const char *val)`
+
+    	Check to see if a key is present in the options object.
+
+    	If it is not, then return 0.
+
+    	If val is non-NULL, *val will be updated to point to the value.
+
+    	The option will be recorded as having been accessed.
+    """
+    return _mupdf.ll_fz_lookup_option(options, key, val)
+
+def ll_fz_lookup_option_boolean(options, key, x):
+    r"""
+     Low-level wrapper for `::fz_lookup_option_boolean()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`ll_fz_lookup_option_boolean(::fz_options *options, const char *key)` => `(int, int x)`
+
+    	Check to see if a key is present, and is true or false.
+
+    	If it is absent, return 0.
+
+    	If it is true (empty, 1, yes, true, or enabled), *x is assigned 1,
+    	the invalid flag is cleared, marked as accessed, returns 1.
+
+    	If it is false (0, no, false, or disabled), *x is assigned 0,
+    	the invalid flag is clear, marked as accessed, returns 0.
+
+    	If it is any other value, it is marked as invalid, returns -1.
+    """
+    return _mupdf.ll_fz_lookup_option_boolean(options, key, x)
+
+def ll_fz_lookup_option_enum(options, key, x, enum_list):
+    r"""
+     Low-level wrapper for `::fz_lookup_option_enum()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`ll_fz_lookup_option_enum(::fz_options *options, const char *key, const ::fz_option_enums *enum_list)` => `(int, int x)`
+    """
+    return _mupdf.ll_fz_lookup_option_enum(options, key, x, enum_list)
+
+def ll_fz_lookup_option_float(options, key, x):
+    r"""
+     Low-level wrapper for `::fz_lookup_option_float()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`ll_fz_lookup_option_float(::fz_options *options, const char *key)` => `(int, float x)`
+
+    	Check to see if an option is present and is of the given type.
+
+    	If an option is absent, this returns 0.
+
+    	If an option is present, but not of the required type, it will be
+    	flagged internally as being invalid, and we will return -1.
+
+    	If an option is present, and of the required type, any previously
+    	set invalid flag will be cleared.
+
+    	This means we can (for example) lookup an option as an enum, and then
+    	safely look for it being an integer if that fails.
+    """
+    return _mupdf.ll_fz_lookup_option_float(options, key, x)
+
+def ll_fz_lookup_option_integer(options, key, x):
+    r"""
+     Low-level wrapper for `::fz_lookup_option_integer()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`ll_fz_lookup_option_integer(::fz_options *options, const char *key)` => `(int, int x)`
+    """
+    return _mupdf.ll_fz_lookup_option_integer(options, key, x)
+
+def ll_fz_lookup_option_unsigned(options, key, x):
+    r"""
+     Low-level wrapper for `::fz_lookup_option_unsigned()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`ll_fz_lookup_option_unsigned(::fz_options *options, const char *key)` => `(int, unsigned int x)`
+    """
+    return _mupdf.ll_fz_lookup_option_unsigned(options, key, x)
+
+def ll_fz_lookup_option_yes(options, key):
+    r"""
+    Low-level wrapper for `::fz_lookup_option_yes()`.
+    Check to see if a key is a boolean.
+
+    If it is absent, return 0.
+
+    If it is true (empty, 1, yes, true, or enabled), returns 1,
+    clears any invalid flag, and counts as accessed.
+
+    If it is false (0, no, false, or disabled), returns 0,
+    clears any invalid flag, and counts as accessed.
+
+    If it is absent, or any other value, it is marked as invalid, returns 0.
+    """
+    return _mupdf.ll_fz_lookup_option_yes(options, key)
+
 def ll_fz_lookup_rendering_intent(name):
     r"""
     Low-level wrapper for `::fz_lookup_rendering_intent()`.
@@ -11105,6 +11805,10 @@ def ll_fz_malloc_aligned(size, align):
     Block must be freed later using fz_free_aligned.
     """
     return _mupdf.ll_fz_malloc_aligned(size, align)
+
+def ll_fz_malloc_array_imp(nmemb, size):
+    r"""Low-level wrapper for `::fz_malloc_array_imp()`."""
+    return _mupdf.ll_fz_malloc_array_imp(nmemb, size)
 
 def ll_fz_malloc_no_throw(size):
     r"""
@@ -11843,6 +12547,36 @@ def ll_fz_new_csv_writer_with_output(out, options):
     r"""Low-level wrapper for `::fz_new_csv_writer_with_output()`."""
     return _mupdf.ll_fz_new_csv_writer_with_output(out, options)
 
+def ll_fz_new_culling_device(passthrough, opts):
+    r"""
+    Low-level wrapper for `::fz_new_culling_device()`.
+    Create an 'cull' device.
+
+    This device passes through all calls to the 'passthrough' device, except
+    for text operations that may be culled.
+
+    The decision as to whether to cull a glyph or not is made by calling the
+    'cull_glyph' function in the options structure with the rectangle that
+    would be affected. If the function returns 0, the glyph is passed through.
+    if the function returns 1, the glyph is dropped. All other values reserved.
+    """
+    return _mupdf.ll_fz_new_culling_device(passthrough, opts)
+
+def ll_fz_new_culling_device_with_rects(passthrough, n, rects):
+    r"""
+    Low-level wrapper for `::fz_new_culling_device_with_rects()`.
+    Create an culling device that will drop any glyphs that significantly
+    overlap any of the given list of rects.
+
+    The rect list is copied into the device, so does not need to exist
+    beyond this call.
+    """
+    return _mupdf.ll_fz_new_culling_device_with_rects(passthrough, n, rects)
+
+def ll_fz_new_culling_device_with_rects2(passthrough, rects):
+    r"""Low-level wrapper for `::fz_new_culling_device_with_rects2()`.  Swig-friendly wrapper for fz_new_culling_device_with_rects()."""
+    return _mupdf.ll_fz_new_culling_device_with_rects2(passthrough, rects)
+
 def ll_fz_new_default_colorspaces():
     r"""
     Low-level wrapper for `::fz_new_default_colorspaces()`.
@@ -12358,7 +13092,7 @@ def ll_fz_new_image_from_svg_xml(xmldoc, xml, base_uri, dir):
     """
     return _mupdf.ll_fz_new_image_from_svg_xml(xmldoc, xml, base_uri, dir)
 
-def ll_fz_new_image_of_size(w, h, bpc, colorspace, xres, yres, interpolate, imagemask, decode, colorkey, mask, size, get_pixmap, get_size, drop):
+def ll_fz_new_image_of_size(w, h, bpc, colorspace, xres, yres, interpolate, imagemask, decode, colorkey, mask, size, get_pixmap, get_size, get_digest, drop):
     r"""
     Low-level wrapper for `::fz_new_image_of_size()`.
     Internal function to make a new fz_image structure
@@ -12393,10 +13127,12 @@ def ll_fz_new_image_of_size(w, h, bpc, colorspace, xres, yres, interpolate, imag
     size: The size of the required allocated structure (the size of
     the derived structure).
 
-    get: The function to be called to obtain a decoded pixmap.
+    get_pixmap: The function to be called to obtain a decoded pixmap.
 
     get_size: The function to be called to return the storage size
     used by this image.
+
+    get_digest: The function to be called to compute a checksum from this image.
 
     drop: The function to be called to dispose of this image once
     the last reference is dropped.
@@ -12405,7 +13141,7 @@ def ll_fz_new_image_of_size(w, h, bpc, colorspace, xres, yres, interpolate, imag
     with the first sizeof(fz_image) bytes initialised as appropriate
     given the supplied parameters, and the other bytes set to zero.
     """
-    return _mupdf.ll_fz_new_image_of_size(w, h, bpc, colorspace, xres, yres, interpolate, imagemask, decode, colorkey, mask, size, get_pixmap, get_size, drop)
+    return _mupdf.ll_fz_new_image_of_size(w, h, bpc, colorspace, xres, yres, interpolate, imagemask, decode, colorkey, mask, size, get_pixmap, get_size, get_digest, drop)
 
 def ll_fz_new_indexed_colorspace(base, high, lookup):
     r"""
@@ -12563,6 +13299,15 @@ def ll_fz_new_odt_writer_with_output(out, options):
     r"""Low-level wrapper for `::fz_new_odt_writer_with_output()`."""
     return _mupdf.ll_fz_new_odt_writer_with_output(out, options)
 
+def ll_fz_new_options(option_string):
+    r"""
+    Low-level wrapper for `::fz_new_options()`.
+    Create an options object, with the initial contents parsed from the string.
+    See fz_parse_options for details on the string parsing.
+    If the string is NULL, the options object will be initialized but empty.
+    """
+    return _mupdf.ll_fz_new_options(option_string)
+
 def ll_fz_new_outline():
     r"""
     Low-level wrapper for `::fz_new_outline()`.
@@ -12656,6 +13401,20 @@ def ll_fz_new_pam_band_writer(out):
 def ll_fz_new_pam_pixmap_writer(path, options):
     r"""Low-level wrapper for `::fz_new_pam_pixmap_writer()`."""
     return _mupdf.ll_fz_new_pam_pixmap_writer(path, options)
+
+def ll_fz_new_passthrough_device_of_size(passthrough, size):
+    r"""
+    Low-level wrapper for `::fz_new_passthrough_device_of_size()`.
+    Create a passthrough device.
+
+    The device is created with stub functions that do nothing except
+    pass calls through to the given sub device. This includes
+    close and drop!
+
+    The caller of this function can then override any functions it
+    wants to handle itself.
+    """
+    return _mupdf.ll_fz_new_passthrough_device_of_size(passthrough, size)
 
 def ll_fz_new_path():
     r"""
@@ -12771,6 +13530,18 @@ def ll_fz_new_pixmap_from_color_and_mask(color, mask):
     r"""Low-level wrapper for `::fz_new_pixmap_from_color_and_mask()`."""
     return _mupdf.ll_fz_new_pixmap_from_color_and_mask(color, mask)
 
+def ll_fz_new_pixmap_from_culled_display_list(list, ctm, cs, alpha, opts):
+    r"""Low-level wrapper for `::fz_new_pixmap_from_culled_display_list()`."""
+    return _mupdf.ll_fz_new_pixmap_from_culled_display_list(list, ctm, cs, alpha, opts)
+
+def ll_fz_new_pixmap_from_culled_page(page, ctm, cs, alpha, opts):
+    r"""Low-level wrapper for `::fz_new_pixmap_from_culled_page()`."""
+    return _mupdf.ll_fz_new_pixmap_from_culled_page(page, ctm, cs, alpha, opts)
+
+def ll_fz_new_pixmap_from_culled_page_number(doc, number, ctm, cs, alpha, opts):
+    r"""Low-level wrapper for `::fz_new_pixmap_from_culled_page_number()`."""
+    return _mupdf.ll_fz_new_pixmap_from_culled_page_number(doc, number, ctm, cs, alpha, opts)
+
 def ll_fz_new_pixmap_from_display_list(list, ctm, cs, alpha):
     r"""
     Low-level wrapper for `::fz_new_pixmap_from_display_list()`.
@@ -12779,6 +13550,22 @@ def ll_fz_new_pixmap_from_display_list(list, ctm, cs, alpha):
     Ownership of the pixmap is returned to the caller.
     """
     return _mupdf.ll_fz_new_pixmap_from_display_list(list, ctm, cs, alpha)
+
+def ll_fz_new_pixmap_from_display_list_culling_text(list, ctm, cs, alpha, n, rects):
+    r"""Low-level wrapper for `::fz_new_pixmap_from_display_list_culling_text()`."""
+    return _mupdf.ll_fz_new_pixmap_from_display_list_culling_text(list, ctm, cs, alpha, n, rects)
+
+def ll_fz_new_pixmap_from_display_list_culling_text2(list, ctm, cs, alpha, rects):
+    r"""Low-level wrapper for `::fz_new_pixmap_from_display_list_culling_text2()`.  Swig-friendly wrapper for fz_new_pixmap_from_display_list_culling_text()."""
+    return _mupdf.ll_fz_new_pixmap_from_display_list_culling_text2(list, ctm, cs, alpha, rects)
+
+def ll_fz_new_pixmap_from_display_list_culling_text_etc(list, ctm, cs, alpha, n, rects, borders):
+    r"""Low-level wrapper for `::fz_new_pixmap_from_display_list_culling_text_etc()`."""
+    return _mupdf.ll_fz_new_pixmap_from_display_list_culling_text_etc(list, ctm, cs, alpha, n, rects, borders)
+
+def ll_fz_new_pixmap_from_display_list_culling_text_etc2(list, ctm, cs, alpha, rects, borders):
+    r"""Low-level wrapper for `::fz_new_pixmap_from_display_list_culling_text_etc2()`.  Swig-friendly wrapper for fz_new_pixmap_from_display_list_culling_text_etc()."""
+    return _mupdf.ll_fz_new_pixmap_from_display_list_culling_text_etc2(list, ctm, cs, alpha, rects, borders)
 
 def ll_fz_new_pixmap_from_display_list_with_separations(list, ctm, cs, seps, alpha):
     r"""
@@ -12806,9 +13593,44 @@ def ll_fz_new_pixmap_from_page_contents_with_separations(page, ctm, cs, seps, al
     r"""Low-level wrapper for `::fz_new_pixmap_from_page_contents_with_separations()`."""
     return _mupdf.ll_fz_new_pixmap_from_page_contents_with_separations(page, ctm, cs, seps, alpha)
 
+def ll_fz_new_pixmap_from_page_culling_text(page, ctm, cs, alpha, n, rects):
+    r"""Low-level wrapper for `::fz_new_pixmap_from_page_culling_text()`."""
+    return _mupdf.ll_fz_new_pixmap_from_page_culling_text(page, ctm, cs, alpha, n, rects)
+
+def ll_fz_new_pixmap_from_page_culling_text2(page, ctm, cs, alpha, rects):
+    r"""Low-level wrapper for `::fz_new_pixmap_from_page_culling_text2()`.  Swig-friendly wrapper for fz_new_pixmap_from_page_culling_text()."""
+    return _mupdf.ll_fz_new_pixmap_from_page_culling_text2(page, ctm, cs, alpha, rects)
+
+def ll_fz_new_pixmap_from_page_culling_text_etc(page, ctm, cs, alpha, n, rects, borders):
+    r"""Low-level wrapper for `::fz_new_pixmap_from_page_culling_text_etc()`."""
+    return _mupdf.ll_fz_new_pixmap_from_page_culling_text_etc(page, ctm, cs, alpha, n, rects, borders)
+
+def ll_fz_new_pixmap_from_page_culling_text_etc2(page, ctm, cs, alpha, rects, borders):
+    r"""Low-level wrapper for `::fz_new_pixmap_from_page_culling_text_etc2()`.  Swig-friendly wrapper for fz_new_pixmap_from_page_culling_text_etc()."""
+    return _mupdf.ll_fz_new_pixmap_from_page_culling_text_etc2(page, ctm, cs, alpha, rects, borders)
+
 def ll_fz_new_pixmap_from_page_number(doc, number, ctm, cs, alpha):
     r"""Low-level wrapper for `::fz_new_pixmap_from_page_number()`."""
     return _mupdf.ll_fz_new_pixmap_from_page_number(doc, number, ctm, cs, alpha)
+
+def ll_fz_new_pixmap_from_page_number_culling_text(doc, number, ctm, cs, alpha, n, rects):
+    r"""
+    Low-level wrapper for `::fz_new_pixmap_from_page_number_culling_text()`.
+    Returns a page rendered with text from the given rectangles culled.
+    """
+    return _mupdf.ll_fz_new_pixmap_from_page_number_culling_text(doc, number, ctm, cs, alpha, n, rects)
+
+def ll_fz_new_pixmap_from_page_number_culling_text2(doc, number, ctm, cs, alpha, rects):
+    r"""Low-level wrapper for `::fz_new_pixmap_from_page_number_culling_text2()`.  Swig-friendly wrapper for fz_new_pixmap_from_page_number_culling_text()."""
+    return _mupdf.ll_fz_new_pixmap_from_page_number_culling_text2(doc, number, ctm, cs, alpha, rects)
+
+def ll_fz_new_pixmap_from_page_number_culling_text_etc(doc, number, ctm, cs, alpha, n, rects, borders):
+    r"""Low-level wrapper for `::fz_new_pixmap_from_page_number_culling_text_etc()`."""
+    return _mupdf.ll_fz_new_pixmap_from_page_number_culling_text_etc(doc, number, ctm, cs, alpha, n, rects, borders)
+
+def ll_fz_new_pixmap_from_page_number_culling_text_etc2(doc, number, ctm, cs, alpha, rects, borders):
+    r"""Low-level wrapper for `::fz_new_pixmap_from_page_number_culling_text_etc2()`.  Swig-friendly wrapper for fz_new_pixmap_from_page_number_culling_text_etc()."""
+    return _mupdf.ll_fz_new_pixmap_from_page_number_culling_text_etc2(doc, number, ctm, cs, alpha, rects, borders)
 
 def ll_fz_new_pixmap_from_page_number_with_separations(doc, number, ctm, cs, seps, alpha):
     r"""Low-level wrapper for `::fz_new_pixmap_from_page_number_with_separations()`."""
@@ -13011,12 +13833,14 @@ def ll_fz_new_rle_output(chain):
     r"""Low-level wrapper for `::fz_new_rle_output()`."""
     return _mupdf.ll_fz_new_rle_output(chain)
 
-def ll_fz_new_search():
+def ll_fz_new_search(needle, options):
     r"""
     Low-level wrapper for `::fz_new_search()`.
     Create a new search.
+
+    If the needle is invalid (in the case of regexps, it fails to compile) it will throw an error.
     """
-    return _mupdf.ll_fz_new_search()
+    return _mupdf.ll_fz_new_search(needle, options)
 
 def ll_fz_new_separations(controllable):
     r"""
@@ -14009,17 +14833,6 @@ def ll_fz_opt_from_list(opt, optlist):
     """
     return _mupdf.ll_fz_opt_from_list(opt, optlist)
 
-def ll_fz_option_eq(a, b):
-    r"""
-    Low-level wrapper for `::fz_option_eq()`.
-    Check to see if an option, a, from a string matches a reference
-    option, b.
-
-    (i.e. a could be 'foo' or 'foo,bar...' etc, but b can only be
-    'foo'.)
-    """
-    return _mupdf.ll_fz_option_eq(a, b)
-
 def ll_fz_optpath(opt):
     r"""
     Low-level wrapper for `::fz_optpath()`.
@@ -14139,6 +14952,22 @@ def ll_fz_overlaps_rect(a, b):
     """
     return _mupdf.ll_fz_overlaps_rect(a, b)
 
+def ll_fz_pack_double(p, x):
+    r"""Low-level wrapper for `::fz_pack_double()`."""
+    return _mupdf.ll_fz_pack_double(p, x)
+
+def ll_fz_pack_double_le(p, x):
+    r"""Low-level wrapper for `::fz_pack_double_le()`."""
+    return _mupdf.ll_fz_pack_double_le(p, x)
+
+def ll_fz_pack_float(p, x):
+    r"""Low-level wrapper for `::fz_pack_float()`."""
+    return _mupdf.ll_fz_pack_float(p, x)
+
+def ll_fz_pack_float_le(p, x):
+    r"""Low-level wrapper for `::fz_pack_float_le()`."""
+    return _mupdf.ll_fz_pack_float_le(p, x)
+
 def ll_fz_pack_path(pack, path):
     r"""
     Low-level wrapper for `::fz_pack_path()`.
@@ -14174,6 +15003,30 @@ def ll_fz_pack_path(pack, path):
     forget about the details.
     """
     return _mupdf.ll_fz_pack_path(pack, path)
+
+def ll_fz_pack_uint16(p, x):
+    r"""Low-level wrapper for `::fz_pack_uint16()`."""
+    return _mupdf.ll_fz_pack_uint16(p, x)
+
+def ll_fz_pack_uint16_le(p, x):
+    r"""Low-level wrapper for `::fz_pack_uint16_le()`."""
+    return _mupdf.ll_fz_pack_uint16_le(p, x)
+
+def ll_fz_pack_uint32(p, x):
+    r"""Low-level wrapper for `::fz_pack_uint32()`."""
+    return _mupdf.ll_fz_pack_uint32(p, x)
+
+def ll_fz_pack_uint32_le(p, x):
+    r"""Low-level wrapper for `::fz_pack_uint32_le()`."""
+    return _mupdf.ll_fz_pack_uint32_le(p, x)
+
+def ll_fz_pack_uint64(p, x):
+    r"""Low-level wrapper for `::fz_pack_uint64()`."""
+    return _mupdf.ll_fz_pack_uint64(p, x)
+
+def ll_fz_pack_uint64_le(p, x):
+    r"""Low-level wrapper for `::fz_pack_uint64_le()`."""
+    return _mupdf.ll_fz_pack_uint64_le(p, x)
 
 def ll_fz_packed_path_size(path):
     r"""
@@ -14275,16 +15128,37 @@ def ll_fz_paragraph_break(page):
     """
     return _mupdf.ll_fz_paragraph_break(page)
 
-def ll_fz_parse_draw_options(options, string):
+def ll_fz_parse_draw_options(draw_options, string):
     r"""
     Low-level wrapper for `::fz_parse_draw_options()`.
     Parse draw device options from a comma separated key-value string.
+
+    This initialises the draw_options struct first.
     """
-    return _mupdf.ll_fz_parse_draw_options(options, string)
+    return _mupdf.ll_fz_parse_draw_options(draw_options, string)
 
 def ll_fz_parse_json(pool, s):
     r"""Low-level wrapper for `::fz_parse_json()`."""
     return _mupdf.ll_fz_parse_json(pool, s)
+
+def ll_fz_parse_options(options, option_string):
+    r"""
+    Low-level wrapper for `::fz_parse_options()`.
+    Parse more options from an options string, and add them to
+    an existing fz_options object.
+
+    The parser supports three distinct syntaxes (identified by the leading character).
+
+    - Classic comma separated list of values
+    	rotate=90,bbox="0,0,100,100",title="Hello, world!"
+
+    - URL query string
+    	?rotate=90&bbox=0,0,100,100&title=Hello, world!
+
+    - A single JSON object -- no nested objects (except arrays of numbers)
+    	{"rotate":90,"bbox":[0,0,100,100],"title":"Hello, world!"}
+    """
+    return _mupdf.ll_fz_parse_options(options, option_string)
 
 def ll_fz_parse_page_range(s, a, b, n):
     r"""
@@ -14296,71 +15170,56 @@ def ll_fz_parse_page_range(s, a, b, n):
     return _mupdf.ll_fz_parse_page_range(s, a, b, n)
 
 def ll_fz_parse_pcl_options(opts, args):
-    r"""
-    Low-level wrapper for `::fz_parse_pcl_options()`.
-    Parse PCL options.
-
-    Currently defined options and values are as follows:
-
-    	preset=X	Either "generic" or one of the presets as for fz_pcl_preset.
-    	spacing=0	No vertical spacing capability
-    	spacing=1	PCL 3 spacing (<ESC>*p+<n>Y)
-    	spacing=2	PCL 4 spacing (<ESC>*b<n>Y)
-    	spacing=3	PCL 5 spacing (<ESC>*b<n>Y and clear seed row)
-    	mode2		Disable/Enable mode 2 graphics compression
-    	mode3		Disable/Enable mode 3 graphics compression
-    	eog_reset	End of graphics (<ESC>*rB) resets all parameters
-    	has_duplex	Duplex supported (<ESC>&l<duplex>S)
-    	has_papersize	Papersize setting supported (<ESC>&l<sizecode>A)
-    	has_copies	Number of copies supported (<ESC>&l<copies>X)
-    	is_ljet4pjl	Disable/Enable HP 4PJL model-specific output
-    	is_oce9050	Disable/Enable Oce 9050 model-specific output
-    """
+    r"""Low-level wrapper for `::fz_parse_pcl_options()`."""
     return _mupdf.ll_fz_parse_pcl_options(opts, args)
 
 def ll_fz_parse_pclm_options(opts, args):
-    r"""
-    Low-level wrapper for `::fz_parse_pclm_options()`.
-    Parse PCLm options.
-
-    Currently defined options and values are as follows:
-
-    	compression=none: No compression
-    	compression=flate: Flate compression
-    	strip-height=n: Strip height (default 16)
-    """
+    r"""Low-level wrapper for `::fz_parse_pclm_options()`."""
     return _mupdf.ll_fz_parse_pclm_options(opts, args)
 
 def ll_fz_parse_pdfocr_options(opts, args):
-    r"""
-    Low-level wrapper for `::fz_parse_pdfocr_options()`.
-    Parse PDFOCR options.
-
-    Currently defined options and values are as follows:
-
-    	compression=none: No compression
-    	compression=flate: Flate compression
-    	strip-height=n: Strip height (default 16)
-    	ocr-language=<lang>: OCR Language (default eng)
-    	ocr-datadir=<datadir>: OCR data path (default rely on TESSDATA_PREFIX)
-    """
+    r"""Low-level wrapper for `::fz_parse_pdfocr_options()`."""
     return _mupdf.ll_fz_parse_pdfocr_options(opts, args)
 
-def ll_fz_parse_search_options(options):
-    r"""Low-level wrapper for `::fz_parse_search_options()`."""
-    return _mupdf.ll_fz_parse_search_options(options)
+def ll_fz_parse_pwg_options(opts, args):
+    r"""
+    Low-level wrapper for `::fz_parse_pwg_options()`.
+    Initialise a pwg options struct, and parse the given options string.
+    """
+    return _mupdf.ll_fz_parse_pwg_options(opts, args)
+
+def ll_fz_parse_search_options(options, args):
+    r"""
+     Low-level wrapper for `::fz_parse_search_options()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`ll_fz_parse_search_options(const char *args)` => `(fz_search_options *, ::fz_search_options options)`
+    """
+    return _mupdf.ll_fz_parse_search_options(options, args)
 
 def ll_fz_parse_stext_options(opts, string):
     r"""
     Low-level wrapper for `::fz_parse_stext_options()`.
     Parse stext device options from a comma separated key-value
     string.
+
+    This initialises the opts structure.
     """
     return _mupdf.ll_fz_parse_stext_options(opts, string)
 
 def ll_fz_parse_svg_device_options(opts, args):
     r"""Low-level wrapper for `::fz_parse_svg_device_options()`."""
     return _mupdf.ll_fz_parse_svg_device_options(opts, args)
+
+def ll_fz_parse_table_hunt_options(opts, args):
+    r"""
+    Low-level wrapper for `::fz_parse_table_hunt_options()`.
+    Parse table hunt options from a comma separated key-value
+    string.
+
+    This initialises the opts structure.
+    """
+    return _mupdf.ll_fz_parse_table_hunt_options(opts, args)
 
 def ll_fz_parse_xml(buf, preserve_white):
     r"""
@@ -14673,6 +15532,13 @@ def ll_fz_pool_strdup(pool, s):
     """
     return _mupdf.ll_fz_pool_strdup(pool, s)
 
+def ll_fz_pool_strndup(pool, s, n):
+    r"""
+    Low-level wrapper for `::fz_pool_strndup()`.
+    strndup equivalent allocating from the pool.
+    """
+    return _mupdf.ll_fz_pool_strndup(pool, s, n)
+
 def ll_fz_pop_clip(dev):
     r"""Low-level wrapper for `::fz_pop_clip()`."""
     return _mupdf.ll_fz_pop_clip(dev)
@@ -14819,6 +15685,10 @@ def ll_fz_print_stext_page_as_xml(out, page, id):
     """
     return _mupdf.ll_fz_print_stext_page_as_xml(out, page, id)
 
+def ll_fz_print_stext_page_as_xml_with_flags(out, page, id, flags):
+    r"""Low-level wrapper for `::fz_print_stext_page_as_xml_with_flags()`."""
+    return _mupdf.ll_fz_print_stext_page_as_xml_with_flags(out, page, id, flags)
+
 def ll_fz_print_stext_trailer_as_html(out):
     r"""Low-level wrapper for `::fz_print_stext_trailer_as_html()`."""
     return _mupdf.ll_fz_print_stext_trailer_as_html(out)
@@ -14833,7 +15703,7 @@ def ll_fz_process_opened_pages(doc, process_openend_page, state):
     Iterates over all opened pages of the document, calling the
     provided callback for each page for processing. If the callback
     returns non-NULL then the iteration stops and that value is returned
-    to the called of fz_process_opened_pages().
+    to the caller of fz_process_opened_pages().
 
     The state pointer provided to fz_process_opened_pages() is
     passed on to the callback but is owned by the caller.
@@ -14867,6 +15737,25 @@ def ll_fz_process_shade(shade, ctm, scissor, prepare, process, process_arg):
     to callback functions.
     """
     return _mupdf.ll_fz_process_shade(shade, ctm, scissor, prepare, process, process_arg)
+
+def ll_fz_propose_table_within_bounds(page, bounds, xposp, yposp, opts):
+    r"""
+     Low-level wrapper for `::fz_propose_table_within_bounds()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`ll_fz_propose_table_within_bounds(::fz_stext_page *page, ::fz_rect bounds, ::fz_stext_grid_positions **xposp, ::fz_stext_grid_positions **yposp, const ::fz_table_hunt_options *opts)` => `(int)`
+
+    	Try to guess at the table structure within given bounds.
+
+    	If no table can be found, we return 0. If we find one we
+    	return non-zero. (Currently, 1, other values reserved
+    	for the future.)
+
+    	In the case of a non-zero return. xposp and ypos are returned
+    	as pointers to fz_stext_grid_positions records that must be
+    	freed.
+    """
+    return _mupdf.ll_fz_propose_table_within_bounds(page, bounds, xposp, yposp, opts)
 
 def ll_fz_ptr_heap_insert(heap, v, HEAP_CMP):
     r"""Low-level wrapper for `::fz_ptr_heap_insert()`."""
@@ -15096,6 +15985,14 @@ def ll_fz_read_string(stm, buffer, len):
     """
     return _mupdf.ll_fz_read_string(stm, buffer, len)
 
+def ll_fz_read_text_file(filename):
+    r"""
+    Low-level wrapper for `::fz_read_text_file()`.
+    Read all the contents of a file into a string.
+    File should be UTF-8 encoded plain text.
+    """
+    return _mupdf.ll_fz_read_text_file(filename)
+
 def ll_fz_read_uint16(stm):
     r"""
     Low-level wrapper for `::fz_read_uint16()`.
@@ -15166,6 +16063,10 @@ def ll_fz_realloc(p, size):
     Throws exception in the event of failure to allocate.
     """
     return _mupdf.ll_fz_realloc(p, size)
+
+def ll_fz_realloc_array_imp(p, nmemb, size):
+    r"""Low-level wrapper for `::fz_realloc_array_imp()`."""
+    return _mupdf.ll_fz_realloc_array_imp(p, nmemb, size)
 
 def ll_fz_realloc_no_throw(p, size):
     r"""
@@ -15243,6 +16144,15 @@ def ll_fz_recognize_image_format(p):
     data.
     """
     return _mupdf.ll_fz_recognize_image_format(p)
+
+def ll_fz_rect_area(r):
+    r"""
+    Low-level wrapper for `::fz_rect_area()`.
+    Calculate the area of a rectangle.
+
+    Always non-negative. All invalid or empty rects return 0.
+    """
+    return _mupdf.ll_fz_rect_area(r)
 
 def ll_fz_rect_from_irect(bbox):
     r"""
@@ -15940,22 +16850,6 @@ def ll_fz_search_page_number_cb(doc, number, needle, cb, opaque):
     r"""Low-level wrapper for `::fz_search_page_number_cb()`."""
     return _mupdf.ll_fz_search_page_number_cb(doc, number, needle, cb, opaque)
 
-def ll_fz_search_set_options(search, options, needle):
-    r"""
-    Low-level wrapper for `::fz_search_set_options()`.
-    Change the options/needle to be used for a search.
-
-    If the needle is invalid (in the case of regexps, it fails to compile)
-    it will throw an error.
-
-    If the needle changes, the current position of the search within the
-    text is kept.
-
-    If the options change, the search position may revert to the beginning
-    of the current page.
-    """
-    return _mupdf.ll_fz_search_set_options(search, options, needle)
-
 def ll_fz_search_stext_page(text, needle, hit_mark, hit_bbox, hit_max):
     r"""
      Low-level wrapper for `::fz_search_stext_page()`.
@@ -16492,10 +17386,6 @@ def ll_fz_snap_selection(page, ap, bp, mode):
     r"""Low-level wrapper for `::fz_snap_selection()`."""
     return _mupdf.ll_fz_snap_selection(page, ap, bp, mode)
 
-def ll_fz_start_throw_on_repair():
-    r"""Low-level wrapper for `::fz_start_throw_on_repair()`."""
-    return _mupdf.ll_fz_start_throw_on_repair()
-
 def ll_fz_stat_ctime(path):
     r"""Low-level wrapper for `::fz_stat_ctime()`."""
     return _mupdf.ll_fz_stat_ctime(path)
@@ -16541,6 +17431,22 @@ def ll_fz_stext_page_block_iterator_begin_dfs(page):
     r"""Low-level wrapper for `::fz_stext_page_block_iterator_begin_dfs()`."""
     return _mupdf.ll_fz_stext_page_block_iterator_begin_dfs(page)
 
+def ll_fz_stext_page_block_iterator_begin_from(page, block, top):
+    r"""Low-level wrapper for `::fz_stext_page_block_iterator_begin_from()`."""
+    return _mupdf.ll_fz_stext_page_block_iterator_begin_from(page, block, top)
+
+def ll_fz_stext_page_block_iterator_begin_from_dfs(page, block, top):
+    r"""Low-level wrapper for `::fz_stext_page_block_iterator_begin_from_dfs()`."""
+    return _mupdf.ll_fz_stext_page_block_iterator_begin_from_dfs(page, block, top)
+
+def ll_fz_stext_page_block_iterator_begin_from_rdfs(page, block, top):
+    r"""Low-level wrapper for `::fz_stext_page_block_iterator_begin_from_rdfs()`."""
+    return _mupdf.ll_fz_stext_page_block_iterator_begin_from_rdfs(page, block, top)
+
+def ll_fz_stext_page_block_iterator_begin_rdfs(page):
+    r"""Low-level wrapper for `::fz_stext_page_block_iterator_begin_rdfs()`."""
+    return _mupdf.ll_fz_stext_page_block_iterator_begin_rdfs(page)
+
 def ll_fz_stext_page_block_iterator_down(pos):
     r"""Low-level wrapper for `::fz_stext_page_block_iterator_down()`."""
     return _mupdf.ll_fz_stext_page_block_iterator_down(pos)
@@ -16553,6 +17459,10 @@ def ll_fz_stext_page_block_iterator_eod_dfs(pos):
     r"""Low-level wrapper for `::fz_stext_page_block_iterator_eod_dfs()`."""
     return _mupdf.ll_fz_stext_page_block_iterator_eod_dfs(pos)
 
+def ll_fz_stext_page_block_iterator_eod_rdfs(pos):
+    r"""Low-level wrapper for `::fz_stext_page_block_iterator_eod_rdfs()`."""
+    return _mupdf.ll_fz_stext_page_block_iterator_eod_rdfs(pos)
+
 def ll_fz_stext_page_block_iterator_next(pos):
     r"""Low-level wrapper for `::fz_stext_page_block_iterator_next()`."""
     return _mupdf.ll_fz_stext_page_block_iterator_next(pos)
@@ -16560,6 +17470,10 @@ def ll_fz_stext_page_block_iterator_next(pos):
 def ll_fz_stext_page_block_iterator_next_dfs(pos):
     r"""Low-level wrapper for `::fz_stext_page_block_iterator_next_dfs()`."""
     return _mupdf.ll_fz_stext_page_block_iterator_next_dfs(pos)
+
+def ll_fz_stext_page_block_iterator_next_rdfs(pos):
+    r"""Low-level wrapper for `::fz_stext_page_block_iterator_next_rdfs()`."""
+    return _mupdf.ll_fz_stext_page_block_iterator_next_rdfs(pos)
 
 def ll_fz_stext_page_block_iterator_up(pos):
     r"""Low-level wrapper for `::fz_stext_page_block_iterator_up()`."""
@@ -16876,6 +17790,16 @@ def ll_fz_strverscmp(s1, s2):
     """
     return _mupdf.ll_fz_strverscmp(s1, s2)
 
+def ll_fz_style_document(doc, publisher_css, user_css):
+    r"""
+    Low-level wrapper for `::fz_style_document()`.
+    Style reflowable document types.
+
+    publisher_css: Whether to respect the publisher's styles or not.
+    user_css: Custom stylesheet to apply.
+    """
+    return _mupdf.ll_fz_style_document(doc, publisher_css, user_css)
+
 def ll_fz_subpixel_adjust(ctm, subpix_ctm, qe, qf):
     r"""
     Low-level wrapper for `::fz_subpixel_adjust()`.
@@ -16928,21 +17852,21 @@ def ll_fz_sync_bits(stm):
     """
     return _mupdf.ll_fz_sync_bits(stm)
 
-def ll_fz_table_hunt(page):
+def ll_fz_table_hunt(page, opts):
     r"""
     Low-level wrapper for `::fz_table_hunt()`.
     Hunt for possible tables on a page, and update the stext with
     information.
     """
-    return _mupdf.ll_fz_table_hunt(page)
+    return _mupdf.ll_fz_table_hunt(page, opts)
 
-def ll_fz_table_hunt_within_bounds(page, bounds):
+def ll_fz_table_hunt_within_bounds(page, bounds, opts):
     r"""
     Low-level wrapper for `::fz_table_hunt_within_bounds()`.
     Hunt for possible tables within a specific rect on a page, and
     update the stext with information.
     """
-    return _mupdf.ll_fz_table_hunt_within_bounds(page, bounds)
+    return _mupdf.ll_fz_table_hunt_within_bounds(page, bounds, opts)
 
 def ll_fz_tell(stm):
     r"""
@@ -16996,6 +17920,18 @@ def ll_fz_text_language_from_string(str):
     accepted.
     """
     return _mupdf.ll_fz_text_language_from_string(str)
+
+def ll_fz_throw_on_unused_options(options, prefix):
+    r"""
+    Low-level wrapper for `::fz_throw_on_unused_options()`.
+    Throw for any options being unused or invalid.
+
+    Either this, or fz_warn_on_unused_options should always be called
+    (in non-error cases at least) before dropping options.
+
+    Returns 0 if OK, non-zero otherwise.
+    """
+    return _mupdf.ll_fz_throw_on_unused_options(options, prefix)
 
 def ll_fz_tint_pixmap(pix, black, white):
     r"""
@@ -17299,6 +18235,10 @@ def ll_fz_tune_image_decode(image_decode, arg):
     """
     return _mupdf.ll_fz_tune_image_decode(image_decode, arg)
 
+def ll_fz_tune_image_rendering(behavior):
+    r"""Low-level wrapper for `::fz_tune_image_rendering()`."""
+    return _mupdf.ll_fz_tune_image_rendering(behavior)
+
 def ll_fz_tune_image_scale(image_scale, arg):
     r"""
     Low-level wrapper for `::fz_tune_image_scale()`.
@@ -17340,9 +18280,76 @@ def ll_fz_unlock(lock):
     """
     return _mupdf.ll_fz_unlock(lock)
 
+def ll_fz_unpack_double(p):
+    r"""Low-level wrapper for `::fz_unpack_double()`."""
+    return _mupdf.ll_fz_unpack_double(p)
+
+def ll_fz_unpack_double_le(p):
+    r"""Low-level wrapper for `::fz_unpack_double_le()`."""
+    return _mupdf.ll_fz_unpack_double_le(p)
+
+def ll_fz_unpack_float(p):
+    r"""Low-level wrapper for `::fz_unpack_float()`."""
+    return _mupdf.ll_fz_unpack_float(p)
+
+def ll_fz_unpack_float_le(p):
+    r"""Low-level wrapper for `::fz_unpack_float_le()`."""
+    return _mupdf.ll_fz_unpack_float_le(p)
+
+def ll_fz_unpack_int16(p):
+    r"""Low-level wrapper for `::fz_unpack_int16()`."""
+    return _mupdf.ll_fz_unpack_int16(p)
+
+def ll_fz_unpack_int16_le(p):
+    r"""Low-level wrapper for `::fz_unpack_int16_le()`."""
+    return _mupdf.ll_fz_unpack_int16_le(p)
+
+def ll_fz_unpack_int32(p):
+    r"""Low-level wrapper for `::fz_unpack_int32()`."""
+    return _mupdf.ll_fz_unpack_int32(p)
+
+def ll_fz_unpack_int32_le(p):
+    r"""Low-level wrapper for `::fz_unpack_int32_le()`."""
+    return _mupdf.ll_fz_unpack_int32_le(p)
+
+def ll_fz_unpack_int64(p):
+    r"""Low-level wrapper for `::fz_unpack_int64()`."""
+    return _mupdf.ll_fz_unpack_int64(p)
+
+def ll_fz_unpack_int64_le(p):
+    r"""Low-level wrapper for `::fz_unpack_int64_le()`."""
+    return _mupdf.ll_fz_unpack_int64_le(p)
+
 def ll_fz_unpack_stream(src, depth, w, h, n, indexed, pad, skip):
     r"""Low-level wrapper for `::fz_unpack_stream()`."""
     return _mupdf.ll_fz_unpack_stream(src, depth, w, h, n, indexed, pad, skip)
+
+def ll_fz_unpack_uint16(p):
+    r"""
+    Low-level wrapper for `::fz_unpack_uint16()`.
+    Bit unpacking.
+    """
+    return _mupdf.ll_fz_unpack_uint16(p)
+
+def ll_fz_unpack_uint16_le(p):
+    r"""Low-level wrapper for `::fz_unpack_uint16_le()`."""
+    return _mupdf.ll_fz_unpack_uint16_le(p)
+
+def ll_fz_unpack_uint32(p):
+    r"""Low-level wrapper for `::fz_unpack_uint32()`."""
+    return _mupdf.ll_fz_unpack_uint32(p)
+
+def ll_fz_unpack_uint32_le(p):
+    r"""Low-level wrapper for `::fz_unpack_uint32_le()`."""
+    return _mupdf.ll_fz_unpack_uint32_le(p)
+
+def ll_fz_unpack_uint64(p):
+    r"""Low-level wrapper for `::fz_unpack_uint64()`."""
+    return _mupdf.ll_fz_unpack_uint64(p)
+
+def ll_fz_unpack_uint64_le(p):
+    r"""Low-level wrapper for `::fz_unpack_uint64_le()`."""
+    return _mupdf.ll_fz_unpack_uint64_le(p)
 
 def ll_fz_unread_byte(stm):
     r"""
@@ -17431,9 +18438,22 @@ def ll_fz_utflen(s):
     """
     return _mupdf.ll_fz_utflen(s)
 
+def ll_fz_validate_options(options, prefix):
+    r"""
+    Low-level wrapper for `::fz_validate_options()`.
+    This should be called by any consumer of options after it has looked up
+    the options it understands. This will throw if any options were found to
+    be flagged as being invalid.
+    """
+    return _mupdf.ll_fz_validate_options(options, prefix)
+
 def ll_fz_var_imp(arg_0):
     r"""Low-level wrapper for `::fz_var_imp()`."""
     return _mupdf.ll_fz_var_imp(arg_0)
+
+def ll_fz_verify_stext_page(page, title):
+    r"""Low-level wrapper for `::fz_verify_stext_page()`."""
+    return _mupdf.ll_fz_verify_stext_page(page, title)
 
 def ll_fz_walk_path(path, walker, arg):
     r"""
@@ -17460,6 +18480,18 @@ def ll_fz_walk_path(path, walker, arg):
 def ll_fz_warn(*args):
     r"""Low-level wrapper for `::fz_warn()`."""
     return _mupdf.ll_fz_warn(*args)
+
+def ll_fz_warn_on_unused_options(options, prefix):
+    r"""
+    Low-level wrapper for `::fz_warn_on_unused_options()`.
+    Warn for any options being unused. Throw if any options are invalid.
+
+    Either this, or fz_throw_on_unused_options should always be called
+    (in non-error cases at least) before dropping options.
+
+    Returns 0 if OK, non-zero otherwise.
+    """
+    return _mupdf.ll_fz_warn_on_unused_options(options, prefix)
 
 def ll_fz_warning_callback(user):
     r"""
@@ -18387,6 +19419,10 @@ def ll_pdf_annot_has_icon_name(annot):
     r"""Low-level wrapper for `::pdf_annot_has_icon_name()`."""
     return _mupdf.ll_pdf_annot_has_icon_name(annot)
 
+def ll_pdf_annot_has_in_reply_to(annot):
+    r"""Low-level wrapper for `::pdf_annot_has_in_reply_to()`."""
+    return _mupdf.ll_pdf_annot_has_in_reply_to(annot)
+
 def ll_pdf_annot_has_ink_list(annot):
     r"""Low-level wrapper for `::pdf_annot_has_ink_list()`."""
     return _mupdf.ll_pdf_annot_has_ink_list(annot)
@@ -18434,6 +19470,10 @@ def ll_pdf_annot_has_rich_contents(annot):
 def ll_pdf_annot_has_rich_defaults(annot):
     r"""Low-level wrapper for `::pdf_annot_has_rich_defaults()`."""
     return _mupdf.ll_pdf_annot_has_rich_defaults(annot)
+
+def ll_pdf_annot_has_subject(annot):
+    r"""Low-level wrapper for `::pdf_annot_has_subject()`."""
+    return _mupdf.ll_pdf_annot_has_subject(annot)
 
 def ll_pdf_annot_has_vertices(annot):
     r"""Low-level wrapper for `::pdf_annot_has_vertices()`."""
@@ -18533,6 +19573,10 @@ def ll_pdf_annot_modification_date(annot):
     r"""Low-level wrapper for `::pdf_annot_modification_date()`."""
     return _mupdf.ll_pdf_annot_modification_date(annot)
 
+def ll_pdf_annot_name(annot):
+    r"""Low-level wrapper for `::pdf_annot_name()`."""
+    return _mupdf.ll_pdf_annot_name(annot)
+
 def ll_pdf_annot_needs_resynthesis(annot):
     r"""Low-level wrapper for `::pdf_annot_needs_resynthesis()`."""
     return _mupdf.ll_pdf_annot_needs_resynthesis(annot)
@@ -18601,6 +19645,10 @@ def ll_pdf_annot_stamp_image_obj(annot):
     r"""Low-level wrapper for `::pdf_annot_stamp_image_obj()`."""
     return _mupdf.ll_pdf_annot_stamp_image_obj(annot)
 
+def ll_pdf_annot_subject(annot):
+    r"""Low-level wrapper for `::pdf_annot_subject()`."""
+    return _mupdf.ll_pdf_annot_subject(annot)
+
 def ll_pdf_annot_transform(annot):
     r"""Low-level wrapper for `::pdf_annot_transform()`."""
     return _mupdf.ll_pdf_annot_transform(annot)
@@ -18636,6 +19684,10 @@ def ll_pdf_append_token(buf, tok, lex):
 def ll_pdf_apply_redaction(annot, opts):
     r"""Low-level wrapper for `::pdf_apply_redaction()`."""
     return _mupdf.ll_pdf_apply_redaction(annot, opts)
+
+def ll_pdf_apply_write_options(opts, args):
+    r"""Low-level wrapper for `::pdf_apply_write_options()`."""
+    return _mupdf.ll_pdf_apply_write_options(opts, args)
 
 def ll_pdf_array_contains(array, obj):
     r"""Low-level wrapper for `::pdf_array_contains()`."""
@@ -18852,6 +19904,10 @@ def ll_pdf_check_digest(verifier, doc, signature):
 def ll_pdf_check_document(doc):
     r"""Low-level wrapper for `::pdf_check_document()`."""
     return _mupdf.ll_pdf_check_document(doc)
+
+def ll_pdf_check_structure_tree(doc):
+    r"""Low-level wrapper for `::pdf_check_structure_tree()`."""
+    return _mupdf.ll_pdf_check_structure_tree(doc)
 
 def ll_pdf_check_widget_certificate(verifier, widget):
     r"""Low-level wrapper for `::pdf_check_widget_certificate()`."""
@@ -19622,9 +20678,17 @@ def ll_pdf_end_operation(doc):
     r"""Low-level wrapper for `::pdf_end_operation()`."""
     return _mupdf.ll_pdf_end_operation(doc)
 
+def ll_pdf_end_throw_on_repair(doc, xref_base):
+    r"""Low-level wrapper for `::pdf_end_throw_on_repair()`."""
+    return _mupdf.ll_pdf_end_throw_on_repair(doc, xref_base)
+
 def ll_pdf_end_vmtx(font):
     r"""Low-level wrapper for `::pdf_end_vmtx()`."""
     return _mupdf.ll_pdf_end_vmtx(font)
+
+def ll_pdf_ensure_indirect(obj):
+    r"""Low-level wrapper for `::pdf_ensure_indirect()`."""
+    return _mupdf.ll_pdf_ensure_indirect(obj)
 
 def ll_pdf_ensure_solid_xref(doc, num):
     r"""Low-level wrapper for `::pdf_ensure_solid_xref()`."""
@@ -19751,6 +20815,10 @@ def ll_pdf_find_colorspace_resource(doc, item, key):
 def ll_pdf_find_font_resource(doc, type, encoding, item, key):
     r"""Low-level wrapper for `::pdf_find_font_resource()`."""
     return _mupdf.ll_pdf_find_font_resource(doc, type, encoding, item, key)
+
+def ll_pdf_find_image_resource(doc, item, key):
+    r"""Low-level wrapper for `::pdf_find_image_resource()`."""
+    return _mupdf.ll_pdf_find_image_resource(doc, item, key)
 
 def ll_pdf_find_item(drop, key):
     r"""Low-level wrapper for `::pdf_find_item()`."""
@@ -19880,6 +20948,10 @@ def ll_pdf_incremental_change_since_signing_widget(widget):
     r"""Low-level wrapper for `::pdf_incremental_change_since_signing_widget()`."""
     return _mupdf.ll_pdf_incremental_change_since_signing_widget(widget)
 
+def ll_pdf_init_write_options(opts):
+    r"""Low-level wrapper for `::pdf_init_write_options()`."""
+    return _mupdf.ll_pdf_init_write_options(opts)
+
 def ll_pdf_insert_colorspace_resource(doc, key, obj):
     r"""Low-level wrapper for `::pdf_insert_colorspace_resource()`."""
     return _mupdf.ll_pdf_insert_colorspace_resource(doc, key, obj)
@@ -19887,6 +20959,10 @@ def ll_pdf_insert_colorspace_resource(doc, key, obj):
 def ll_pdf_insert_font_resource(doc, key, obj):
     r"""Low-level wrapper for `::pdf_insert_font_resource()`."""
     return _mupdf.ll_pdf_insert_font_resource(doc, key, obj)
+
+def ll_pdf_insert_image_resource(doc, key, obj):
+    r"""Low-level wrapper for `::pdf_insert_image_resource()`."""
+    return _mupdf.ll_pdf_insert_image_resource(doc, key, obj)
 
 def ll_pdf_insert_page(doc, at, page):
     r"""Low-level wrapper for `::pdf_insert_page()`."""
@@ -20452,6 +21528,10 @@ def ll_pdf_mark_xref(doc):
     r"""Low-level wrapper for `::pdf_mark_xref()`."""
     return _mupdf.ll_pdf_mark_xref(doc)
 
+def ll_pdf_maybe_throw_after_repair(doc):
+    r"""Low-level wrapper for `::pdf_maybe_throw_after_repair()`."""
+    return _mupdf.ll_pdf_maybe_throw_after_repair(doc)
+
 def ll_pdf_metadata(doc):
     r"""Low-level wrapper for `::pdf_metadata()`."""
     return _mupdf.ll_pdf_metadata(doc)
@@ -20688,6 +21768,10 @@ def ll_pdf_obj_is_incremental(obj):
     r"""Low-level wrapper for `::pdf_obj_is_incremental()`."""
     return _mupdf.ll_pdf_obj_is_incremental(obj)
 
+def ll_pdf_obj_is_singleton(obj):
+    r"""Low-level wrapper for `::pdf_obj_is_singleton()`."""
+    return _mupdf.ll_pdf_obj_is_singleton(obj)
+
 def ll_pdf_obj_marked(obj):
     r"""Low-level wrapper for `::pdf_obj_marked()`."""
     return _mupdf.ll_pdf_obj_marked(obj)
@@ -20906,6 +21990,10 @@ def ll_pdf_parse_stm_obj(doc, f, buf):
 def ll_pdf_parse_write_options(opts, args):
     r"""Low-level wrapper for `::pdf_parse_write_options()`."""
     return _mupdf.ll_pdf_parse_write_options(opts, args)
+
+def ll_pdf_pattern_uses_blending(dict, cycle_up):
+    r"""Low-level wrapper for `::pdf_pattern_uses_blending()`."""
+    return _mupdf.ll_pdf_pattern_uses_blending(dict, cycle_up)
 
 def ll_pdf_pin_document(obj):
     r"""Low-level wrapper for `::pdf_pin_document()`."""
@@ -21318,6 +22406,10 @@ def ll_pdf_set_annot_modification_date(annot, time):
     r"""Low-level wrapper for `::pdf_set_annot_modification_date()`."""
     return _mupdf.ll_pdf_set_annot_modification_date(annot, time)
 
+def ll_pdf_set_annot_name(annot, name):
+    r"""Low-level wrapper for `::pdf_set_annot_name()`."""
+    return _mupdf.ll_pdf_set_annot_name(annot, name)
+
 def ll_pdf_set_annot_opacity(annot, opacity):
     r"""Low-level wrapper for `::pdf_set_annot_opacity()`."""
     return _mupdf.ll_pdf_set_annot_opacity(annot, opacity)
@@ -21357,6 +22449,10 @@ def ll_pdf_set_annot_stamp_image(annot, image):
 def ll_pdf_set_annot_stamp_image_obj(annot, ref):
     r"""Low-level wrapper for `::pdf_set_annot_stamp_image_obj()`."""
     return _mupdf.ll_pdf_set_annot_stamp_image_obj(annot, ref)
+
+def ll_pdf_set_annot_subject(annot, subject):
+    r"""Low-level wrapper for `::pdf_set_annot_subject()`."""
+    return _mupdf.ll_pdf_set_annot_subject(annot, subject)
 
 def ll_pdf_set_annot_vertex(annot, i, p):
     r"""Low-level wrapper for `::pdf_set_annot_vertex()`."""
@@ -21437,6 +22533,10 @@ def ll_pdf_set_str_len(obj, newlen):
 def ll_pdf_set_text_field_value(widget, value):
     r"""Low-level wrapper for `::pdf_set_text_field_value()`."""
     return _mupdf.ll_pdf_set_text_field_value(widget, value)
+
+def ll_pdf_set_trailer(doc, obj):
+    r"""Low-level wrapper for `::pdf_set_trailer()`."""
+    return _mupdf.ll_pdf_set_trailer(doc, obj)
 
 def ll_pdf_set_usecmap(cmap, usecmap):
     r"""Low-level wrapper for `::pdf_set_usecmap()`."""
@@ -21535,6 +22635,15 @@ def ll_pdf_sprint_obj(buf, cap, len, obj, tight, ascii):
     	`ll_pdf_sprint_obj(char *buf, size_t cap, ::pdf_obj *obj, int tight, int ascii)` => `(char *, size_t len)`
     """
     return _mupdf.ll_pdf_sprint_obj(buf, cap, len, obj, tight, ascii)
+
+def ll_pdf_start_throw_on_repair(doc, xref_base):
+    r"""
+     Low-level wrapper for `::pdf_start_throw_on_repair()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`ll_pdf_start_throw_on_repair(::pdf_document *doc)` => int xref_base
+    """
+    return _mupdf.ll_pdf_start_throw_on_repair(doc, xref_base)
 
 def ll_pdf_store_item(key, val, itemsize):
     r"""Low-level wrapper for `::pdf_store_item()`."""
@@ -21677,6 +22786,14 @@ def ll_pdf_toggle_widget(widget):
     r"""Low-level wrapper for `::pdf_toggle_widget()`."""
     return _mupdf.ll_pdf_toggle_widget(widget)
 
+def ll_pdf_tos_accumulate_clip(tos):
+    r"""Low-level wrapper for `::pdf_tos_accumulate_clip()`."""
+    return _mupdf.ll_pdf_tos_accumulate_clip(tos)
+
+def ll_pdf_tos_get_clip_text(tos):
+    r"""Low-level wrapper for `::pdf_tos_get_clip_text()`."""
+    return _mupdf.ll_pdf_tos_get_clip_text(tos)
+
 def ll_pdf_tos_get_text(tos):
     r"""Low-level wrapper for `::pdf_tos_get_text()`."""
     return _mupdf.ll_pdf_tos_get_text(tos)
@@ -21783,9 +22900,13 @@ def ll_pdf_validate_changes(doc, version):
     r"""Low-level wrapper for `::pdf_validate_changes()`."""
     return _mupdf.ll_pdf_validate_changes(doc, version)
 
-def ll_pdf_validate_signature(widget):
+def ll_pdf_validate_signature(doc, field):
     r"""Low-level wrapper for `::pdf_validate_signature()`."""
-    return _mupdf.ll_pdf_validate_signature(widget)
+    return _mupdf.ll_pdf_validate_signature(doc, field)
+
+def ll_pdf_validate_signature_widget(widget):
+    r"""Low-level wrapper for `::pdf_validate_signature_widget()`."""
+    return _mupdf.ll_pdf_validate_signature_widget(widget)
 
 def ll_pdf_vectorize_page(page):
     r"""Low-level wrapper for `::pdf_vectorize_page()`."""
@@ -21985,6 +23106,10 @@ def to_string_fz_rect(s):
     r"""Returns string containing a fz_rect's members, labelled and inside (...), using operator<<."""
     return _mupdf.to_string_fz_rect(s)
 
+def to_string_fz_stext_grid_divider(s):
+    r"""Returns string containing a fz_stext_grid_divider's members, labelled and inside (...), using operator<<."""
+    return _mupdf.to_string_fz_stext_grid_divider(s)
+
 def to_string_fz_stext_options(s):
     r"""Returns string containing a fz_stext_options's members, labelled and inside (...), using operator<<."""
     return _mupdf.to_string_fz_stext_options(s)
@@ -21992,6 +23117,10 @@ def to_string_fz_stext_options(s):
 def to_string_fz_story_element_position(s):
     r"""Returns string containing a fz_story_element_position's members, labelled and inside (...), using operator<<."""
     return _mupdf.to_string_fz_story_element_position(s)
+
+def to_string_fz_table_hunt_options(s):
+    r"""Returns string containing a fz_table_hunt_options's members, labelled and inside (...), using operator<<."""
+    return _mupdf.to_string_fz_table_hunt_options(s)
 
 def to_string_fz_transition(s):
     r"""Returns string containing a fz_transition's members, labelled and inside (...), using operator<<."""
@@ -22130,78 +23259,90 @@ def to_string(*args):
     |
 
     *Overload 16:*
-     Returns string containing a fz_stext_options's members, labelled and inside (...), using operator<<.
+     Returns string containing a fz_stext_grid_divider's members, labelled and inside (...), using operator<<.
     (Convenience overload).
 
     |
 
     *Overload 17:*
-     Returns string containing a fz_story_element_position's members, labelled and inside (...), using operator<<.
+     Returns string containing a fz_stext_options's members, labelled and inside (...), using operator<<.
     (Convenience overload).
 
     |
 
     *Overload 18:*
-     Returns string containing a fz_transition's members, labelled and inside (...), using operator<<.
+     Returns string containing a fz_story_element_position's members, labelled and inside (...), using operator<<.
     (Convenience overload).
 
     |
 
     *Overload 19:*
-     Returns string containing a pdf_clean_options's members, labelled and inside (...), using operator<<.
+     Returns string containing a fz_table_hunt_options's members, labelled and inside (...), using operator<<.
     (Convenience overload).
 
     |
 
     *Overload 20:*
-     Returns string containing a pdf_filter_factory's members, labelled and inside (...), using operator<<.
+     Returns string containing a fz_transition's members, labelled and inside (...), using operator<<.
     (Convenience overload).
 
     |
 
     *Overload 21:*
-     Returns string containing a pdf_filter_options's members, labelled and inside (...), using operator<<.
+     Returns string containing a pdf_clean_options's members, labelled and inside (...), using operator<<.
     (Convenience overload).
 
     |
 
     *Overload 22:*
-     Returns string containing a pdf_image_rewriter_options's members, labelled and inside (...), using operator<<.
+     Returns string containing a pdf_filter_factory's members, labelled and inside (...), using operator<<.
     (Convenience overload).
 
     |
 
     *Overload 23:*
-     Returns string containing a pdf_layer_config's members, labelled and inside (...), using operator<<.
+     Returns string containing a pdf_filter_options's members, labelled and inside (...), using operator<<.
     (Convenience overload).
 
     |
 
     *Overload 24:*
-     Returns string containing a pdf_layer_config_ui's members, labelled and inside (...), using operator<<.
+     Returns string containing a pdf_image_rewriter_options's members, labelled and inside (...), using operator<<.
     (Convenience overload).
 
     |
 
     *Overload 25:*
-     Returns string containing a pdf_recolor_options's members, labelled and inside (...), using operator<<.
+     Returns string containing a pdf_layer_config's members, labelled and inside (...), using operator<<.
     (Convenience overload).
 
     |
 
     *Overload 26:*
-     Returns string containing a pdf_redact_options's members, labelled and inside (...), using operator<<.
+     Returns string containing a pdf_layer_config_ui's members, labelled and inside (...), using operator<<.
     (Convenience overload).
 
     |
 
     *Overload 27:*
-     Returns string containing a pdf_sanitize_filter_options's members, labelled and inside (...), using operator<<.
+     Returns string containing a pdf_recolor_options's members, labelled and inside (...), using operator<<.
     (Convenience overload).
 
     |
 
     *Overload 28:*
+     Returns string containing a pdf_redact_options's members, labelled and inside (...), using operator<<.
+    (Convenience overload).
+
+    |
+
+    *Overload 29:*
+     Returns string containing a pdf_sanitize_filter_options's members, labelled and inside (...), using operator<<.
+    (Convenience overload).
+
+    |
+
+    *Overload 30:*
      Returns string containing a pdf_write_options's members, labelled and inside (...), using operator<<.
     (Convenience overload).
     """
@@ -23318,6 +24459,22 @@ class FzBuffer(object):
     def fz_append_string(self, data):
         r"""Class-aware wrapper for `::fz_append_string()`."""
         return _mupdf.FzBuffer_fz_append_string(self, data)
+
+    def fz_append_uint16_be(self, x):
+        r"""Class-aware wrapper for `::fz_append_uint16_be()`."""
+        return _mupdf.FzBuffer_fz_append_uint16_be(self, x)
+
+    def fz_append_uint16_le(self, x):
+        r"""Class-aware wrapper for `::fz_append_uint16_le()`."""
+        return _mupdf.FzBuffer_fz_append_uint16_le(self, x)
+
+    def fz_append_uint32_be(self, x):
+        r"""Class-aware wrapper for `::fz_append_uint32_be()`."""
+        return _mupdf.FzBuffer_fz_append_uint32_be(self, x)
+
+    def fz_append_uint32_le(self, x):
+        r"""Class-aware wrapper for `::fz_append_uint32_le()`."""
+        return _mupdf.FzBuffer_fz_append_uint32_le(self, x)
 
     def fz_buffer_extract(self, data):
         r"""
@@ -24530,6 +25687,48 @@ class FzCookie(object):
 
 # Register FzCookie in _mupdf:
 _mupdf.FzCookie_swigregister(FzCookie)
+class FzCullingOptions(object):
+    r"""
+    Wrapper class for struct `fz_culling_options`. Not copyable or assignable.
+    Options for the culling device.
+
+    cull_gylph is called when the cull device needs a decision
+    about whether a given glyph should be culled or not. Return 0
+    to keep, 1 to cull, all other values reserved.
+
+    drop is called when the culling device is closed.
+    """
+
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+
+    def __init__(self, *args):
+        r"""
+        *Overload 1:*
+        Default constructor, sets `m_internal` to null.
+
+        |
+
+        *Overload 2:*
+        Constructor using raw copy of pre-existing `::fz_culling_options`.
+        """
+        _mupdf.FzCullingOptions_swiginit(self, _mupdf.new_FzCullingOptions(*args))
+    __swig_destroy__ = _mupdf.delete_FzCullingOptions
+
+    def m_internal_value(self):
+        r"""Return numerical value of .m_internal; helps with Python debugging."""
+        return _mupdf.FzCullingOptions_m_internal_value(self)
+
+    def __nonzero__(self):
+        return _mupdf.FzCullingOptions___nonzero__(self)
+    __bool__ = __nonzero__
+
+
+    m_internal = property(_mupdf.FzCullingOptions_m_internal_get, _mupdf.FzCullingOptions_m_internal_set, doc=r"""Pointer to wrapped data.""")
+    s_num_instances = property(_mupdf.FzCullingOptions_s_num_instances_get, _mupdf.FzCullingOptions_s_num_instances_set)
+
+# Register FzCullingOptions in _mupdf:
+_mupdf.FzCullingOptions_swigregister(FzCullingOptions)
 class FzDefaultColorspaces(object):
     r"""
     Wrapper class for struct `fz_default_colorspaces`.
@@ -24812,6 +26011,36 @@ class FzDevice(object):
         r"""Class-aware wrapper for `::fz_ignore_text()`."""
         return _mupdf.FzDevice_fz_ignore_text(self, text, ctm)
 
+    def fz_new_culling_device(self, opts):
+        r"""
+        Class-aware wrapper for `::fz_new_culling_device()`.
+        	Create an 'cull' device.
+
+        	This device passes through all calls to the 'passthrough' device, except
+        	for text operations that may be culled.
+
+        	The decision as to whether to cull a glyph or not is made by calling the
+        	'cull_glyph' function in the options structure with the rectangle that
+        	would be affected. If the function returns 0, the glyph is passed through.
+        	if the function returns 1, the glyph is dropped. All other values reserved.
+        """
+        return _mupdf.FzDevice_fz_new_culling_device(self, opts)
+
+    def fz_new_culling_device_with_rects(self, n, rects):
+        r"""
+        Class-aware wrapper for `::fz_new_culling_device_with_rects()`.
+        	Create an culling device that will drop any glyphs that significantly
+        	overlap any of the given list of rects.
+
+        	The rect list is copied into the device, so does not need to exist
+        	beyond this call.
+        """
+        return _mupdf.FzDevice_fz_new_culling_device_with_rects(self, n, rects)
+
+    def fz_new_culling_device_with_rects2(self, rects):
+        r"""Class-aware wrapper for `::fz_new_culling_device_with_rects2()`.   Swig-friendly wrapper for fz_new_culling_device_with_rects()."""
+        return _mupdf.FzDevice_fz_new_culling_device_with_rects2(self, rects)
+
     def fz_new_ocr_device(self, ctm, mediabox, with_list, language, datadir, progress, progress_arg):
         r"""
         Class-aware wrapper for `::fz_new_ocr_device()`.
@@ -24862,6 +26091,20 @@ class FzDevice(object):
         r"""Class-aware wrapper for `::fz_new_ocr_device_with_options()`."""
         return _mupdf.FzDevice_fz_new_ocr_device_with_options(self, ctm, mediabox, with_list, language, datadir, progress, progress_arg, options)
 
+    def fz_new_passthrough_device_of_size(self, size):
+        r"""
+        Class-aware wrapper for `::fz_new_passthrough_device_of_size()`.
+        	Create a passthrough device.
+
+        	The device is created with stub functions that do nothing except
+        	pass calls through to the given sub device. This includes
+        	close and drop!
+
+        	The caller of this function can then override any functions it
+        	wants to handle itself.
+        """
+        return _mupdf.FzDevice_fz_new_passthrough_device_of_size(self, size)
+
     def fz_pop_clip(self):
         r"""Class-aware wrapper for `::fz_pop_clip()`."""
         return _mupdf.FzDevice_fz_pop_clip(self)
@@ -24909,6 +26152,37 @@ class FzDevice(object):
         |
 
         *Overload 2:*
+         Constructor using `fz_new_culling_device()`.
+        		Create an 'cull' device.
+
+        		This device passes through all calls to the 'passthrough' device, except
+        		for text operations that may be culled.
+
+        		The decision as to whether to cull a glyph or not is made by calling the
+        		'cull_glyph' function in the options structure with the rectangle that
+        		would be affected. If the function returns 0, the glyph is passed through.
+        		if the function returns 1, the glyph is dropped. All other values reserved.
+
+
+        |
+
+        *Overload 3:*
+         Constructor using `fz_new_culling_device_with_rects()`.
+        		Create an culling device that will drop any glyphs that significantly
+        		overlap any of the given list of rects.
+
+        		The rect list is copied into the device, so does not need to exist
+        		beyond this call.
+
+
+        |
+
+        *Overload 4:*
+         Constructor using `fz_new_culling_device_with_rects2()`.  Swig-friendly wrapper for fz_new_culling_device_with_rects().
+
+        |
+
+        *Overload 5:*
          Constructor using `fz_new_device_of_size()`.
         		Devices are created by calls to device implementations, for
         		instance: foo_new_device(). These will be implemented by calling
@@ -24919,7 +26193,7 @@ class FzDevice(object):
 
         |
 
-        *Overload 3:*
+        *Overload 6:*
          Constructor using `fz_new_draw_device()`.
         		Create a device to draw on a pixmap.
 
@@ -24935,7 +26209,7 @@ class FzDevice(object):
 
         |
 
-        *Overload 4:*
+        *Overload 7:*
          Constructor using `fz_new_draw_device_with_bbox()`.
         		Create a device to draw on a pixmap.
 
@@ -24954,7 +26228,7 @@ class FzDevice(object):
 
         |
 
-        *Overload 5:*
+        *Overload 8:*
          Constructor using `fz_new_draw_device_with_bbox_proof()`.
         		Create a device to draw on a pixmap.
 
@@ -24976,7 +26250,7 @@ class FzDevice(object):
 
         |
 
-        *Overload 6:*
+        *Overload 9:*
          Constructor using `fz_new_draw_device_with_options()`.
         		Create a new pixmap and draw device, using the specified options.
 
@@ -24990,7 +26264,7 @@ class FzDevice(object):
 
         |
 
-        *Overload 7:*
+        *Overload 10:*
          Constructor using `fz_new_draw_device_with_proof()`.
         		Create a device to draw on a pixmap.
 
@@ -25009,7 +26283,7 @@ class FzDevice(object):
 
         |
 
-        *Overload 8:*
+        *Overload 11:*
          Constructor using `fz_new_list_device()`.
         		Create a rendering device for a display list.
 
@@ -25025,7 +26299,7 @@ class FzDevice(object):
 
         |
 
-        *Overload 9:*
+        *Overload 12:*
          Constructor using `fz_new_ocr_device()`.
         		Create a device to OCR the text on the page.
 
@@ -25071,12 +26345,26 @@ class FzDevice(object):
 
         |
 
-        *Overload 10:*
+        *Overload 13:*
          Constructor using `fz_new_ocr_device_with_options()`.
 
         |
 
-        *Overload 11:*
+        *Overload 14:*
+         Constructor using `fz_new_passthrough_device_of_size()`.
+        		Create a passthrough device.
+
+        		The device is created with stub functions that do nothing except
+        		pass calls through to the given sub device. This includes
+        		close and drop!
+
+        		The caller of this function can then override any functions it
+        		wants to handle itself.
+
+
+        |
+
+        *Overload 15:*
          Constructor using `fz_new_stext_device()`.
         		Create a device to extract the text on a page.
 
@@ -25095,7 +26383,7 @@ class FzDevice(object):
 
         |
 
-        *Overload 12:*
+        *Overload 16:*
          Constructor using `fz_new_stext_device_for_page()`.
         		Create a device to extract the text on a page into an existing
         		fz_stext_page structure.
@@ -25131,7 +26419,7 @@ class FzDevice(object):
 
         |
 
-        *Overload 13:*
+        *Overload 17:*
          Constructor using `fz_new_svg_device()`.
         		Create a device that outputs (single page) SVG files to
         		the given output stream.
@@ -25141,7 +26429,7 @@ class FzDevice(object):
 
         |
 
-        *Overload 14:*
+        *Overload 18:*
          Constructor using `fz_new_svg_device_with_id()`.
         		Create a device that outputs (single page) SVG files to
         		the given output stream.
@@ -25165,12 +26453,12 @@ class FzDevice(object):
 
         |
 
-        *Overload 15:*
+        *Overload 19:*
          Constructor using `fz_new_svg_device_with_options()`.
 
         |
 
-        *Overload 16:*
+        *Overload 20:*
          Constructor using `fz_new_test_device()`.
         		Create a device to test for features.
 
@@ -25200,29 +26488,29 @@ class FzDevice(object):
 
         |
 
-        *Overload 17:*
+        *Overload 21:*
          Constructor using `fz_new_trace_device()`.
         		Create a device to print a debug trace of all device calls.
 
 
         |
 
-        *Overload 18:*
+        *Overload 22:*
          Constructor using `pdf_new_pdf_device()`.
 
         |
 
-        *Overload 19:*
+        *Overload 23:*
          Copy constructor using `fz_keep_device()`.
 
         |
 
-        *Overload 20:*
+        *Overload 24:*
          Default constructor, sets `m_internal` to null.
 
         |
 
-        *Overload 21:*
+        *Overload 25:*
          Constructor using raw copy of pre-existing `::fz_device`.
         """
         _mupdf.FzDevice_swiginit(self, _mupdf.new_FzDevice(*args))
@@ -25572,6 +26860,10 @@ class FzDisplayList(object):
         """
         return _mupdf.FzDisplayList_fz_new_list_device(self)
 
+    def fz_new_pixmap_from_culled_display_list(self, ctm, cs, alpha, opts):
+        r"""Class-aware wrapper for `::fz_new_pixmap_from_culled_display_list()`."""
+        return _mupdf.FzDisplayList_fz_new_pixmap_from_culled_display_list(self, ctm, cs, alpha, opts)
+
     def fz_new_pixmap_from_display_list(self, ctm, cs, alpha):
         r"""
         Class-aware wrapper for `::fz_new_pixmap_from_display_list()`.
@@ -25580,6 +26872,22 @@ class FzDisplayList(object):
         	Ownership of the pixmap is returned to the caller.
         """
         return _mupdf.FzDisplayList_fz_new_pixmap_from_display_list(self, ctm, cs, alpha)
+
+    def fz_new_pixmap_from_display_list_culling_text(self, ctm, cs, alpha, n, rects):
+        r"""Class-aware wrapper for `::fz_new_pixmap_from_display_list_culling_text()`."""
+        return _mupdf.FzDisplayList_fz_new_pixmap_from_display_list_culling_text(self, ctm, cs, alpha, n, rects)
+
+    def fz_new_pixmap_from_display_list_culling_text2(self, ctm, cs, alpha, rects):
+        r"""Class-aware wrapper for `::fz_new_pixmap_from_display_list_culling_text2()`.   Swig-friendly wrapper for fz_new_pixmap_from_display_list_culling_text()."""
+        return _mupdf.FzDisplayList_fz_new_pixmap_from_display_list_culling_text2(self, ctm, cs, alpha, rects)
+
+    def fz_new_pixmap_from_display_list_culling_text_etc(self, ctm, cs, alpha, n, rects, borders):
+        r"""Class-aware wrapper for `::fz_new_pixmap_from_display_list_culling_text_etc()`."""
+        return _mupdf.FzDisplayList_fz_new_pixmap_from_display_list_culling_text_etc(self, ctm, cs, alpha, n, rects, borders)
+
+    def fz_new_pixmap_from_display_list_culling_text_etc2(self, ctm, cs, alpha, rects, borders):
+        r"""Class-aware wrapper for `::fz_new_pixmap_from_display_list_culling_text_etc2()`.   Swig-friendly wrapper for fz_new_pixmap_from_display_list_culling_text_etc()."""
+        return _mupdf.FzDisplayList_fz_new_pixmap_from_display_list_culling_text_etc2(self, ctm, cs, alpha, rects, borders)
 
     def fz_new_pixmap_from_display_list_with_separations(self, ctm, cs, seps, alpha):
         r"""
@@ -25970,9 +27278,32 @@ class FzDocument(object):
         r"""Class-aware wrapper for `::fz_new_pdf_document_from_fz_document()`."""
         return _mupdf.FzDocument_fz_new_pdf_document_from_fz_document(self)
 
+    def fz_new_pixmap_from_culled_page_number(self, number, ctm, cs, alpha, opts):
+        r"""Class-aware wrapper for `::fz_new_pixmap_from_culled_page_number()`."""
+        return _mupdf.FzDocument_fz_new_pixmap_from_culled_page_number(self, number, ctm, cs, alpha, opts)
+
     def fz_new_pixmap_from_page_number(self, number, ctm, cs, alpha):
         r"""Class-aware wrapper for `::fz_new_pixmap_from_page_number()`."""
         return _mupdf.FzDocument_fz_new_pixmap_from_page_number(self, number, ctm, cs, alpha)
+
+    def fz_new_pixmap_from_page_number_culling_text(self, number, ctm, cs, alpha, n, rects):
+        r"""
+        Class-aware wrapper for `::fz_new_pixmap_from_page_number_culling_text()`.
+        	Returns a page rendered with text from the given rectangles culled.
+        """
+        return _mupdf.FzDocument_fz_new_pixmap_from_page_number_culling_text(self, number, ctm, cs, alpha, n, rects)
+
+    def fz_new_pixmap_from_page_number_culling_text2(self, number, ctm, cs, alpha, rects):
+        r"""Class-aware wrapper for `::fz_new_pixmap_from_page_number_culling_text2()`.   Swig-friendly wrapper for fz_new_pixmap_from_page_number_culling_text()."""
+        return _mupdf.FzDocument_fz_new_pixmap_from_page_number_culling_text2(self, number, ctm, cs, alpha, rects)
+
+    def fz_new_pixmap_from_page_number_culling_text_etc(self, number, ctm, cs, alpha, n, rects, borders):
+        r"""Class-aware wrapper for `::fz_new_pixmap_from_page_number_culling_text_etc()`."""
+        return _mupdf.FzDocument_fz_new_pixmap_from_page_number_culling_text_etc(self, number, ctm, cs, alpha, n, rects, borders)
+
+    def fz_new_pixmap_from_page_number_culling_text_etc2(self, number, ctm, cs, alpha, rects, borders):
+        r"""Class-aware wrapper for `::fz_new_pixmap_from_page_number_culling_text_etc2()`.   Swig-friendly wrapper for fz_new_pixmap_from_page_number_culling_text_etc()."""
+        return _mupdf.FzDocument_fz_new_pixmap_from_page_number_culling_text_etc2(self, number, ctm, cs, alpha, rects, borders)
 
     def fz_new_pixmap_from_page_number_with_separations(self, number, ctm, cs, seps, alpha):
         r"""Class-aware wrapper for `::fz_new_pixmap_from_page_number_with_separations()`."""
@@ -26040,7 +27371,7 @@ class FzDocument(object):
         	Iterates over all opened pages of the document, calling the
         	provided callback for each page for processing. If the callback
         	returns non-NULL then the iteration stops and that value is returned
-        	to the called of fz_process_opened_pages().
+        	to the caller of fz_process_opened_pages().
 
         	The state pointer provided to fz_process_opened_pages() is
         	passed on to the callback but is owned by the caller.
@@ -26127,6 +27458,16 @@ class FzDocument(object):
     def fz_set_metadata(self, key, value):
         r"""Class-aware wrapper for `::fz_set_metadata()`."""
         return _mupdf.FzDocument_fz_set_metadata(self, key, value)
+
+    def fz_style_document(self, publisher_css, user_css):
+        r"""
+        Class-aware wrapper for `::fz_style_document()`.
+        	Style reflowable document types.
+
+        	publisher_css: Whether to respect the publisher's styles or not.
+        	user_css: Custom stylesheet to apply.
+        """
+        return _mupdf.FzDocument_fz_style_document(self, publisher_css, user_css)
 
     def pdf_count_pages_imp(self, chapter):
         r"""Class-aware wrapper for `::pdf_count_pages_imp()`."""
@@ -26611,11 +27952,29 @@ class FzDrawOptions(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
 
+    def fz_apply_draw_options(self, options):
+        r"""
+        Class-aware wrapper for `::fz_apply_draw_options()`.
+        	Parse draw device options from an fz_options structure.
+
+        	This assumes that the draw_options struct has been initialised already.
+        """
+        return _mupdf.FzDrawOptions_fz_apply_draw_options(self, options)
+
+    def fz_init_draw_options(self):
+        r"""
+        Class-aware wrapper for `::fz_init_draw_options()`.
+        	Initialise a draw_options struct to sensible values.
+        """
+        return _mupdf.FzDrawOptions_fz_init_draw_options(self)
+
     def __init__(self, *args):
         r"""
         *Overload 1:*
          == Constructors.  Constructor using `fz_parse_draw_options()`.
         		Parse draw device options from a comma separated key-value string.
+
+        		This initialises the draw_options struct first.
 
 
         |
@@ -27928,6 +29287,13 @@ class FzImage(object):
         """
         return _mupdf.FzImage_fz_get_unscaled_pixmap_from_image(self)
 
+    def fz_image_digest(self, digest):
+        r"""
+        Class-aware wrapper for `::fz_image_digest()`.
+        	Compute a checksum for the image.
+        """
+        return _mupdf.FzImage_fz_image_digest(self, digest)
+
     def fz_image_orientation(self):
         r"""
         Class-aware wrapper for `::fz_image_orientation()`.
@@ -28194,10 +29560,12 @@ class FzImage(object):
         		size: The size of the required allocated structure (the size of
         		the derived structure).
 
-        		get: The function to be called to obtain a decoded pixmap.
+        		get_pixmap: The function to be called to obtain a decoded pixmap.
 
         		get_size: The function to be called to return the storage size
         		used by this image.
+
+        		get_digest: The function to be called to compute a checksum from this image.
 
         		drop: The function to be called to dispose of this image once
         		the last reference is dropped.
@@ -29413,39 +30781,6 @@ class FzLocksContext(object):
 
 # Register FzLocksContext in _mupdf:
 _mupdf.FzLocksContext_swigregister(FzLocksContext)
-class FzMatchQuad(object):
-    r"""Wrapper class for struct `fz_match_quad`. Not copyable or assignable."""
-
-    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
-    __repr__ = _swig_repr
-
-    def __init__(self, *args):
-        r"""
-        *Overload 1:*
-        Default constructor, sets `m_internal` to null.
-
-        |
-
-        *Overload 2:*
-        Constructor using raw copy of pre-existing `::fz_match_quad`.
-        """
-        _mupdf.FzMatchQuad_swiginit(self, _mupdf.new_FzMatchQuad(*args))
-    __swig_destroy__ = _mupdf.delete_FzMatchQuad
-
-    def m_internal_value(self):
-        r"""Return numerical value of .m_internal; helps with Python debugging."""
-        return _mupdf.FzMatchQuad_m_internal_value(self)
-
-    def __nonzero__(self):
-        return _mupdf.FzMatchQuad___nonzero__(self)
-    __bool__ = __nonzero__
-
-
-    m_internal = property(_mupdf.FzMatchQuad_m_internal_get, _mupdf.FzMatchQuad_m_internal_set, doc=r"""Pointer to wrapped data.""")
-    s_num_instances = property(_mupdf.FzMatchQuad_s_num_instances_get, _mupdf.FzMatchQuad_s_num_instances_set)
-
-# Register FzMatchQuad in _mupdf:
-_mupdf.FzMatchQuad_swigregister(FzMatchQuad)
 class FzMatrix(object):
     r"""
      Wrapper class for struct `fz_matrix`.
@@ -29893,6 +31228,309 @@ class FzMd5(object):
 
 # Register FzMd5 in _mupdf:
 _mupdf.FzMd5_swigregister(FzMd5)
+class FzOption(object):
+    r"""
+    Wrapper class for struct `fz_option`. Not copyable or assignable.
+    Implementation details: subject to change. Only public for
+    SWIG built wrappers.
+    """
+
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+
+    def __init__(self, *args):
+        r"""
+        *Overload 1:*
+        Default constructor, sets `m_internal` to null.
+
+        |
+
+        *Overload 2:*
+        Constructor using raw copy of pre-existing `::fz_option`.
+        """
+        _mupdf.FzOption_swiginit(self, _mupdf.new_FzOption(*args))
+    __swig_destroy__ = _mupdf.delete_FzOption
+
+    def m_internal_value(self):
+        r"""Return numerical value of .m_internal; helps with Python debugging."""
+        return _mupdf.FzOption_m_internal_value(self)
+
+    def __nonzero__(self):
+        return _mupdf.FzOption___nonzero__(self)
+    __bool__ = __nonzero__
+
+
+    m_internal = property(_mupdf.FzOption_m_internal_get, _mupdf.FzOption_m_internal_set, doc=r"""Pointer to wrapped data.""")
+    s_num_instances = property(_mupdf.FzOption_s_num_instances_get, _mupdf.FzOption_s_num_instances_set)
+
+# Register FzOption in _mupdf:
+_mupdf.FzOption_swigregister(FzOption)
+class FzOptionEnums(object):
+    r"""Wrapper class for struct `fz_option_enums`. Not copyable or assignable."""
+
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+
+    def __init__(self, *args):
+        r"""
+        *Overload 1:*
+        Default constructor, sets `m_internal` to null.
+
+        |
+
+        *Overload 2:*
+        Constructor using raw copy of pre-existing `::fz_option_enums`.
+        """
+        _mupdf.FzOptionEnums_swiginit(self, _mupdf.new_FzOptionEnums(*args))
+    __swig_destroy__ = _mupdf.delete_FzOptionEnums
+
+    def m_internal_value(self):
+        r"""Return numerical value of .m_internal; helps with Python debugging."""
+        return _mupdf.FzOptionEnums_m_internal_value(self)
+
+    def __nonzero__(self):
+        return _mupdf.FzOptionEnums___nonzero__(self)
+    __bool__ = __nonzero__
+
+
+    m_internal = property(_mupdf.FzOptionEnums_m_internal_get, _mupdf.FzOptionEnums_m_internal_set, doc=r"""Pointer to wrapped data.""")
+    s_num_instances = property(_mupdf.FzOptionEnums_s_num_instances_get, _mupdf.FzOptionEnums_s_num_instances_set)
+
+# Register FzOptionEnums in _mupdf:
+_mupdf.FzOptionEnums_swigregister(FzOptionEnums)
+class FzOptions(object):
+    r"""
+    Wrapper class for struct `fz_options`.
+    An fz_options structure encapsulates a list of key, or
+    key=value options, together with details such as whether
+    they have been used or not.
+    """
+
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+
+    def fz_access_option_by_index(self, i):
+        r"""
+        Class-aware wrapper for `::fz_access_option_by_index()`.
+        	Mark a given option index as being accessed.
+        """
+        return _mupdf.FzOptions_fz_access_option_by_index(self, i)
+
+    def fz_count_options(self):
+        r"""
+        Class-aware wrapper for `::fz_count_options()`.
+        	Count the number of options in an options structure.
+        """
+        return _mupdf.FzOptions_fz_count_options(self)
+
+    def fz_get_option_by_index(self, i, val):
+        r"""
+        Class-aware wrapper for `::fz_get_option_by_index()`.
+
+        This method has out-params. Python/C# wrappers look like:
+        	`fz_get_option_by_index(int i)` => `(const char *, const char *val)`
+
+        	Get an option by index.
+        """
+        return _mupdf.FzOptions_fz_get_option_by_index(self, i, val)
+
+    def fz_lookup_option(self, key, val):
+        r"""
+        Class-aware wrapper for `::fz_lookup_option()`.
+
+        This method has out-params. Python/C# wrappers look like:
+        	`fz_lookup_option(const char *key)` => `(int, const char *val)`
+
+        	Check to see if a key is present in the options object.
+
+        	If it is not, then return 0.
+
+        	If val is non-NULL, *val will be updated to point to the value.
+
+        	The option will be recorded as having been accessed.
+        """
+        return _mupdf.FzOptions_fz_lookup_option(self, key, val)
+
+    def fz_lookup_option_boolean(self, key, x):
+        r"""
+        Class-aware wrapper for `::fz_lookup_option_boolean()`.
+
+        This method has out-params. Python/C# wrappers look like:
+        	`fz_lookup_option_boolean(const char *key)` => `(int, int x)`
+
+        	Check to see if a key is present, and is true or false.
+
+        	If it is absent, return 0.
+
+        	If it is true (empty, 1, yes, true, or enabled), *x is assigned 1,
+        	the invalid flag is cleared, marked as accessed, returns 1.
+
+        	If it is false (0, no, false, or disabled), *x is assigned 0,
+        	the invalid flag is clear, marked as accessed, returns 0.
+
+        	If it is any other value, it is marked as invalid, returns -1.
+        """
+        return _mupdf.FzOptions_fz_lookup_option_boolean(self, key, x)
+
+    def fz_lookup_option_enum(self, key, x, enum_list):
+        r"""
+        Class-aware wrapper for `::fz_lookup_option_enum()`.
+
+        This method has out-params. Python/C# wrappers look like:
+        	`fz_lookup_option_enum(const char *key, const ::fz_option_enums *enum_list)` => `(int, int x)`
+        """
+        return _mupdf.FzOptions_fz_lookup_option_enum(self, key, x, enum_list)
+
+    def fz_lookup_option_float(self, key, x):
+        r"""
+        Class-aware wrapper for `::fz_lookup_option_float()`.
+
+        This method has out-params. Python/C# wrappers look like:
+        	`fz_lookup_option_float(const char *key)` => `(int, float x)`
+
+        	Check to see if an option is present and is of the given type.
+
+        	If an option is absent, this returns 0.
+
+        	If an option is present, but not of the required type, it will be
+        	flagged internally as being invalid, and we will return -1.
+
+        	If an option is present, and of the required type, any previously
+        	set invalid flag will be cleared.
+
+        	This means we can (for example) lookup an option as an enum, and then
+        	safely look for it being an integer if that fails.
+        """
+        return _mupdf.FzOptions_fz_lookup_option_float(self, key, x)
+
+    def fz_lookup_option_integer(self, key, x):
+        r"""
+        Class-aware wrapper for `::fz_lookup_option_integer()`.
+
+        This method has out-params. Python/C# wrappers look like:
+        	`fz_lookup_option_integer(const char *key)` => `(int, int x)`
+        """
+        return _mupdf.FzOptions_fz_lookup_option_integer(self, key, x)
+
+    def fz_lookup_option_unsigned(self, key, x):
+        r"""
+        Class-aware wrapper for `::fz_lookup_option_unsigned()`.
+
+        This method has out-params. Python/C# wrappers look like:
+        	`fz_lookup_option_unsigned(const char *key)` => `(int, unsigned int x)`
+        """
+        return _mupdf.FzOptions_fz_lookup_option_unsigned(self, key, x)
+
+    def fz_lookup_option_yes(self, key):
+        r"""
+        Class-aware wrapper for `::fz_lookup_option_yes()`.
+        	Check to see if a key is a boolean.
+
+        	If it is absent, return 0.
+
+        	If it is true (empty, 1, yes, true, or enabled), returns 1,
+        	clears any invalid flag, and counts as accessed.
+
+        	If it is false (0, no, false, or disabled), returns 0,
+        	clears any invalid flag, and counts as accessed.
+
+        	If it is absent, or any other value, it is marked as invalid, returns 0.
+        """
+        return _mupdf.FzOptions_fz_lookup_option_yes(self, key)
+
+    def fz_parse_options(self, option_string):
+        r"""
+        Class-aware wrapper for `::fz_parse_options()`.
+        	Parse more options from an options string, and add them to
+        	an existing fz_options object.
+
+        	The parser supports three distinct syntaxes (identified by the leading character).
+
+        	- Classic comma separated list of values
+        		rotate=90,bbox="0,0,100,100",title="Hello, world!"
+
+        	- URL query string
+        		?rotate=90&bbox=0,0,100,100&title=Hello, world!
+
+        	- A single JSON object -- no nested objects (except arrays of numbers)
+        		{"rotate":90,"bbox":[0,0,100,100],"title":"Hello, world!"}
+        """
+        return _mupdf.FzOptions_fz_parse_options(self, option_string)
+
+    def fz_throw_on_unused_options(self, prefix):
+        r"""
+        Class-aware wrapper for `::fz_throw_on_unused_options()`.
+        	Throw for any options being unused or invalid.
+
+        	Either this, or fz_warn_on_unused_options should always be called
+        	(in non-error cases at least) before dropping options.
+
+        	Returns 0 if OK, non-zero otherwise.
+        """
+        return _mupdf.FzOptions_fz_throw_on_unused_options(self, prefix)
+
+    def fz_validate_options(self, prefix):
+        r"""
+        Class-aware wrapper for `::fz_validate_options()`.
+        	This should be called by any consumer of options after it has looked up
+        	the options it understands. This will throw if any options were found to
+        	be flagged as being invalid.
+        """
+        return _mupdf.FzOptions_fz_validate_options(self, prefix)
+
+    def fz_warn_on_unused_options(self, prefix):
+        r"""
+        Class-aware wrapper for `::fz_warn_on_unused_options()`.
+        	Warn for any options being unused. Throw if any options are invalid.
+
+        	Either this, or fz_throw_on_unused_options should always be called
+        	(in non-error cases at least) before dropping options.
+
+        	Returns 0 if OK, non-zero otherwise.
+        """
+        return _mupdf.FzOptions_fz_warn_on_unused_options(self, prefix)
+
+    def __init__(self, *args):
+        r"""
+        *Overload 1:*
+         == Constructors.  Constructor using `fz_new_options()`.
+        		Create an options object, with the initial contents parsed from the string.
+        		See fz_parse_options for details on the string parsing.
+        		If the string is NULL, the options object will be initialized but empty.
+
+
+        |
+
+        *Overload 2:*
+         Copy constructor using `fz_keep_options()`.
+
+        |
+
+        *Overload 3:*
+         Default constructor, sets `m_internal` to null.
+
+        |
+
+        *Overload 4:*
+         Constructor using raw copy of pre-existing `::fz_options`.
+        """
+        _mupdf.FzOptions_swiginit(self, _mupdf.new_FzOptions(*args))
+    __swig_destroy__ = _mupdf.delete_FzOptions
+
+    def m_internal_value(self):
+        r"""Return numerical value of .m_internal; helps with Python debugging."""
+        return _mupdf.FzOptions_m_internal_value(self)
+
+    def __nonzero__(self):
+        return _mupdf.FzOptions___nonzero__(self)
+    __bool__ = __nonzero__
+
+
+    m_internal = property(_mupdf.FzOptions_m_internal_get, _mupdf.FzOptions_m_internal_set, doc=r"""Pointer to wrapped data.""")
+    s_num_instances = property(_mupdf.FzOptions_s_num_instances_get, _mupdf.FzOptions_s_num_instances_set)
+
+# Register FzOptions in _mupdf:
+_mupdf.FzOptions_swigregister(FzOptions)
 class FzOutline(object):
     r"""
     Wrapper class for struct `fz_outline`.
@@ -30323,6 +31961,10 @@ class FzOutput(object):
         	Output structured text to a file in XML format.
         """
         return _mupdf.FzOutput_fz_print_stext_page_as_xml(self, page, id)
+
+    def fz_print_stext_page_as_xml_with_flags(self, page, id, flags):
+        r"""Class-aware wrapper for `::fz_print_stext_page_as_xml_with_flags()`."""
+        return _mupdf.FzOutput_fz_print_stext_page_as_xml_with_flags(self, page, id, flags)
 
     def fz_print_stext_trailer_as_html(self):
         r"""Class-aware wrapper for `::fz_print_stext_trailer_as_html()`."""
@@ -31036,6 +32678,10 @@ class FzPage(object):
         """
         return _mupdf.FzPage_fz_new_display_list_from_page_contents(self)
 
+    def fz_new_pixmap_from_culled_page(self, ctm, cs, alpha, opts):
+        r"""Class-aware wrapper for `::fz_new_pixmap_from_culled_page()`."""
+        return _mupdf.FzPage_fz_new_pixmap_from_culled_page(self, ctm, cs, alpha, opts)
+
     def fz_new_pixmap_from_page(self, ctm, cs, alpha):
         r"""Class-aware wrapper for `::fz_new_pixmap_from_page()`."""
         return _mupdf.FzPage_fz_new_pixmap_from_page(self, ctm, cs, alpha)
@@ -31052,6 +32698,22 @@ class FzPage(object):
     def fz_new_pixmap_from_page_contents_with_separations(self, ctm, cs, seps, alpha):
         r"""Class-aware wrapper for `::fz_new_pixmap_from_page_contents_with_separations()`."""
         return _mupdf.FzPage_fz_new_pixmap_from_page_contents_with_separations(self, ctm, cs, seps, alpha)
+
+    def fz_new_pixmap_from_page_culling_text(self, ctm, cs, alpha, n, rects):
+        r"""Class-aware wrapper for `::fz_new_pixmap_from_page_culling_text()`."""
+        return _mupdf.FzPage_fz_new_pixmap_from_page_culling_text(self, ctm, cs, alpha, n, rects)
+
+    def fz_new_pixmap_from_page_culling_text2(self, ctm, cs, alpha, rects):
+        r"""Class-aware wrapper for `::fz_new_pixmap_from_page_culling_text2()`.   Swig-friendly wrapper for fz_new_pixmap_from_page_culling_text()."""
+        return _mupdf.FzPage_fz_new_pixmap_from_page_culling_text2(self, ctm, cs, alpha, rects)
+
+    def fz_new_pixmap_from_page_culling_text_etc(self, ctm, cs, alpha, n, rects, borders):
+        r"""Class-aware wrapper for `::fz_new_pixmap_from_page_culling_text_etc()`."""
+        return _mupdf.FzPage_fz_new_pixmap_from_page_culling_text_etc(self, ctm, cs, alpha, n, rects, borders)
+
+    def fz_new_pixmap_from_page_culling_text_etc2(self, ctm, cs, alpha, rects, borders):
+        r"""Class-aware wrapper for `::fz_new_pixmap_from_page_culling_text_etc2()`.   Swig-friendly wrapper for fz_new_pixmap_from_page_culling_text_etc()."""
+        return _mupdf.FzPage_fz_new_pixmap_from_page_culling_text_etc2(self, ctm, cs, alpha, rects, borders)
 
     def fz_new_pixmap_from_page_with_separations(self, ctm, cs, seps, alpha):
         r"""Class-aware wrapper for `::fz_new_pixmap_from_page_with_separations()`."""
@@ -31706,6 +33368,33 @@ class FzPclOptions(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
 
+    def fz_apply_pcl_options(self, args):
+        r"""Class-aware wrapper for `::fz_apply_pcl_options()`."""
+        return _mupdf.FzPclOptions_fz_apply_pcl_options(self, args)
+
+    def fz_init_pcl_options(self):
+        r"""
+        Class-aware wrapper for `::fz_init_pcl_options()`.
+        	Parse PCL options.
+
+        	Currently defined options and values are as follows:
+
+        		preset=X	Either "generic" or one of the presets as for fz_pcl_preset.
+        		spacing=0	No vertical spacing capability
+        		spacing=1	PCL 3 spacing (<ESC>*p+<n>Y)
+        		spacing=2	PCL 4 spacing (<ESC>*b<n>Y)
+        		spacing=3	PCL 5 spacing (<ESC>*b<n>Y and clear seed row)
+        		mode2		Disable/Enable mode 2 graphics compression
+        		mode3		Disable/Enable mode 3 graphics compression
+        		eog_reset	End of graphics (<ESC>*rB) resets all parameters
+        		has_duplex	Duplex supported (<ESC>&l<duplex>S)
+        		has_papersize	Papersize setting supported (<ESC>&l<sizecode>A)
+        		has_copies	Number of copies supported (<ESC>&l<copies>X)
+        		is_ljet4pjl	Disable/Enable HP 4PJL model-specific output
+        		is_oce9050	Disable/Enable Oce 9050 model-specific output
+        """
+        return _mupdf.FzPclOptions_fz_init_pcl_options(self)
+
     def fz_pcl_preset(self, preset):
         r"""
         Class-aware wrapper for `::fz_pcl_preset()`.
@@ -31732,35 +33421,17 @@ class FzPclOptions(object):
     def __init__(self, *args):
         r"""
         *Overload 1:*
-         == Constructors.  Constructor using `fz_parse_pcl_options()`.
-        		Parse PCL options.
-
-        		Currently defined options and values are as follows:
-
-        			preset=X	Either "generic" or one of the presets as for fz_pcl_preset.
-        			spacing=0	No vertical spacing capability
-        			spacing=1	PCL 3 spacing (<ESC>*p+<n>Y)
-        			spacing=2	PCL 4 spacing (<ESC>*b<n>Y)
-        			spacing=3	PCL 5 spacing (<ESC>*b<n>Y and clear seed row)
-        			mode2		Disable/Enable mode 2 graphics compression
-        			mode3		Disable/Enable mode 3 graphics compression
-        			eog_reset	End of graphics (<ESC>*rB) resets all parameters
-        			has_duplex	Duplex supported (<ESC>&l<duplex>S)
-        			has_papersize	Papersize setting supported (<ESC>&l<sizecode>A)
-        			has_copies	Number of copies supported (<ESC>&l<copies>X)
-        			is_ljet4pjl	Disable/Enable HP 4PJL model-specific output
-        			is_oce9050	Disable/Enable Oce 9050 model-specific output
-
+        == Constructors.  Constructor using `fz_parse_pcl_options()`.
 
         |
 
         *Overload 2:*
-         Default constructor, sets `m_internal` to null.
+        Default constructor, sets `m_internal` to null.
 
         |
 
         *Overload 3:*
-         Constructor using raw copy of pre-existing `::fz_pcl_options`.
+        Constructor using raw copy of pre-existing `::fz_pcl_options`.
         """
         _mupdf.FzPclOptions_swiginit(self, _mupdf.new_FzPclOptions(*args))
     __swig_destroy__ = _mupdf.delete_FzPclOptions
@@ -31788,33 +33459,42 @@ class FzPclmOptions(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
 
+    def fz_apply_pclm_options(self, args):
+        r"""Class-aware wrapper for `::fz_apply_pclm_options()`."""
+        return _mupdf.FzPclmOptions_fz_apply_pclm_options(self, args)
+
+    def fz_init_pclm_options(self):
+        r"""
+        Class-aware wrapper for `::fz_init_pclm_options()`.
+        	Parse PCLm options.
+
+        	Currently defined options and values are as follows:
+
+        		compression=none: No compression
+        		compression=flate: Flate compression
+        		strip-height=n: Strip height (default 16)
+        """
+        return _mupdf.FzPclmOptions_fz_init_pclm_options(self)
+
     def __init__(self, *args):
         r"""
         *Overload 1:*
-         == Constructors.  Constructor using `fz_parse_pclm_options()`.
-        		Parse PCLm options.
-
-        		Currently defined options and values are as follows:
-
-        			compression=none: No compression
-        			compression=flate: Flate compression
-        			strip-height=n: Strip height (default 16)
-
+        == Constructors.  Constructor using `fz_parse_pclm_options()`.
 
         |
 
         *Overload 2:*
-         Construct using fz_parse_pclm_options().
+        Construct using fz_parse_pclm_options().
 
         |
 
         *Overload 3:*
-         Default constructor, sets `m_internal` to null.
+        Default constructor, sets `m_internal` to null.
 
         |
 
         *Overload 4:*
-         Constructor using raw copy of pre-existing `::fz_pclm_options`.
+        Constructor using raw copy of pre-existing `::fz_pclm_options`.
         """
         _mupdf.FzPclmOptions_swiginit(self, _mupdf.new_FzPclmOptions(*args))
     __swig_destroy__ = _mupdf.delete_FzPclmOptions
@@ -31842,9 +33522,13 @@ class FzPdfocrOptions(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
 
-    def fz_parse_pdfocr_options(self, args):
+    def fz_apply_pdfocr_options(self, options):
+        r"""Class-aware wrapper for `::fz_apply_pdfocr_options()`."""
+        return _mupdf.FzPdfocrOptions_fz_apply_pdfocr_options(self, options)
+
+    def fz_init_pdfocr_options(self):
         r"""
-        Class-aware wrapper for `::fz_parse_pdfocr_options()`.
+        Class-aware wrapper for `::fz_init_pdfocr_options()`.
         	Parse PDFOCR options.
 
         	Currently defined options and values are as follows:
@@ -31855,6 +33539,10 @@ class FzPdfocrOptions(object):
         		ocr-language=<lang>: OCR Language (default eng)
         		ocr-datadir=<datadir>: OCR data path (default rely on TESSDATA_PREFIX)
         """
+        return _mupdf.FzPdfocrOptions_fz_init_pdfocr_options(self)
+
+    def fz_parse_pdfocr_options(self, args):
+        r"""Class-aware wrapper for `::fz_parse_pdfocr_options()`."""
         return _mupdf.FzPdfocrOptions_fz_parse_pdfocr_options(self, args)
 
     def language_set2(self, language):
@@ -32590,6 +34278,21 @@ class FzPixmap(object):
         |
 
         *Overload 4:*
+         Constructor using `fz_new_pixmap_from_culled_display_list()`.
+
+        |
+
+        *Overload 5:*
+         Constructor using `fz_new_pixmap_from_culled_page()`.
+
+        |
+
+        *Overload 6:*
+         Constructor using `fz_new_pixmap_from_culled_page_number()`.
+
+        |
+
+        *Overload 7:*
          Constructor using `fz_new_pixmap_from_display_list()`.
         		Render the page to a pixmap using the transform and colorspace.
 
@@ -32598,7 +34301,27 @@ class FzPixmap(object):
 
         |
 
-        *Overload 5:*
+        *Overload 8:*
+         Constructor using `fz_new_pixmap_from_display_list_culling_text()`.
+
+        |
+
+        *Overload 9:*
+         Constructor using `fz_new_pixmap_from_display_list_culling_text2()`.  Swig-friendly wrapper for fz_new_pixmap_from_display_list_culling_text().
+
+        |
+
+        *Overload 10:*
+         Constructor using `fz_new_pixmap_from_display_list_culling_text_etc()`.
+
+        |
+
+        *Overload 11:*
+         Constructor using `fz_new_pixmap_from_display_list_culling_text_etc2()`.  Swig-friendly wrapper for fz_new_pixmap_from_display_list_culling_text_etc().
+
+        |
+
+        *Overload 12:*
          Constructor using `fz_new_pixmap_from_display_list_with_separations()`.
         		Render the page contents with control over spot colors.
 
@@ -32607,27 +34330,69 @@ class FzPixmap(object):
 
         |
 
-        *Overload 6:*
+        *Overload 13:*
          Constructor using `fz_new_pixmap_from_page()`.
 
         |
 
-        *Overload 7:*
+        *Overload 14:*
+         Constructor using `fz_new_pixmap_from_page_culling_text()`.
+
+        |
+
+        *Overload 15:*
+         Constructor using `fz_new_pixmap_from_page_culling_text2()`.  Swig-friendly wrapper for fz_new_pixmap_from_page_culling_text().
+
+        |
+
+        *Overload 16:*
+         Constructor using `fz_new_pixmap_from_page_culling_text_etc()`.
+
+        |
+
+        *Overload 17:*
+         Constructor using `fz_new_pixmap_from_page_culling_text_etc2()`.  Swig-friendly wrapper for fz_new_pixmap_from_page_culling_text_etc().
+
+        |
+
+        *Overload 18:*
          Constructor using `fz_new_pixmap_from_page_number()`.
 
         |
 
-        *Overload 8:*
+        *Overload 19:*
+         Constructor using `fz_new_pixmap_from_page_number_culling_text()`.
+        		Returns a page rendered with text from the given rectangles culled.
+
+
+        |
+
+        *Overload 20:*
+         Constructor using `fz_new_pixmap_from_page_number_culling_text2()`.  Swig-friendly wrapper for fz_new_pixmap_from_page_number_culling_text().
+
+        |
+
+        *Overload 21:*
+         Constructor using `fz_new_pixmap_from_page_number_culling_text_etc()`.
+
+        |
+
+        *Overload 22:*
+         Constructor using `fz_new_pixmap_from_page_number_culling_text_etc2()`.  Swig-friendly wrapper for fz_new_pixmap_from_page_number_culling_text_etc().
+
+        |
+
+        *Overload 23:*
          Constructor using `fz_new_pixmap_from_page_number_with_separations()`.
 
         |
 
-        *Overload 9:*
+        *Overload 24:*
          Constructor using `fz_new_pixmap_from_page_with_separations()`.
 
         |
 
-        *Overload 10:*
+        *Overload 25:*
          Constructor using `fz_new_pixmap_from_pixmap()`.
         		Create a new pixmap that represents a subarea of the specified
         		pixmap. A reference is taken to this pixmap that will be dropped
@@ -32642,7 +34407,7 @@ class FzPixmap(object):
 
         |
 
-        *Overload 11:*
+        *Overload 26:*
          Constructor using `fz_new_pixmap_with_bbox()`.
         		Create a pixmap of a given size, location and pixel format.
 
@@ -32666,7 +34431,7 @@ class FzPixmap(object):
 
         |
 
-        *Overload 12:*
+        *Overload 27:*
          Constructor using `fz_new_pixmap_with_bbox_and_data()`.
         		Create a pixmap of a given size, location and pixel format,
         		using the supplied data block.
@@ -32693,7 +34458,7 @@ class FzPixmap(object):
 
         |
 
-        *Overload 13:*
+        *Overload 28:*
          Constructor using `fz_new_pixmap_with_data()`.
         		Create a new pixmap, with its origin at
         		(0,0) using the supplied data block.
@@ -32720,32 +34485,32 @@ class FzPixmap(object):
 
         |
 
-        *Overload 14:*
+        *Overload 29:*
          Constructor using `pdf_new_pixmap_from_annot()`.
 
         |
 
-        *Overload 15:*
+        *Overload 30:*
          Constructor using `pdf_new_pixmap_from_page_contents_with_separations_and_usage()`.
 
         |
 
-        *Overload 16:*
+        *Overload 31:*
          Constructor using `pdf_new_pixmap_from_page_contents_with_usage()`.
 
         |
 
-        *Overload 17:*
+        *Overload 32:*
          Copy constructor using `fz_keep_pixmap()`.
 
         |
 
-        *Overload 18:*
+        *Overload 33:*
          Default constructor, sets `m_internal` to null.
 
         |
 
-        *Overload 19:*
+        *Overload 34:*
          Constructor using raw copy of pre-existing `::fz_pixmap`.
         """
         _mupdf.FzPixmap_swiginit(self, _mupdf.new_FzPixmap(*args))
@@ -33061,6 +34826,13 @@ class FzPool(object):
         """
         return _mupdf.FzPool_fz_pool_strdup(self, s)
 
+    def fz_pool_strndup(self, s, n):
+        r"""
+        Class-aware wrapper for `::fz_pool_strndup()`.
+        	strndup equivalent allocating from the pool.
+        """
+        return _mupdf.FzPool_fz_pool_strndup(self, s, n)
+
     def fz_xml_add_att(self, node, key, val):
         r"""
         Class-aware wrapper for `::fz_xml_add_att()`.
@@ -33219,6 +34991,27 @@ class FzPwgOptions(object):
 
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
+
+    def fz_apply_pwg_options(self, args):
+        r"""
+        Class-aware wrapper for `::fz_apply_pwg_options()`.
+        	Apply the given options to an initialised pwg options struct.
+        """
+        return _mupdf.FzPwgOptions_fz_apply_pwg_options(self, args)
+
+    def fz_init_pwg_options(self):
+        r"""
+        Class-aware wrapper for `::fz_init_pwg_options()`.
+        	Init pwg options to a sensible default.
+        """
+        return _mupdf.FzPwgOptions_fz_init_pwg_options(self)
+
+    def fz_parse_pwg_options(self, args):
+        r"""
+        Class-aware wrapper for `::fz_parse_pwg_options()`.
+        	Initialise a pwg options struct, and parse the given options string.
+        """
+        return _mupdf.FzPwgOptions_fz_parse_pwg_options(self, args)
 
     def __init__(self, *args):
         r"""
@@ -33675,6 +35468,15 @@ class FzRect(object):
         """
         return _mupdf.FzRect_fz_quad_from_rect(self)
 
+    def fz_rect_area(self):
+        r"""
+        Class-aware wrapper for `::fz_rect_area()`.
+        	Calculate the area of a rectangle.
+
+        	Always non-negative. All invalid or empty rects return 0.
+        """
+        return _mupdf.FzRect_fz_rect_area(self)
+
     def fz_round_rect(self):
         r"""
         Class-aware wrapper for `::fz_round_rect()`.
@@ -33940,32 +35742,23 @@ class FzSearch(object):
         """
         return _mupdf.FzSearch_fz_feed_search(self, page, seq)
 
-    def fz_search_set_options(self, options, needle):
-        r"""
-        Class-aware wrapper for `::fz_search_set_options()`.
-        	Change the options/needle to be used for a search.
-
-        	If the needle is invalid (in the case of regexps, it fails to compile)
-        	it will throw an error.
-
-        	If the needle changes, the current position of the search within the
-        	text is kept.
-
-        	If the options change, the search position may revert to the beginning
-        	of the current page.
-        """
-        return _mupdf.FzSearch_fz_search_set_options(self, options, needle)
-
     def __init__(self, *args):
         r"""
         *Overload 1:*
          == Constructors.  Constructor using `fz_new_search()`.
         		Create a new search.
 
+        		If the needle is invalid (in the case of regexps, it fails to compile) it will throw an error.
+
 
         |
 
         *Overload 2:*
+         Default constructor, sets `m_internal` to null.
+
+        |
+
+        *Overload 3:*
          Constructor using raw copy of pre-existing `::fz_search`.
         """
         _mupdf.FzSearch_swiginit(self, _mupdf.new_FzSearch(*args))
@@ -33985,6 +35778,72 @@ class FzSearch(object):
 
 # Register FzSearch in _mupdf:
 _mupdf.FzSearch_swigregister(FzSearch)
+class FzSearchMatch(object):
+    r"""Wrapper class for struct `fz_search_match`. Not copyable or assignable."""
+
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+
+    def __init__(self, *args):
+        r"""
+        *Overload 1:*
+        Default constructor, sets `m_internal` to null.
+
+        |
+
+        *Overload 2:*
+        Constructor using raw copy of pre-existing `::fz_search_match`.
+        """
+        _mupdf.FzSearchMatch_swiginit(self, _mupdf.new_FzSearchMatch(*args))
+    __swig_destroy__ = _mupdf.delete_FzSearchMatch
+
+    def m_internal_value(self):
+        r"""Return numerical value of .m_internal; helps with Python debugging."""
+        return _mupdf.FzSearchMatch_m_internal_value(self)
+
+    def __nonzero__(self):
+        return _mupdf.FzSearchMatch___nonzero__(self)
+    __bool__ = __nonzero__
+
+
+    m_internal = property(_mupdf.FzSearchMatch_m_internal_get, _mupdf.FzSearchMatch_m_internal_set, doc=r"""Pointer to wrapped data.""")
+    s_num_instances = property(_mupdf.FzSearchMatch_s_num_instances_get, _mupdf.FzSearchMatch_s_num_instances_set)
+
+# Register FzSearchMatch in _mupdf:
+_mupdf.FzSearchMatch_swigregister(FzSearchMatch)
+class FzSearchQuad(object):
+    r"""Wrapper class for struct `fz_search_quad`. Not copyable or assignable."""
+
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+
+    def __init__(self, *args):
+        r"""
+        *Overload 1:*
+        Default constructor, sets `m_internal` to null.
+
+        |
+
+        *Overload 2:*
+        Constructor using raw copy of pre-existing `::fz_search_quad`.
+        """
+        _mupdf.FzSearchQuad_swiginit(self, _mupdf.new_FzSearchQuad(*args))
+    __swig_destroy__ = _mupdf.delete_FzSearchQuad
+
+    def m_internal_value(self):
+        r"""Return numerical value of .m_internal; helps with Python debugging."""
+        return _mupdf.FzSearchQuad_m_internal_value(self)
+
+    def __nonzero__(self):
+        return _mupdf.FzSearchQuad___nonzero__(self)
+    __bool__ = __nonzero__
+
+
+    m_internal = property(_mupdf.FzSearchQuad_m_internal_get, _mupdf.FzSearchQuad_m_internal_set, doc=r"""Pointer to wrapped data.""")
+    s_num_instances = property(_mupdf.FzSearchQuad_s_num_instances_get, _mupdf.FzSearchQuad_s_num_instances_set)
+
+# Register FzSearchQuad in _mupdf:
+_mupdf.FzSearchQuad_swigregister(FzSearchQuad)
 class FzSearchResult(object):
     r"""
     Wrapper class for struct `fz_search_result`. Not copyable or assignable.
@@ -34021,39 +35880,6 @@ class FzSearchResult(object):
 
 # Register FzSearchResult in _mupdf:
 _mupdf.FzSearchResult_swigregister(FzSearchResult)
-class FzSearchResultDetails(object):
-    r"""Wrapper class for struct `fz_search_result_details`. Not copyable or assignable."""
-
-    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
-    __repr__ = _swig_repr
-
-    def __init__(self, *args):
-        r"""
-        *Overload 1:*
-        Default constructor, sets `m_internal` to null.
-
-        |
-
-        *Overload 2:*
-        Constructor using raw copy of pre-existing `::fz_search_result_details`.
-        """
-        _mupdf.FzSearchResultDetails_swiginit(self, _mupdf.new_FzSearchResultDetails(*args))
-    __swig_destroy__ = _mupdf.delete_FzSearchResultDetails
-
-    def m_internal_value(self):
-        r"""Return numerical value of .m_internal; helps with Python debugging."""
-        return _mupdf.FzSearchResultDetails_m_internal_value(self)
-
-    def __nonzero__(self):
-        return _mupdf.FzSearchResultDetails___nonzero__(self)
-    __bool__ = __nonzero__
-
-
-    m_internal = property(_mupdf.FzSearchResultDetails_m_internal_get, _mupdf.FzSearchResultDetails_m_internal_set, doc=r"""Pointer to wrapped data.""")
-    s_num_instances = property(_mupdf.FzSearchResultDetails_s_num_instances_get, _mupdf.FzSearchResultDetails_s_num_instances_set)
-
-# Register FzSearchResultDetails in _mupdf:
-_mupdf.FzSearchResultDetails_swigregister(FzSearchResultDetails)
 class FzSeparations(object):
     r"""Wrapper class for struct `fz_separations`."""
 
@@ -34653,6 +36479,56 @@ class FzStextChar(object):
 
 # Register FzStextChar in _mupdf:
 _mupdf.FzStextChar_swigregister(FzStextChar)
+class FzStextGridDivider(object):
+    r"""Wrapper class for struct `fz_stext_grid_divider`."""
+
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+
+    def __init__(self, *args):
+        r"""
+        *Overload 1:*
+        We use default copy constructor and operator=.  Default constructor, sets each member to default value.
+
+        |
+
+        *Overload 2:*
+        Constructor using raw copy of pre-existing `::fz_stext_grid_divider`.
+        """
+        _mupdf.FzStextGridDivider_swiginit(self, _mupdf.new_FzStextGridDivider(*args))
+
+    def reinforcement(self):
+        return _mupdf.FzStextGridDivider_reinforcement(self)
+
+    def pos(self):
+        return _mupdf.FzStextGridDivider_pos(self)
+
+    def min(self):
+        return _mupdf.FzStextGridDivider_min(self)
+
+    def max(self):
+        return _mupdf.FzStextGridDivider_max(self)
+
+    def uncertainty(self):
+        return _mupdf.FzStextGridDivider_uncertainty(self)
+    __swig_destroy__ = _mupdf.delete_FzStextGridDivider
+    m_internal = property(_mupdf.FzStextGridDivider_m_internal_get, _mupdf.FzStextGridDivider_m_internal_set)
+    s_num_instances = property(_mupdf.FzStextGridDivider_s_num_instances_get, _mupdf.FzStextGridDivider_s_num_instances_set, doc=r"""Wrapped data is held by value.""")
+
+    def to_string(self):
+        r"""Returns string containing our members, labelled and inside (...), using operator<<."""
+        return _mupdf.FzStextGridDivider_to_string(self)
+
+    def __eq__(self, rhs):
+        r"""Comparison method."""
+        return _mupdf.FzStextGridDivider___eq__(self, rhs)
+
+    def __ne__(self, rhs):
+        r"""Comparison method."""
+        return _mupdf.FzStextGridDivider___ne__(self, rhs)
+
+# Register FzStextGridDivider in _mupdf:
+_mupdf.FzStextGridDivider_swigregister(FzStextGridDivider)
 class FzStextGridInfo(object):
     r"""Wrapper class for struct `fz_stext_grid_info`. Not copyable or assignable."""
 
@@ -34692,6 +36568,10 @@ class FzStextGridPositions(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
 
+    def list(self, i):
+        return _mupdf.FzStextGridPositions_list(self, i)
+    __swig_destroy__ = _mupdf.delete_FzStextGridPositions
+
     def __init__(self, *args):
         r"""
         *Overload 1:*
@@ -34703,7 +36583,6 @@ class FzStextGridPositions(object):
         Constructor using raw copy of pre-existing `::fz_stext_grid_positions`.
         """
         _mupdf.FzStextGridPositions_swiginit(self, _mupdf.new_FzStextGridPositions(*args))
-    __swig_destroy__ = _mupdf.delete_FzStextGridPositions
 
     def m_internal_value(self):
         r"""Return numerical value of .m_internal; helps with Python debugging."""
@@ -34769,11 +36648,25 @@ class FzStextOptions(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
 
+    def fz_apply_stext_options(self, options):
+        r"""
+        Class-aware wrapper for `::fz_apply_stext_options()`.
+        	Parse stext device options from an fz_options struct
+        	into an already initialised opts structure.
+        """
+        return _mupdf.FzStextOptions_fz_apply_stext_options(self, options)
+
+    def fz_init_stext_options(self):
+        r"""Class-aware wrapper for `::fz_init_stext_options()`."""
+        return _mupdf.FzStextOptions_fz_init_stext_options(self)
+
     def fz_parse_stext_options(self, string):
         r"""
         Class-aware wrapper for `::fz_parse_stext_options()`.
         	Parse stext device options from a comma separated key-value
         	string.
+
+        	This initialises the opts structure.
         """
         return _mupdf.FzStextOptions_fz_parse_stext_options(self, string)
 
@@ -34826,6 +36719,7 @@ class FzStextOptions(object):
     flags = property(_mupdf.FzStextOptions_flags_get, _mupdf.FzStextOptions_flags_set)
     scale = property(_mupdf.FzStextOptions_scale_get, _mupdf.FzStextOptions_scale_set)
     clip = property(_mupdf.FzStextOptions_clip_get, _mupdf.FzStextOptions_clip_set)
+    table_hunt_options = property(_mupdf.FzStextOptions_table_hunt_options_get, _mupdf.FzStextOptions_table_hunt_options_set)
     s_num_instances = property(_mupdf.FzStextOptions_s_num_instances_get, _mupdf.FzStextOptions_s_num_instances_set)
 
     def to_string(self):
@@ -34860,7 +36754,14 @@ class FzStextPage(object):
         r"""Class-aware wrapper for `::fz_classify_stext_rect()`."""
         return _mupdf.FzStextPage_fz_classify_stext_rect(self, classification, rect)
 
-    def fz_find_table_within_bounds(self, bounds):
+    def fz_debug_stext_page(self, id):
+        r"""
+        Class-aware wrapper for `::fz_debug_stext_page()`.
+        	Convenience function to call the above.
+        """
+        return _mupdf.FzStextPage_fz_debug_stext_page(self, id)
+
+    def fz_find_table_within_bounds(self, bounds, opts):
         r"""
         Class-aware wrapper for `::fz_find_table_within_bounds()`.
         	Interpret the bounded contents of a given stext page as
@@ -34877,7 +36778,38 @@ class FzStextPage(object):
         	Returns the stext_block list that contains the content of
         	the table.
         """
-        return _mupdf.FzStextPage_fz_find_table_within_bounds(self, bounds)
+        return _mupdf.FzStextPage_fz_find_table_within_bounds(self, bounds, opts)
+
+    def fz_find_table_within_grid(self, xpos, ypos, limit, opts):
+        r"""
+        Class-aware wrapper for `::fz_find_table_within_grid()`.
+        	Interpret the contents of a given stext page that fall within
+        	a given grid as a table.
+
+        	The page contents will be rewritten to contain a Table
+        	structure with the identified content in it.
+
+        	This uses the same logic as for fz_table_hunt, without the
+        	actual hunting, and the grid detection phase. fz_table_hunt
+        	hunts to find possible bounds for multiple tables on the
+        	page; this routine just finds a single table contained within
+        	the given rectangle. The grid detection phase is skipped, and
+        	we just use the grid as given to us. We still perform the
+        	cell analysis stage though, so the grid can be refined.
+
+        	Returns the stext_block list that contains the content of
+        	the table, or NULL if no table is found that scores below
+        	limit.
+        """
+        return _mupdf.FzStextPage_fz_find_table_within_grid(self, xpos, ypos, limit, opts)
+
+    def fz_find_table_within_grid_dividers(self, xs, ys, limit, opts):
+        r"""Class-aware wrapper for `::fz_find_table_within_grid_dividers()`."""
+        return _mupdf.FzStextPage_fz_find_table_within_grid_dividers(self, xs, ys, limit, opts)
+
+    def fz_find_table_within_grid_floats(self, xs, ys, limit, opts):
+        r"""Class-aware wrapper for `::fz_find_table_within_grid_floats()`.   Swig-friendly wrapper for fz_find_table_within_grid()."""
+        return _mupdf.FzStextPage_fz_find_table_within_grid_floats(self, xs, ys, limit, opts)
 
     def fz_highlight_selection(self, a, b, quads, max_quads):
         r"""
@@ -35016,6 +36948,25 @@ class FzStextPage(object):
         """
         return _mupdf.FzStextPage_fz_paragraph_break(self)
 
+    def fz_propose_table_within_bounds(self, bounds, xposp, yposp, opts):
+        r"""
+        Class-aware wrapper for `::fz_propose_table_within_bounds()`.
+
+        This method has out-params. Python/C# wrappers look like:
+        	`fz_propose_table_within_bounds(::fz_rect bounds, ::fz_stext_grid_positions **xposp, ::fz_stext_grid_positions **yposp, const ::fz_table_hunt_options *opts)` => `(int)`
+
+        	Try to guess at the table structure within given bounds.
+
+        	If no table can be found, we return 0. If we find one we
+        	return non-zero. (Currently, 1, other values reserved
+        	for the future.)
+
+        	In the case of a non-zero return. xposp and ypos are returned
+        	as pointers to fz_stext_grid_positions records that must be
+        	freed.
+        """
+        return _mupdf.FzStextPage_fz_propose_table_within_bounds(self, bounds, xposp, yposp, opts)
+
     def fz_search_stext_page(self, needle, hit_mark, hit_bbox, hit_max):
         r"""
         Class-aware wrapper for `::fz_search_stext_page()`.
@@ -35110,21 +37061,25 @@ class FzStextPage(object):
         r"""Class-aware wrapper for `::fz_stext_remove_page_fill()`."""
         return _mupdf.FzStextPage_fz_stext_remove_page_fill(self)
 
-    def fz_table_hunt(self):
+    def fz_table_hunt(self, opts):
         r"""
         Class-aware wrapper for `::fz_table_hunt()`.
         	Hunt for possible tables on a page, and update the stext with
         	information.
         """
-        return _mupdf.FzStextPage_fz_table_hunt(self)
+        return _mupdf.FzStextPage_fz_table_hunt(self, opts)
 
-    def fz_table_hunt_within_bounds(self, bounds):
+    def fz_table_hunt_within_bounds(self, bounds, opts):
         r"""
         Class-aware wrapper for `::fz_table_hunt_within_bounds()`.
         	Hunt for possible tables within a specific rect on a page, and
         	update the stext with information.
         """
-        return _mupdf.FzStextPage_fz_table_hunt_within_bounds(self, bounds)
+        return _mupdf.FzStextPage_fz_table_hunt_within_bounds(self, bounds, opts)
+
+    def fz_verify_stext_page(self, title):
+        r"""Class-aware wrapper for `::fz_verify_stext_page()`."""
+        return _mupdf.FzStextPage_fz_verify_stext_page(self, title)
 
     def fz_copy_selection(self, a, b, crlf):
         r"""Wrapper for fz_copy_selection() that returns std::string."""
@@ -35232,6 +37187,10 @@ class FzStextPageBlockIterator(object):
     def fz_stext_page_block_iterator_eod_dfs(self):
         r"""Class-aware wrapper for `::fz_stext_page_block_iterator_eod_dfs()`."""
         return _mupdf.FzStextPageBlockIterator_fz_stext_page_block_iterator_eod_dfs(self)
+
+    def fz_stext_page_block_iterator_eod_rdfs(self):
+        r"""Class-aware wrapper for `::fz_stext_page_block_iterator_eod_rdfs()`."""
+        return _mupdf.FzStextPageBlockIterator_fz_stext_page_block_iterator_eod_rdfs(self)
 
     def __init__(self, *args):
         r"""
@@ -36868,6 +38827,14 @@ class FzSvgDeviceOptions(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
 
+    def fz_apply_svg_device_options(self, options):
+        r"""Class-aware wrapper for `::fz_apply_svg_device_options()`."""
+        return _mupdf.FzSvgDeviceOptions_fz_apply_svg_device_options(self, options)
+
+    def fz_init_svg_device_options(self):
+        r"""Class-aware wrapper for `::fz_init_svg_device_options()`."""
+        return _mupdf.FzSvgDeviceOptions_fz_init_svg_device_options(self)
+
     def fz_parse_svg_device_options(self, args):
         r"""Class-aware wrapper for `::fz_parse_svg_device_options()`."""
         return _mupdf.FzSvgDeviceOptions_fz_parse_svg_device_options(self, args)
@@ -36899,6 +38866,88 @@ class FzSvgDeviceOptions(object):
 
 # Register FzSvgDeviceOptions in _mupdf:
 _mupdf.FzSvgDeviceOptions_swigregister(FzSvgDeviceOptions)
+class FzTableHuntOptions(object):
+    r"""
+    Wrapper class for struct `fz_table_hunt_options`.
+    Options for controlling table hunt.
+    """
+
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+
+    def fz_apply_table_hunt_options(self, options):
+        r"""
+        Class-aware wrapper for `::fz_apply_table_hunt_options()`.
+        	Parse table hunt device options from an fz_options struct
+        	into an already initialised opts structure.
+        """
+        return _mupdf.FzTableHuntOptions_fz_apply_table_hunt_options(self, options)
+
+    def fz_init_table_hunt_options(self):
+        r"""Class-aware wrapper for `::fz_init_table_hunt_options()`."""
+        return _mupdf.FzTableHuntOptions_fz_init_table_hunt_options(self)
+
+    def fz_parse_table_hunt_options(self, args):
+        r"""
+        Class-aware wrapper for `::fz_parse_table_hunt_options()`.
+        	Parse table hunt options from a comma separated key-value
+        	string.
+
+        	This initialises the opts structure.
+        """
+        return _mupdf.FzTableHuntOptions_fz_parse_table_hunt_options(self, args)
+
+    def __init__(self, *args):
+        r"""
+        *Overload 1:*
+        Construct
+
+        |
+
+        *Overload 2:*
+        We use default copy constructor and operator=.  Default constructor, sets each member to default value.
+
+        |
+
+        *Overload 3:*
+        Constructor using raw copy of pre-existing `::fz_table_hunt_options`.
+
+        |
+
+        *Overload 4:*
+        Constructor using raw copy of pre-existing `::fz_table_hunt_options`.
+        """
+        _mupdf.FzTableHuntOptions_swiginit(self, _mupdf.new_FzTableHuntOptions(*args))
+
+    def internal(self, *args):
+        r"""
+        *Overload 1:*
+        Access as underlying struct.
+
+        |
+
+        *Overload 2:*
+        Access as underlying struct.
+        """
+        return _mupdf.FzTableHuntOptions_internal(self, *args)
+    __swig_destroy__ = _mupdf.delete_FzTableHuntOptions
+    vertically_collapse_bordered_cells = property(_mupdf.FzTableHuntOptions_vertically_collapse_bordered_cells_get, _mupdf.FzTableHuntOptions_vertically_collapse_bordered_cells_set)
+    s_num_instances = property(_mupdf.FzTableHuntOptions_s_num_instances_get, _mupdf.FzTableHuntOptions_s_num_instances_set)
+
+    def to_string(self):
+        r"""Returns string containing our members, labelled and inside (...), using operator<<."""
+        return _mupdf.FzTableHuntOptions_to_string(self)
+
+    def __eq__(self, rhs):
+        r"""Comparison method."""
+        return _mupdf.FzTableHuntOptions___eq__(self, rhs)
+
+    def __ne__(self, rhs):
+        r"""Comparison method."""
+        return _mupdf.FzTableHuntOptions___ne__(self, rhs)
+
+# Register FzTableHuntOptions in _mupdf:
+_mupdf.FzTableHuntOptions_swigregister(FzTableHuntOptions)
 class FzText(object):
     r"""Wrapper class for struct `fz_text`."""
 
@@ -38326,6 +40375,10 @@ class PdfAnnot(object):
         r"""Class-aware wrapper for `::pdf_annot_has_icon_name()`."""
         return _mupdf.PdfAnnot_pdf_annot_has_icon_name(self)
 
+    def pdf_annot_has_in_reply_to(self):
+        r"""Class-aware wrapper for `::pdf_annot_has_in_reply_to()`."""
+        return _mupdf.PdfAnnot_pdf_annot_has_in_reply_to(self)
+
     def pdf_annot_has_ink_list(self):
         r"""Class-aware wrapper for `::pdf_annot_has_ink_list()`."""
         return _mupdf.PdfAnnot_pdf_annot_has_ink_list(self)
@@ -38373,6 +40426,10 @@ class PdfAnnot(object):
     def pdf_annot_has_rich_defaults(self):
         r"""Class-aware wrapper for `::pdf_annot_has_rich_defaults()`."""
         return _mupdf.PdfAnnot_pdf_annot_has_rich_defaults(self)
+
+    def pdf_annot_has_subject(self):
+        r"""Class-aware wrapper for `::pdf_annot_has_subject()`."""
+        return _mupdf.PdfAnnot_pdf_annot_has_subject(self)
 
     def pdf_annot_has_vertices(self):
         r"""Class-aware wrapper for `::pdf_annot_has_vertices()`."""
@@ -38468,6 +40525,10 @@ class PdfAnnot(object):
         r"""Class-aware wrapper for `::pdf_annot_modification_date()`."""
         return _mupdf.PdfAnnot_pdf_annot_modification_date(self)
 
+    def pdf_annot_name(self):
+        r"""Class-aware wrapper for `::pdf_annot_name()`."""
+        return _mupdf.PdfAnnot_pdf_annot_name(self)
+
     def pdf_annot_needs_resynthesis(self):
         r"""Class-aware wrapper for `::pdf_annot_needs_resynthesis()`."""
         return _mupdf.PdfAnnot_pdf_annot_needs_resynthesis(self)
@@ -38535,6 +40596,10 @@ class PdfAnnot(object):
     def pdf_annot_stamp_image_obj(self):
         r"""Class-aware wrapper for `::pdf_annot_stamp_image_obj()`."""
         return _mupdf.PdfAnnot_pdf_annot_stamp_image_obj(self)
+
+    def pdf_annot_subject(self):
+        r"""Class-aware wrapper for `::pdf_annot_subject()`."""
+        return _mupdf.PdfAnnot_pdf_annot_subject(self)
 
     def pdf_annot_transform(self):
         r"""Class-aware wrapper for `::pdf_annot_transform()`."""
@@ -38792,6 +40857,10 @@ class PdfAnnot(object):
         r"""Class-aware wrapper for `::pdf_set_annot_modification_date()`."""
         return _mupdf.PdfAnnot_pdf_set_annot_modification_date(self, time)
 
+    def pdf_set_annot_name(self, name):
+        r"""Class-aware wrapper for `::pdf_set_annot_name()`."""
+        return _mupdf.PdfAnnot_pdf_set_annot_name(self, name)
+
     def pdf_set_annot_opacity(self, opacity):
         r"""Class-aware wrapper for `::pdf_set_annot_opacity()`."""
         return _mupdf.PdfAnnot_pdf_set_annot_opacity(self, opacity)
@@ -38831,6 +40900,10 @@ class PdfAnnot(object):
     def pdf_set_annot_stamp_image_obj(self, ref):
         r"""Class-aware wrapper for `::pdf_set_annot_stamp_image_obj()`."""
         return _mupdf.PdfAnnot_pdf_set_annot_stamp_image_obj(self, ref)
+
+    def pdf_set_annot_subject(self, subject):
+        r"""Class-aware wrapper for `::pdf_set_annot_subject()`."""
+        return _mupdf.PdfAnnot_pdf_set_annot_subject(self, subject)
 
     def pdf_set_annot_vertex(self, i, p):
         r"""Class-aware wrapper for `::pdf_set_annot_vertex()`."""
@@ -38880,9 +40953,9 @@ class PdfAnnot(object):
         r"""Class-aware wrapper for `::pdf_update_widget()`."""
         return _mupdf.PdfAnnot_pdf_update_widget(self)
 
-    def pdf_validate_signature(self):
-        r"""Class-aware wrapper for `::pdf_validate_signature()`."""
-        return _mupdf.PdfAnnot_pdf_validate_signature(self)
+    def pdf_validate_signature_widget(self):
+        r"""Class-aware wrapper for `::pdf_validate_signature_widget()`."""
+        return _mupdf.PdfAnnot_pdf_validate_signature_widget(self)
 
     def pdf_widget_is_readonly(self):
         r"""Class-aware wrapper for `::pdf_widget_is_readonly()`."""
@@ -39634,6 +41707,10 @@ class PdfDocument(object):
         r"""Class-aware wrapper for `::pdf_end_operation()`."""
         return _mupdf.PdfDocument_pdf_end_operation(self)
 
+    def pdf_end_throw_on_repair(self, xref_base):
+        r"""Class-aware wrapper for `::pdf_end_throw_on_repair()`."""
+        return _mupdf.PdfDocument_pdf_end_throw_on_repair(self, xref_base)
+
     def pdf_ensure_solid_xref(self, num):
         r"""Class-aware wrapper for `::pdf_ensure_solid_xref()`."""
         return _mupdf.PdfDocument_pdf_ensure_solid_xref(self, num)
@@ -39699,6 +41776,10 @@ class PdfDocument(object):
         r"""Class-aware wrapper for `::pdf_find_font_resource()`."""
         return _mupdf.PdfDocument_pdf_find_font_resource(self, type, encoding, item, key)
 
+    def pdf_find_image_resource(self, item, key):
+        r"""Class-aware wrapper for `::pdf_find_image_resource()`."""
+        return _mupdf.PdfDocument_pdf_find_image_resource(self, item, key)
+
     def pdf_find_version_for_obj(self, obj):
         r"""Class-aware wrapper for `::pdf_find_version_for_obj()`."""
         return _mupdf.PdfDocument_pdf_find_version_for_obj(self, obj)
@@ -39738,6 +41819,10 @@ class PdfDocument(object):
     def pdf_insert_font_resource(self, key, obj):
         r"""Class-aware wrapper for `::pdf_insert_font_resource()`."""
         return _mupdf.PdfDocument_pdf_insert_font_resource(self, key, obj)
+
+    def pdf_insert_image_resource(self, key, obj):
+        r"""Class-aware wrapper for `::pdf_insert_image_resource()`."""
+        return _mupdf.PdfDocument_pdf_insert_image_resource(self, key, obj)
 
     def pdf_insert_page(self, at, page):
         r"""Class-aware wrapper for `::pdf_insert_page()`."""
@@ -39928,6 +42013,10 @@ class PdfDocument(object):
     def pdf_mark_xref(self):
         r"""Class-aware wrapper for `::pdf_mark_xref()`."""
         return _mupdf.PdfDocument_pdf_mark_xref(self)
+
+    def pdf_maybe_throw_after_repair(self):
+        r"""Class-aware wrapper for `::pdf_maybe_throw_after_repair()`."""
+        return _mupdf.PdfDocument_pdf_maybe_throw_after_repair(self)
 
     def pdf_metadata(self):
         r"""Class-aware wrapper for `::pdf_metadata()`."""
@@ -40218,6 +42307,10 @@ class PdfDocument(object):
         r"""Class-aware wrapper for `::pdf_set_populating_xref_trailer()`."""
         return _mupdf.PdfDocument_pdf_set_populating_xref_trailer(self, trailer)
 
+    def pdf_set_trailer(self, obj):
+        r"""Class-aware wrapper for `::pdf_set_trailer()`."""
+        return _mupdf.PdfDocument_pdf_set_trailer(self, obj)
+
     def pdf_signature_byte_range(self, signature, byte_range):
         r"""Class-aware wrapper for `::pdf_signature_byte_range()`."""
         return _mupdf.PdfDocument_pdf_signature_byte_range(self, signature, byte_range)
@@ -40246,6 +42339,15 @@ class PdfDocument(object):
     def pdf_signature_set_value(self, field, signer, stime):
         r"""Class-aware wrapper for `::pdf_signature_set_value()`."""
         return _mupdf.PdfDocument_pdf_signature_set_value(self, field, signer, stime)
+
+    def pdf_start_throw_on_repair(self, xref_base):
+        r"""
+        Class-aware wrapper for `::pdf_start_throw_on_repair()`.
+
+        This method has out-params. Python/C# wrappers look like:
+        	`pdf_start_throw_on_repair()` => int xref_base
+        """
+        return _mupdf.PdfDocument_pdf_start_throw_on_repair(self, xref_base)
 
     def pdf_subset_fonts(self, pages_len, pages):
         r"""Class-aware wrapper for `::pdf_subset_fonts()`."""
@@ -40307,6 +42409,10 @@ class PdfDocument(object):
     def pdf_validate_changes(self, version):
         r"""Class-aware wrapper for `::pdf_validate_changes()`."""
         return _mupdf.PdfDocument_pdf_validate_changes(self, version)
+
+    def pdf_validate_signature(self, field):
+        r"""Class-aware wrapper for `::pdf_validate_signature()`."""
+        return _mupdf.PdfDocument_pdf_validate_signature(self, field)
 
     def pdf_vectorize_pages(self, count, new_page_list, vectorize):
         r"""Class-aware wrapper for `::pdf_vectorize_pages()`."""
@@ -40978,6 +43084,39 @@ class PdfHmtx(object):
 
 # Register PdfHmtx in _mupdf:
 _mupdf.PdfHmtx_swigregister(PdfHmtx)
+class PdfImageResourceKey(object):
+    r"""Wrapper class for struct `pdf_image_resource_key`. Not copyable or assignable."""
+
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+
+    def __init__(self, *args):
+        r"""
+        *Overload 1:*
+        Default constructor, sets `m_internal` to null.
+
+        |
+
+        *Overload 2:*
+        Constructor using raw copy of pre-existing `::pdf_image_resource_key`.
+        """
+        _mupdf.PdfImageResourceKey_swiginit(self, _mupdf.new_PdfImageResourceKey(*args))
+    __swig_destroy__ = _mupdf.delete_PdfImageResourceKey
+
+    def m_internal_value(self):
+        r"""Return numerical value of .m_internal; helps with Python debugging."""
+        return _mupdf.PdfImageResourceKey_m_internal_value(self)
+
+    def __nonzero__(self):
+        return _mupdf.PdfImageResourceKey___nonzero__(self)
+    __bool__ = __nonzero__
+
+
+    m_internal = property(_mupdf.PdfImageResourceKey_m_internal_get, _mupdf.PdfImageResourceKey_m_internal_set, doc=r"""Pointer to wrapped data.""")
+    s_num_instances = property(_mupdf.PdfImageResourceKey_s_num_instances_get, _mupdf.PdfImageResourceKey_s_num_instances_set)
+
+# Register PdfImageResourceKey in _mupdf:
+_mupdf.PdfImageResourceKey_swigregister(PdfImageResourceKey)
 class PdfImageRewriterOptions(object):
     r"""Wrapper class for struct `pdf_image_rewriter_options`."""
 
@@ -42075,6 +44214,10 @@ class PdfObj(object):
         r"""Class-aware wrapper for `::pdf_dirty_obj()`."""
         return _mupdf.PdfObj_pdf_dirty_obj(self)
 
+    def pdf_ensure_indirect(self):
+        r"""Class-aware wrapper for `::pdf_ensure_indirect()`."""
+        return _mupdf.PdfObj_pdf_ensure_indirect(self)
+
     def pdf_field_border_style(self):
         r"""Class-aware wrapper for `::pdf_field_border_style()`."""
         return _mupdf.PdfObj_pdf_field_border_style(self)
@@ -42275,6 +44418,10 @@ class PdfObj(object):
         r"""Class-aware wrapper for `::pdf_obj_is_incremental()`."""
         return _mupdf.PdfObj_pdf_obj_is_incremental(self)
 
+    def pdf_obj_is_singleton(self):
+        r"""Class-aware wrapper for `::pdf_obj_is_singleton()`."""
+        return _mupdf.PdfObj_pdf_obj_is_singleton(self)
+
     def pdf_obj_marked(self):
         r"""Class-aware wrapper for `::pdf_obj_marked()`."""
         return _mupdf.PdfObj_pdf_obj_marked(self)
@@ -42323,6 +44470,10 @@ class PdfObj(object):
     def pdf_page_obj_transform_box(self, outbox, out, box):
         r"""Class-aware wrapper for `::pdf_page_obj_transform_box()`."""
         return _mupdf.PdfObj_pdf_page_obj_transform_box(self, outbox, out, box)
+
+    def pdf_pattern_uses_blending(self, cycle_up):
+        r"""Class-aware wrapper for `::pdf_pattern_uses_blending()`."""
+        return _mupdf.PdfObj_pdf_pattern_uses_blending(self, cycle_up)
 
     def pdf_pin_document(self):
         r"""Class-aware wrapper for `::pdf_pin_document()`."""
@@ -44056,6 +46207,14 @@ class PdfTextObjectState(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
 
+    def pdf_tos_accumulate_clip(self):
+        r"""Class-aware wrapper for `::pdf_tos_accumulate_clip()`."""
+        return _mupdf.PdfTextObjectState_pdf_tos_accumulate_clip(self)
+
+    def pdf_tos_get_clip_text(self):
+        r"""Class-aware wrapper for `::pdf_tos_get_clip_text()`."""
+        return _mupdf.PdfTextObjectState_pdf_tos_get_clip_text(self)
+
     def pdf_tos_get_text(self):
         r"""Class-aware wrapper for `::pdf_tos_get_text()`."""
         return _mupdf.PdfTextObjectState_pdf_tos_get_text(self)
@@ -44254,8 +46413,16 @@ class PdfWriteOptions(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
 
+    def pdf_apply_write_options(self, args):
+        r"""We use default copy constructor and operator=.  Class-aware wrapper for `::pdf_apply_write_options()`."""
+        return _mupdf.PdfWriteOptions_pdf_apply_write_options(self, args)
+
+    def pdf_init_write_options(self):
+        r"""Class-aware wrapper for `::pdf_init_write_options()`."""
+        return _mupdf.PdfWriteOptions_pdf_init_write_options(self)
+
     def pdf_parse_write_options(self, args):
-        r"""We use default copy constructor and operator=.  Class-aware wrapper for `::pdf_parse_write_options()`."""
+        r"""Class-aware wrapper for `::pdf_parse_write_options()`."""
         return _mupdf.PdfWriteOptions_pdf_parse_write_options(self, args)
 
     def opwd_utf8_set_value(self, text):
@@ -44322,6 +46489,7 @@ class PdfWriteOptions(object):
     do_use_objstms = property(_mupdf.PdfWriteOptions_do_use_objstms_get, _mupdf.PdfWriteOptions_do_use_objstms_set)
     compression_effort = property(_mupdf.PdfWriteOptions_compression_effort_get, _mupdf.PdfWriteOptions_compression_effort_set)
     do_labels = property(_mupdf.PdfWriteOptions_do_labels_get, _mupdf.PdfWriteOptions_do_labels_set)
+    reproducible = property(_mupdf.PdfWriteOptions_reproducible_get, _mupdf.PdfWriteOptions_reproducible_set)
     s_num_instances = property(_mupdf.PdfWriteOptions_s_num_instances_get, _mupdf.PdfWriteOptions_s_num_instances_set)
 
     def to_string(self):
@@ -44701,6 +46869,13 @@ def fz_absi(i):
     r"""Class-aware wrapper for `::fz_absi()`."""
     return _mupdf.fz_absi(i)
 
+def fz_access_option_by_index(options, i):
+    r"""
+    Class-aware wrapper for `::fz_access_option_by_index()`.
+    	Mark a given option index as being accessed.
+    """
+    return _mupdf.fz_access_option_by_index(options, i)
+
 def fz_add_layout_char(block, x, w, p):
     r"""
     Class-aware wrapper for `::fz_add_layout_char()`.
@@ -44891,6 +47066,79 @@ def fz_append_rune(buf, c):
 def fz_append_string(buf, data):
     r"""Class-aware wrapper for `::fz_append_string()`."""
     return _mupdf.fz_append_string(buf, data)
+
+def fz_append_uint16_be(buf, x):
+    r"""Class-aware wrapper for `::fz_append_uint16_be()`."""
+    return _mupdf.fz_append_uint16_be(buf, x)
+
+def fz_append_uint16_le(buf, x):
+    r"""Class-aware wrapper for `::fz_append_uint16_le()`."""
+    return _mupdf.fz_append_uint16_le(buf, x)
+
+def fz_append_uint32_be(buf, x):
+    r"""Class-aware wrapper for `::fz_append_uint32_be()`."""
+    return _mupdf.fz_append_uint32_be(buf, x)
+
+def fz_append_uint32_le(buf, x):
+    r"""Class-aware wrapper for `::fz_append_uint32_le()`."""
+    return _mupdf.fz_append_uint32_le(buf, x)
+
+def fz_apply_draw_options(draw_options, options):
+    r"""
+    Class-aware wrapper for `::fz_apply_draw_options()`.
+    	Parse draw device options from an fz_options structure.
+
+    	This assumes that the draw_options struct has been initialised already.
+    """
+    return _mupdf.fz_apply_draw_options(draw_options, options)
+
+def fz_apply_pcl_options(opts, args):
+    r"""Class-aware wrapper for `::fz_apply_pcl_options()`."""
+    return _mupdf.fz_apply_pcl_options(opts, args)
+
+def fz_apply_pclm_options(opts, args):
+    r"""Class-aware wrapper for `::fz_apply_pclm_options()`."""
+    return _mupdf.fz_apply_pclm_options(opts, args)
+
+def fz_apply_pdfocr_options(opts, options):
+    r"""Class-aware wrapper for `::fz_apply_pdfocr_options()`."""
+    return _mupdf.fz_apply_pdfocr_options(opts, options)
+
+def fz_apply_pwg_options(opts, args):
+    r"""
+    Class-aware wrapper for `::fz_apply_pwg_options()`.
+    	Apply the given options to an initialised pwg options struct.
+    """
+    return _mupdf.fz_apply_pwg_options(opts, args)
+
+def fz_apply_search_options(options, opts):
+    r"""
+    Class-aware wrapper for `::fz_apply_search_options()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`fz_apply_search_options(::fz_options *opts)` => ::fz_search_options options
+    """
+    return _mupdf.fz_apply_search_options(options, opts)
+
+def fz_apply_stext_options(opts, options):
+    r"""
+    Class-aware wrapper for `::fz_apply_stext_options()`.
+    	Parse stext device options from an fz_options struct
+    	into an already initialised opts structure.
+    """
+    return _mupdf.fz_apply_stext_options(opts, options)
+
+def fz_apply_svg_device_options(opts, options):
+    r"""Class-aware wrapper for `::fz_apply_svg_device_options()`."""
+    return _mupdf.fz_apply_svg_device_options(opts, options)
+
+def fz_apply_table_hunt_options(opts, options):
+    r"""
+    Class-aware wrapper for `::fz_apply_table_hunt_options()`.
+    	Parse table hunt device options from an fz_options struct
+    	into an already initialised opts structure.
+    """
+    return _mupdf.fz_apply_table_hunt_options(opts, options)
 
 def fz_arc4_encrypt(state, dest, src, len):
     r"""
@@ -45944,18 +48192,6 @@ def fz_convert_separation_pixmap_to_base(src):
     """
     return _mupdf.fz_convert_separation_pixmap_to_base(src)
 
-def fz_copy_option(val, dest, maxlen):
-    r"""
-    Class-aware wrapper for `::fz_copy_option()`.
-    	Copy an option (val) into a destination buffer (dest), of maxlen
-    	bytes.
-
-    	Returns the number of bytes (including terminator) that did not
-    	fit. If val is maxlen or greater bytes in size, it will be left
-    	unterminated.
-    """
-    return _mupdf.fz_copy_option(val, dest, maxlen)
-
 def fz_copy_pixmap_rect(dest, src, r, default_cs):
     r"""Class-aware wrapper for `::fz_copy_pixmap_rect()`."""
     return _mupdf.fz_copy_pixmap_rect(dest, src, r, default_cs)
@@ -46016,6 +48252,13 @@ def fz_count_chapters(doc):
     	At least 1.
     """
     return _mupdf.fz_count_chapters(doc)
+
+def fz_count_options(options):
+    r"""
+    Class-aware wrapper for `::fz_count_options()`.
+    	Count the number of options in an options structure.
+    """
+    return _mupdf.fz_count_options(options)
 
 def fz_count_pages(doc):
     r"""
@@ -46106,6 +48349,13 @@ def fz_curvetoy(path, x0, y0, x2, y2):
     	modify a packed path.
     """
     return _mupdf.fz_curvetoy(path, x0, y0, x2, y2)
+
+def fz_debug_stext_page(page, id):
+    r"""
+    Class-aware wrapper for `::fz_debug_stext_page()`.
+    	Convenience function to call the above.
+    """
+    return _mupdf.fz_debug_stext_page(page, id)
 
 def fz_debug_store(out):
     r"""
@@ -46858,10 +49108,6 @@ def fz_end_structure(dev):
     r"""Class-aware wrapper for `::fz_end_structure()`."""
     return _mupdf.fz_end_structure(dev)
 
-def fz_end_throw_on_repair():
-    r"""Class-aware wrapper for `::fz_end_throw_on_repair()`."""
-    return _mupdf.fz_end_throw_on_repair()
-
 def fz_end_tile(dev):
     r"""Class-aware wrapper for `::fz_end_tile()`."""
     return _mupdf.fz_end_tile(dev)
@@ -47016,7 +49262,7 @@ def fz_find_item(drop, key, type):
     """
     return _mupdf.fz_find_item(drop, key, type)
 
-def fz_find_table_within_bounds(page, bounds):
+def fz_find_table_within_bounds(page, bounds, opts):
     r"""
     Class-aware wrapper for `::fz_find_table_within_bounds()`.
     	Interpret the bounded contents of a given stext page as
@@ -47033,7 +49279,38 @@ def fz_find_table_within_bounds(page, bounds):
     	Returns the stext_block list that contains the content of
     	the table.
     """
-    return _mupdf.fz_find_table_within_bounds(page, bounds)
+    return _mupdf.fz_find_table_within_bounds(page, bounds, opts)
+
+def fz_find_table_within_grid(page, xpos, ypos, limit, opts):
+    r"""
+    Class-aware wrapper for `::fz_find_table_within_grid()`.
+    	Interpret the contents of a given stext page that fall within
+    	a given grid as a table.
+
+    	The page contents will be rewritten to contain a Table
+    	structure with the identified content in it.
+
+    	This uses the same logic as for fz_table_hunt, without the
+    	actual hunting, and the grid detection phase. fz_table_hunt
+    	hunts to find possible bounds for multiple tables on the
+    	page; this routine just finds a single table contained within
+    	the given rectangle. The grid detection phase is skipped, and
+    	we just use the grid as given to us. We still perform the
+    	cell analysis stage though, so the grid can be refined.
+
+    	Returns the stext_block list that contains the content of
+    	the table, or NULL if no table is found that scores below
+    	limit.
+    """
+    return _mupdf.fz_find_table_within_grid(page, xpos, ypos, limit, opts)
+
+def fz_find_table_within_grid_dividers(page, xs, ys, limit, opts):
+    r"""Class-aware wrapper for `::fz_find_table_within_grid_dividers()`."""
+    return _mupdf.fz_find_table_within_grid_dividers(page, xs, ys, limit, opts)
+
+def fz_find_table_within_grid_floats(page, xs, ys, limit, opts):
+    r"""Class-aware wrapper for `::fz_find_table_within_grid_floats()`.   Swig-friendly wrapper for fz_find_table_within_grid()."""
+    return _mupdf.fz_find_table_within_grid_floats(page, xs, ys, limit, opts)
 
 def fz_flotilla_raft_area(flot, i):
     r"""Class-aware wrapper for `::fz_flotilla_raft_area()`."""
@@ -47281,6 +49558,17 @@ def fz_get_glyph_name2(font, glyph):
     """
     return _mupdf.fz_get_glyph_name2(font, glyph)
 
+def fz_get_option_by_index(options, i, val):
+    r"""
+    Class-aware wrapper for `::fz_get_option_by_index()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`fz_get_option_by_index(::fz_options *options, int i)` => `(const char *, const char *val)`
+
+    	Get an option by index.
+    """
+    return _mupdf.fz_get_option_by_index(options, i, val)
+
 def fz_get_pixmap_from_image(image, subarea, ctm, w, h):
     r"""
     Class-aware wrapper for `::fz_get_pixmap_from_image()`.
@@ -47496,18 +49784,6 @@ def fz_has_archive_entry(arch, name):
     """
     return _mupdf.fz_has_archive_entry(arch, name)
 
-def fz_has_option(opts, key, val):
-    r"""
-    Class-aware wrapper for `::fz_has_option()`.
-
-    This function has out-params. Python/C# wrappers look like:
-    	`fz_has_option(const char *opts, const char *key)` => `(int, const char *val)`
-
-    	Look for a given option (key) in the opts string. Return 1 if
-    	it has it, and update *val to point to the value within opts.
-    """
-    return _mupdf.fz_has_option(opts, key, val)
-
 def fz_has_permission(doc, p):
     r"""
     Class-aware wrapper for `::fz_has_permission()`.
@@ -47607,6 +49883,13 @@ def fz_ignore_text(dev, text, ctm):
     r"""Class-aware wrapper for `::fz_ignore_text()`."""
     return _mupdf.fz_ignore_text(dev, text, ctm)
 
+def fz_image_digest(img, digest):
+    r"""
+    Class-aware wrapper for `::fz_image_digest()`.
+    	Compute a checksum for the image.
+    """
+    return _mupdf.fz_image_digest(img, digest)
+
 def fz_image_orientation(image):
     r"""
     Class-aware wrapper for `::fz_image_orientation()`.
@@ -47678,6 +49961,92 @@ def fz_include_point_in_rect(r, p):
     	the points before including the others.
     """
     return _mupdf.fz_include_point_in_rect(r, p)
+
+def fz_init_draw_options(draw_options):
+    r"""
+    Class-aware wrapper for `::fz_init_draw_options()`.
+    	Initialise a draw_options struct to sensible values.
+    """
+    return _mupdf.fz_init_draw_options(draw_options)
+
+def fz_init_pcl_options(opts):
+    r"""
+    Class-aware wrapper for `::fz_init_pcl_options()`.
+    	Parse PCL options.
+
+    	Currently defined options and values are as follows:
+
+    		preset=X	Either "generic" or one of the presets as for fz_pcl_preset.
+    		spacing=0	No vertical spacing capability
+    		spacing=1	PCL 3 spacing (<ESC>*p+<n>Y)
+    		spacing=2	PCL 4 spacing (<ESC>*b<n>Y)
+    		spacing=3	PCL 5 spacing (<ESC>*b<n>Y and clear seed row)
+    		mode2		Disable/Enable mode 2 graphics compression
+    		mode3		Disable/Enable mode 3 graphics compression
+    		eog_reset	End of graphics (<ESC>*rB) resets all parameters
+    		has_duplex	Duplex supported (<ESC>&l<duplex>S)
+    		has_papersize	Papersize setting supported (<ESC>&l<sizecode>A)
+    		has_copies	Number of copies supported (<ESC>&l<copies>X)
+    		is_ljet4pjl	Disable/Enable HP 4PJL model-specific output
+    		is_oce9050	Disable/Enable Oce 9050 model-specific output
+    """
+    return _mupdf.fz_init_pcl_options(opts)
+
+def fz_init_pclm_options(opts):
+    r"""
+    Class-aware wrapper for `::fz_init_pclm_options()`.
+    	Parse PCLm options.
+
+    	Currently defined options and values are as follows:
+
+    		compression=none: No compression
+    		compression=flate: Flate compression
+    		strip-height=n: Strip height (default 16)
+    """
+    return _mupdf.fz_init_pclm_options(opts)
+
+def fz_init_pdfocr_options(opts):
+    r"""
+    Class-aware wrapper for `::fz_init_pdfocr_options()`.
+    	Parse PDFOCR options.
+
+    	Currently defined options and values are as follows:
+
+    		compression=none: No compression
+    		compression=flate: Flate compression
+    		strip-height=n: Strip height (default 16)
+    		ocr-language=<lang>: OCR Language (default eng)
+    		ocr-datadir=<datadir>: OCR data path (default rely on TESSDATA_PREFIX)
+    """
+    return _mupdf.fz_init_pdfocr_options(opts)
+
+def fz_init_pwg_options(opts):
+    r"""
+    Class-aware wrapper for `::fz_init_pwg_options()`.
+    	Init pwg options to a sensible default.
+    """
+    return _mupdf.fz_init_pwg_options(opts)
+
+def fz_init_search_options(options):
+    r"""
+    Class-aware wrapper for `::fz_init_search_options()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`fz_init_search_options()` => ::fz_search_options options
+    """
+    return _mupdf.fz_init_search_options(options)
+
+def fz_init_stext_options(opts):
+    r"""Class-aware wrapper for `::fz_init_stext_options()`."""
+    return _mupdf.fz_init_stext_options(opts)
+
+def fz_init_svg_device_options(opts):
+    r"""Class-aware wrapper for `::fz_init_svg_device_options()`."""
+    return _mupdf.fz_init_svg_device_options(opts)
+
+def fz_init_table_hunt_options(opts):
+    r"""Class-aware wrapper for `::fz_init_table_hunt_options()`."""
+    return _mupdf.fz_init_table_hunt_options(opts)
 
 def fz_init_text_decoder(dec, encoding):
     r"""Class-aware wrapper for `::fz_init_text_decoder()`."""
@@ -48741,6 +51110,110 @@ def fz_lookup_noto_symbol2_font(len):
     """
     return _mupdf.fz_lookup_noto_symbol2_font(len)
 
+def fz_lookup_option(options, key, val):
+    r"""
+    Class-aware wrapper for `::fz_lookup_option()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`fz_lookup_option(::fz_options *options, const char *key)` => `(int, const char *val)`
+
+    	Check to see if a key is present in the options object.
+
+    	If it is not, then return 0.
+
+    	If val is non-NULL, *val will be updated to point to the value.
+
+    	The option will be recorded as having been accessed.
+    """
+    return _mupdf.fz_lookup_option(options, key, val)
+
+def fz_lookup_option_boolean(options, key, x):
+    r"""
+    Class-aware wrapper for `::fz_lookup_option_boolean()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`fz_lookup_option_boolean(::fz_options *options, const char *key)` => `(int, int x)`
+
+    	Check to see if a key is present, and is true or false.
+
+    	If it is absent, return 0.
+
+    	If it is true (empty, 1, yes, true, or enabled), *x is assigned 1,
+    	the invalid flag is cleared, marked as accessed, returns 1.
+
+    	If it is false (0, no, false, or disabled), *x is assigned 0,
+    	the invalid flag is clear, marked as accessed, returns 0.
+
+    	If it is any other value, it is marked as invalid, returns -1.
+    """
+    return _mupdf.fz_lookup_option_boolean(options, key, x)
+
+def fz_lookup_option_enum(options, key, x, enum_list):
+    r"""
+    Class-aware wrapper for `::fz_lookup_option_enum()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`fz_lookup_option_enum(::fz_options *options, const char *key, const ::fz_option_enums *enum_list)` => `(int, int x)`
+    """
+    return _mupdf.fz_lookup_option_enum(options, key, x, enum_list)
+
+def fz_lookup_option_float(options, key, x):
+    r"""
+    Class-aware wrapper for `::fz_lookup_option_float()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`fz_lookup_option_float(::fz_options *options, const char *key)` => `(int, float x)`
+
+    	Check to see if an option is present and is of the given type.
+
+    	If an option is absent, this returns 0.
+
+    	If an option is present, but not of the required type, it will be
+    	flagged internally as being invalid, and we will return -1.
+
+    	If an option is present, and of the required type, any previously
+    	set invalid flag will be cleared.
+
+    	This means we can (for example) lookup an option as an enum, and then
+    	safely look for it being an integer if that fails.
+    """
+    return _mupdf.fz_lookup_option_float(options, key, x)
+
+def fz_lookup_option_integer(options, key, x):
+    r"""
+    Class-aware wrapper for `::fz_lookup_option_integer()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`fz_lookup_option_integer(::fz_options *options, const char *key)` => `(int, int x)`
+    """
+    return _mupdf.fz_lookup_option_integer(options, key, x)
+
+def fz_lookup_option_unsigned(options, key, x):
+    r"""
+    Class-aware wrapper for `::fz_lookup_option_unsigned()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`fz_lookup_option_unsigned(::fz_options *options, const char *key)` => `(int, unsigned int x)`
+    """
+    return _mupdf.fz_lookup_option_unsigned(options, key, x)
+
+def fz_lookup_option_yes(options, key):
+    r"""
+    Class-aware wrapper for `::fz_lookup_option_yes()`.
+    	Check to see if a key is a boolean.
+
+    	If it is absent, return 0.
+
+    	If it is true (empty, 1, yes, true, or enabled), returns 1,
+    	clears any invalid flag, and counts as accessed.
+
+    	If it is false (0, no, false, or disabled), returns 0,
+    	clears any invalid flag, and counts as accessed.
+
+    	If it is absent, or any other value, it is marked as invalid, returns 0.
+    """
+    return _mupdf.fz_lookup_option_yes(options, key)
+
 def fz_lookup_rendering_intent(name):
     r"""
     Class-aware wrapper for `::fz_lookup_rendering_intent()`.
@@ -48811,6 +51284,10 @@ def fz_malloc_aligned(size, align):
     	Block must be freed later using fz_free_aligned.
     """
     return _mupdf.fz_malloc_aligned(size, align)
+
+def fz_malloc_array_imp(nmemb, size):
+    r"""Class-aware wrapper for `::fz_malloc_array_imp()`."""
+    return _mupdf.fz_malloc_array_imp(nmemb, size)
 
 def fz_malloc_no_throw(size):
     r"""
@@ -49488,6 +51965,36 @@ def fz_new_compressed_buffer():
     """
     return _mupdf.fz_new_compressed_buffer()
 
+def fz_new_culling_device(passthrough, opts):
+    r"""
+    Class-aware wrapper for `::fz_new_culling_device()`.
+    	Create an 'cull' device.
+
+    	This device passes through all calls to the 'passthrough' device, except
+    	for text operations that may be culled.
+
+    	The decision as to whether to cull a glyph or not is made by calling the
+    	'cull_glyph' function in the options structure with the rectangle that
+    	would be affected. If the function returns 0, the glyph is passed through.
+    	if the function returns 1, the glyph is dropped. All other values reserved.
+    """
+    return _mupdf.fz_new_culling_device(passthrough, opts)
+
+def fz_new_culling_device_with_rects(passthrough, n, rects):
+    r"""
+    Class-aware wrapper for `::fz_new_culling_device_with_rects()`.
+    	Create an culling device that will drop any glyphs that significantly
+    	overlap any of the given list of rects.
+
+    	The rect list is copied into the device, so does not need to exist
+    	beyond this call.
+    """
+    return _mupdf.fz_new_culling_device_with_rects(passthrough, n, rects)
+
+def fz_new_culling_device_with_rects2(passthrough, rects):
+    r"""Class-aware wrapper for `::fz_new_culling_device_with_rects2()`.   Swig-friendly wrapper for fz_new_culling_device_with_rects()."""
+    return _mupdf.fz_new_culling_device_with_rects2(passthrough, rects)
+
 def fz_new_default_colorspaces():
     r"""
     Class-aware wrapper for `::fz_new_default_colorspaces()`.
@@ -49927,7 +52434,7 @@ def fz_new_image_from_svg_xml(xmldoc, xml, base_uri, dir):
     """
     return _mupdf.fz_new_image_from_svg_xml(xmldoc, xml, base_uri, dir)
 
-def fz_new_image_of_size(w, h, bpc, colorspace, xres, yres, interpolate, imagemask, decode, colorkey, mask, size, get_pixmap, get_size, drop):
+def fz_new_image_of_size(w, h, bpc, colorspace, xres, yres, interpolate, imagemask, decode, colorkey, mask, size, get_pixmap, get_size, get_digest, drop):
     r"""
     Class-aware wrapper for `::fz_new_image_of_size()`.
     	Internal function to make a new fz_image structure
@@ -49962,10 +52469,12 @@ def fz_new_image_of_size(w, h, bpc, colorspace, xres, yres, interpolate, imagema
     	size: The size of the required allocated structure (the size of
     	the derived structure).
 
-    	get: The function to be called to obtain a decoded pixmap.
+    	get_pixmap: The function to be called to obtain a decoded pixmap.
 
     	get_size: The function to be called to return the storage size
     	used by this image.
+
+    	get_digest: The function to be called to compute a checksum from this image.
 
     	drop: The function to be called to dispose of this image once
     	the last reference is dropped.
@@ -49974,7 +52483,7 @@ def fz_new_image_of_size(w, h, bpc, colorspace, xres, yres, interpolate, imagema
     	with the first sizeof(fz_image) bytes initialised as appropriate
     	given the supplied parameters, and the other bytes set to zero.
     """
-    return _mupdf.fz_new_image_of_size(w, h, bpc, colorspace, xres, yres, interpolate, imagemask, decode, colorkey, mask, size, get_pixmap, get_size, drop)
+    return _mupdf.fz_new_image_of_size(w, h, bpc, colorspace, xres, yres, interpolate, imagemask, decode, colorkey, mask, size, get_pixmap, get_size, get_digest, drop)
 
 def fz_new_indexed_colorspace(base, high, lookup):
     r"""
@@ -50089,6 +52598,15 @@ def fz_new_ocr_device_with_options(target, ctm, mediabox, with_list, language, d
     r"""Class-aware wrapper for `::fz_new_ocr_device_with_options()`."""
     return _mupdf.fz_new_ocr_device_with_options(target, ctm, mediabox, with_list, language, datadir, progress, progress_arg, options)
 
+def fz_new_options(option_string):
+    r"""
+    Class-aware wrapper for `::fz_new_options()`.
+    	Create an options object, with the initial contents parsed from the string.
+    	See fz_parse_options for details on the string parsing.
+    	If the string is NULL, the options object will be initialized but empty.
+    """
+    return _mupdf.fz_new_options(option_string)
+
 def fz_new_outline():
     r"""
     Class-aware wrapper for `::fz_new_outline()`.
@@ -50105,6 +52623,20 @@ def fz_new_page_of_size(size, doc):
     	initialises the base sections.
     """
     return _mupdf.fz_new_page_of_size(size, doc)
+
+def fz_new_passthrough_device_of_size(passthrough, size):
+    r"""
+    Class-aware wrapper for `::fz_new_passthrough_device_of_size()`.
+    	Create a passthrough device.
+
+    	The device is created with stub functions that do nothing except
+    	pass calls through to the given sub device. This includes
+    	close and drop!
+
+    	The caller of this function can then override any functions it
+    	wants to handle itself.
+    """
+    return _mupdf.fz_new_passthrough_device_of_size(passthrough, size)
 
 def fz_new_path():
     r"""
@@ -50146,6 +52678,18 @@ def fz_new_pixmap_from_color_and_mask(color, mask):
     r"""Class-aware wrapper for `::fz_new_pixmap_from_color_and_mask()`."""
     return _mupdf.fz_new_pixmap_from_color_and_mask(color, mask)
 
+def fz_new_pixmap_from_culled_display_list(list, ctm, cs, alpha, opts):
+    r"""Class-aware wrapper for `::fz_new_pixmap_from_culled_display_list()`."""
+    return _mupdf.fz_new_pixmap_from_culled_display_list(list, ctm, cs, alpha, opts)
+
+def fz_new_pixmap_from_culled_page(page, ctm, cs, alpha, opts):
+    r"""Class-aware wrapper for `::fz_new_pixmap_from_culled_page()`."""
+    return _mupdf.fz_new_pixmap_from_culled_page(page, ctm, cs, alpha, opts)
+
+def fz_new_pixmap_from_culled_page_number(doc, number, ctm, cs, alpha, opts):
+    r"""Class-aware wrapper for `::fz_new_pixmap_from_culled_page_number()`."""
+    return _mupdf.fz_new_pixmap_from_culled_page_number(doc, number, ctm, cs, alpha, opts)
+
 def fz_new_pixmap_from_display_list(list, ctm, cs, alpha):
     r"""
     Class-aware wrapper for `::fz_new_pixmap_from_display_list()`.
@@ -50154,6 +52698,22 @@ def fz_new_pixmap_from_display_list(list, ctm, cs, alpha):
     	Ownership of the pixmap is returned to the caller.
     """
     return _mupdf.fz_new_pixmap_from_display_list(list, ctm, cs, alpha)
+
+def fz_new_pixmap_from_display_list_culling_text(list, ctm, cs, alpha, n, rects):
+    r"""Class-aware wrapper for `::fz_new_pixmap_from_display_list_culling_text()`."""
+    return _mupdf.fz_new_pixmap_from_display_list_culling_text(list, ctm, cs, alpha, n, rects)
+
+def fz_new_pixmap_from_display_list_culling_text2(list, ctm, cs, alpha, rects):
+    r"""Class-aware wrapper for `::fz_new_pixmap_from_display_list_culling_text2()`.   Swig-friendly wrapper for fz_new_pixmap_from_display_list_culling_text()."""
+    return _mupdf.fz_new_pixmap_from_display_list_culling_text2(list, ctm, cs, alpha, rects)
+
+def fz_new_pixmap_from_display_list_culling_text_etc(list, ctm, cs, alpha, n, rects, borders):
+    r"""Class-aware wrapper for `::fz_new_pixmap_from_display_list_culling_text_etc()`."""
+    return _mupdf.fz_new_pixmap_from_display_list_culling_text_etc(list, ctm, cs, alpha, n, rects, borders)
+
+def fz_new_pixmap_from_display_list_culling_text_etc2(list, ctm, cs, alpha, rects, borders):
+    r"""Class-aware wrapper for `::fz_new_pixmap_from_display_list_culling_text_etc2()`.   Swig-friendly wrapper for fz_new_pixmap_from_display_list_culling_text_etc()."""
+    return _mupdf.fz_new_pixmap_from_display_list_culling_text_etc2(list, ctm, cs, alpha, rects, borders)
 
 def fz_new_pixmap_from_display_list_with_separations(list, ctm, cs, seps, alpha):
     r"""
@@ -50181,9 +52741,44 @@ def fz_new_pixmap_from_page_contents_with_separations(page, ctm, cs, seps, alpha
     r"""Class-aware wrapper for `::fz_new_pixmap_from_page_contents_with_separations()`."""
     return _mupdf.fz_new_pixmap_from_page_contents_with_separations(page, ctm, cs, seps, alpha)
 
+def fz_new_pixmap_from_page_culling_text(page, ctm, cs, alpha, n, rects):
+    r"""Class-aware wrapper for `::fz_new_pixmap_from_page_culling_text()`."""
+    return _mupdf.fz_new_pixmap_from_page_culling_text(page, ctm, cs, alpha, n, rects)
+
+def fz_new_pixmap_from_page_culling_text2(page, ctm, cs, alpha, rects):
+    r"""Class-aware wrapper for `::fz_new_pixmap_from_page_culling_text2()`.   Swig-friendly wrapper for fz_new_pixmap_from_page_culling_text()."""
+    return _mupdf.fz_new_pixmap_from_page_culling_text2(page, ctm, cs, alpha, rects)
+
+def fz_new_pixmap_from_page_culling_text_etc(page, ctm, cs, alpha, n, rects, borders):
+    r"""Class-aware wrapper for `::fz_new_pixmap_from_page_culling_text_etc()`."""
+    return _mupdf.fz_new_pixmap_from_page_culling_text_etc(page, ctm, cs, alpha, n, rects, borders)
+
+def fz_new_pixmap_from_page_culling_text_etc2(page, ctm, cs, alpha, rects, borders):
+    r"""Class-aware wrapper for `::fz_new_pixmap_from_page_culling_text_etc2()`.   Swig-friendly wrapper for fz_new_pixmap_from_page_culling_text_etc()."""
+    return _mupdf.fz_new_pixmap_from_page_culling_text_etc2(page, ctm, cs, alpha, rects, borders)
+
 def fz_new_pixmap_from_page_number(doc, number, ctm, cs, alpha):
     r"""Class-aware wrapper for `::fz_new_pixmap_from_page_number()`."""
     return _mupdf.fz_new_pixmap_from_page_number(doc, number, ctm, cs, alpha)
+
+def fz_new_pixmap_from_page_number_culling_text(doc, number, ctm, cs, alpha, n, rects):
+    r"""
+    Class-aware wrapper for `::fz_new_pixmap_from_page_number_culling_text()`.
+    	Returns a page rendered with text from the given rectangles culled.
+    """
+    return _mupdf.fz_new_pixmap_from_page_number_culling_text(doc, number, ctm, cs, alpha, n, rects)
+
+def fz_new_pixmap_from_page_number_culling_text2(doc, number, ctm, cs, alpha, rects):
+    r"""Class-aware wrapper for `::fz_new_pixmap_from_page_number_culling_text2()`.   Swig-friendly wrapper for fz_new_pixmap_from_page_number_culling_text()."""
+    return _mupdf.fz_new_pixmap_from_page_number_culling_text2(doc, number, ctm, cs, alpha, rects)
+
+def fz_new_pixmap_from_page_number_culling_text_etc(doc, number, ctm, cs, alpha, n, rects, borders):
+    r"""Class-aware wrapper for `::fz_new_pixmap_from_page_number_culling_text_etc()`."""
+    return _mupdf.fz_new_pixmap_from_page_number_culling_text_etc(doc, number, ctm, cs, alpha, n, rects, borders)
+
+def fz_new_pixmap_from_page_number_culling_text_etc2(doc, number, ctm, cs, alpha, rects, borders):
+    r"""Class-aware wrapper for `::fz_new_pixmap_from_page_number_culling_text_etc2()`.   Swig-friendly wrapper for fz_new_pixmap_from_page_number_culling_text_etc()."""
+    return _mupdf.fz_new_pixmap_from_page_number_culling_text_etc2(doc, number, ctm, cs, alpha, rects, borders)
 
 def fz_new_pixmap_from_page_number_with_separations(doc, number, ctm, cs, seps, alpha):
     r"""Class-aware wrapper for `::fz_new_pixmap_from_page_number_with_separations()`."""
@@ -51199,17 +53794,6 @@ def fz_opt_from_list(opt, optlist):
     """
     return _mupdf.fz_opt_from_list(opt, optlist)
 
-def fz_option_eq(a, b):
-    r"""
-    Class-aware wrapper for `::fz_option_eq()`.
-    	Check to see if an option, a, from a string matches a reference
-    	option, b.
-
-    	(i.e. a could be 'foo' or 'foo,bar...' etc, but b can only be
-    	'foo'.)
-    """
-    return _mupdf.fz_option_eq(a, b)
-
 def fz_optpath(opt):
     r"""
     Class-aware wrapper for `::fz_optpath()`.
@@ -51302,6 +53886,22 @@ def fz_overlaps_rect(a, b):
     """
     return _mupdf.fz_overlaps_rect(a, b)
 
+def fz_pack_double(p, x):
+    r"""Class-aware wrapper for `::fz_pack_double()`."""
+    return _mupdf.fz_pack_double(p, x)
+
+def fz_pack_double_le(p, x):
+    r"""Class-aware wrapper for `::fz_pack_double_le()`."""
+    return _mupdf.fz_pack_double_le(p, x)
+
+def fz_pack_float(p, x):
+    r"""Class-aware wrapper for `::fz_pack_float()`."""
+    return _mupdf.fz_pack_float(p, x)
+
+def fz_pack_float_le(p, x):
+    r"""Class-aware wrapper for `::fz_pack_float_le()`."""
+    return _mupdf.fz_pack_float_le(p, x)
+
 def fz_pack_path(pack, path):
     r"""
     Class-aware wrapper for `::fz_pack_path()`.
@@ -51337,6 +53937,30 @@ def fz_pack_path(pack, path):
     	forget about the details.
     """
     return _mupdf.fz_pack_path(pack, path)
+
+def fz_pack_uint16(p, x):
+    r"""Class-aware wrapper for `::fz_pack_uint16()`."""
+    return _mupdf.fz_pack_uint16(p, x)
+
+def fz_pack_uint16_le(p, x):
+    r"""Class-aware wrapper for `::fz_pack_uint16_le()`."""
+    return _mupdf.fz_pack_uint16_le(p, x)
+
+def fz_pack_uint32(p, x):
+    r"""Class-aware wrapper for `::fz_pack_uint32()`."""
+    return _mupdf.fz_pack_uint32(p, x)
+
+def fz_pack_uint32_le(p, x):
+    r"""Class-aware wrapper for `::fz_pack_uint32_le()`."""
+    return _mupdf.fz_pack_uint32_le(p, x)
+
+def fz_pack_uint64(p, x):
+    r"""Class-aware wrapper for `::fz_pack_uint64()`."""
+    return _mupdf.fz_pack_uint64(p, x)
+
+def fz_pack_uint64_le(p, x):
+    r"""Class-aware wrapper for `::fz_pack_uint64_le()`."""
+    return _mupdf.fz_pack_uint64_le(p, x)
 
 def fz_packed_path_size(path):
     r"""
@@ -51438,6 +54062,25 @@ def fz_paragraph_break(page):
     """
     return _mupdf.fz_paragraph_break(page)
 
+def fz_parse_options(options, option_string):
+    r"""
+    Class-aware wrapper for `::fz_parse_options()`.
+    	Parse more options from an options string, and add them to
+    	an existing fz_options object.
+
+    	The parser supports three distinct syntaxes (identified by the leading character).
+
+    	- Classic comma separated list of values
+    		rotate=90,bbox="0,0,100,100",title="Hello, world!"
+
+    	- URL query string
+    		?rotate=90&bbox=0,0,100,100&title=Hello, world!
+
+    	- A single JSON object -- no nested objects (except arrays of numbers)
+    		{"rotate":90,"bbox":[0,0,100,100],"title":"Hello, world!"}
+    """
+    return _mupdf.fz_parse_options(options, option_string)
+
 def fz_parse_page_range(s, a, b, n):
     r"""
     Class-aware wrapper for `::fz_parse_page_range()`.
@@ -51448,35 +54091,48 @@ def fz_parse_page_range(s, a, b, n):
     return _mupdf.fz_parse_page_range(s, a, b, n)
 
 def fz_parse_pdfocr_options(opts, args):
-    r"""
-    Class-aware wrapper for `::fz_parse_pdfocr_options()`.
-    	Parse PDFOCR options.
-
-    	Currently defined options and values are as follows:
-
-    		compression=none: No compression
-    		compression=flate: Flate compression
-    		strip-height=n: Strip height (default 16)
-    		ocr-language=<lang>: OCR Language (default eng)
-    		ocr-datadir=<datadir>: OCR data path (default rely on TESSDATA_PREFIX)
-    """
+    r"""Class-aware wrapper for `::fz_parse_pdfocr_options()`."""
     return _mupdf.fz_parse_pdfocr_options(opts, args)
 
-def fz_parse_search_options(options):
-    r"""Class-aware wrapper for `::fz_parse_search_options()`."""
-    return _mupdf.fz_parse_search_options(options)
+def fz_parse_pwg_options(opts, args):
+    r"""
+    Class-aware wrapper for `::fz_parse_pwg_options()`.
+    	Initialise a pwg options struct, and parse the given options string.
+    """
+    return _mupdf.fz_parse_pwg_options(opts, args)
+
+def fz_parse_search_options(options, args):
+    r"""
+    Class-aware wrapper for `::fz_parse_search_options()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`fz_parse_search_options(const char *args)` => `(fz_search_options *, ::fz_search_options options)`
+    """
+    return _mupdf.fz_parse_search_options(options, args)
 
 def fz_parse_stext_options(opts, string):
     r"""
     Class-aware wrapper for `::fz_parse_stext_options()`.
     	Parse stext device options from a comma separated key-value
     	string.
+
+    	This initialises the opts structure.
     """
     return _mupdf.fz_parse_stext_options(opts, string)
 
 def fz_parse_svg_device_options(opts, args):
     r"""Class-aware wrapper for `::fz_parse_svg_device_options()`."""
     return _mupdf.fz_parse_svg_device_options(opts, args)
+
+def fz_parse_table_hunt_options(opts, args):
+    r"""
+    Class-aware wrapper for `::fz_parse_table_hunt_options()`.
+    	Parse table hunt options from a comma separated key-value
+    	string.
+
+    	This initialises the opts structure.
+    """
+    return _mupdf.fz_parse_table_hunt_options(opts, args)
 
 def fz_parse_xml(buf, preserve_white):
     r"""
@@ -51789,6 +54445,13 @@ def fz_pool_strdup(pool, s):
     """
     return _mupdf.fz_pool_strdup(pool, s)
 
+def fz_pool_strndup(pool, s, n):
+    r"""
+    Class-aware wrapper for `::fz_pool_strndup()`.
+    	strndup equivalent allocating from the pool.
+    """
+    return _mupdf.fz_pool_strndup(pool, s, n)
+
 def fz_pop_clip(dev):
     r"""Class-aware wrapper for `::fz_pop_clip()`."""
     return _mupdf.fz_pop_clip(dev)
@@ -51935,6 +54598,10 @@ def fz_print_stext_page_as_xml(out, page, id):
     """
     return _mupdf.fz_print_stext_page_as_xml(out, page, id)
 
+def fz_print_stext_page_as_xml_with_flags(out, page, id, flags):
+    r"""Class-aware wrapper for `::fz_print_stext_page_as_xml_with_flags()`."""
+    return _mupdf.fz_print_stext_page_as_xml_with_flags(out, page, id, flags)
+
 def fz_print_stext_trailer_as_html(out):
     r"""Class-aware wrapper for `::fz_print_stext_trailer_as_html()`."""
     return _mupdf.fz_print_stext_trailer_as_html(out)
@@ -51949,7 +54616,7 @@ def fz_process_opened_pages(doc, process_openend_page, state):
     	Iterates over all opened pages of the document, calling the
     	provided callback for each page for processing. If the callback
     	returns non-NULL then the iteration stops and that value is returned
-    	to the called of fz_process_opened_pages().
+    	to the caller of fz_process_opened_pages().
 
     	The state pointer provided to fz_process_opened_pages() is
     	passed on to the callback but is owned by the caller.
@@ -51983,6 +54650,25 @@ def fz_process_shade(shade, ctm, scissor, prepare, process, process_arg):
     	to callback functions.
     """
     return _mupdf.fz_process_shade(shade, ctm, scissor, prepare, process, process_arg)
+
+def fz_propose_table_within_bounds(page, bounds, xposp, yposp, opts):
+    r"""
+    Class-aware wrapper for `::fz_propose_table_within_bounds()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`fz_propose_table_within_bounds(::fz_stext_page *page, ::fz_rect bounds, ::fz_stext_grid_positions **xposp, ::fz_stext_grid_positions **yposp, const ::fz_table_hunt_options *opts)` => `(int)`
+
+    	Try to guess at the table structure within given bounds.
+
+    	If no table can be found, we return 0. If we find one we
+    	return non-zero. (Currently, 1, other values reserved
+    	for the future.)
+
+    	In the case of a non-zero return. xposp and ypos are returned
+    	as pointers to fz_stext_grid_positions records that must be
+    	freed.
+    """
+    return _mupdf.fz_propose_table_within_bounds(page, bounds, xposp, yposp, opts)
 
 def fz_ptr_heap_insert(heap, v, HEAP_CMP):
     r"""Class-aware wrapper for `::fz_ptr_heap_insert()`."""
@@ -52212,6 +54898,14 @@ def fz_read_string(stm, buffer, len):
     """
     return _mupdf.fz_read_string(stm, buffer, len)
 
+def fz_read_text_file(filename):
+    r"""
+    Class-aware wrapper for `::fz_read_text_file()`.
+    	Read all the contents of a file into a string.
+    	File should be UTF-8 encoded plain text.
+    """
+    return _mupdf.fz_read_text_file(filename)
+
 def fz_read_uint16(stm):
     r"""
     Class-aware wrapper for `::fz_read_uint16()`.
@@ -52283,6 +54977,10 @@ def fz_realloc(p, size):
     """
     return _mupdf.fz_realloc(p, size)
 
+def fz_realloc_array_imp(p, nmemb, size):
+    r"""Class-aware wrapper for `::fz_realloc_array_imp()`."""
+    return _mupdf.fz_realloc_array_imp(p, nmemb, size)
+
 def fz_realloc_no_throw(p, size):
     r"""
     Class-aware wrapper for `::fz_realloc_no_throw()`.
@@ -52306,6 +55004,15 @@ def fz_recognize_image_format(p):
     	data.
     """
     return _mupdf.fz_recognize_image_format(p)
+
+def fz_rect_area(r):
+    r"""
+    Class-aware wrapper for `::fz_rect_area()`.
+    	Calculate the area of a rectangle.
+
+    	Always non-negative. All invalid or empty rects return 0.
+    """
+    return _mupdf.fz_rect_area(r)
 
 def fz_rect_from_irect(bbox):
     r"""
@@ -52963,22 +55670,6 @@ def fz_search_page_number_cb(doc, number, needle, cb, opaque):
     r"""Class-aware wrapper for `::fz_search_page_number_cb()`."""
     return _mupdf.fz_search_page_number_cb(doc, number, needle, cb, opaque)
 
-def fz_search_set_options(search, options, needle):
-    r"""
-    Class-aware wrapper for `::fz_search_set_options()`.
-    	Change the options/needle to be used for a search.
-
-    	If the needle is invalid (in the case of regexps, it fails to compile)
-    	it will throw an error.
-
-    	If the needle changes, the current position of the search within the
-    	text is kept.
-
-    	If the options change, the search position may revert to the beginning
-    	of the current page.
-    """
-    return _mupdf.fz_search_set_options(search, options, needle)
-
 def fz_search_stext_page(text, needle, hit_mark, hit_bbox, hit_max):
     r"""
     Class-aware wrapper for `::fz_search_stext_page()`.
@@ -53515,10 +56206,6 @@ def fz_snap_selection(page, ap, bp, mode):
     r"""Class-aware wrapper for `::fz_snap_selection()`."""
     return _mupdf.fz_snap_selection(page, ap, bp, mode)
 
-def fz_start_throw_on_repair():
-    r"""Class-aware wrapper for `::fz_start_throw_on_repair()`."""
-    return _mupdf.fz_start_throw_on_repair()
-
 def fz_stat_ctime(path):
     r"""Class-aware wrapper for `::fz_stat_ctime()`."""
     return _mupdf.fz_stat_ctime(path)
@@ -53534,6 +56221,10 @@ def fz_stext_page_block_iterator_eod(pos):
 def fz_stext_page_block_iterator_eod_dfs(pos):
     r"""Class-aware wrapper for `::fz_stext_page_block_iterator_eod_dfs()`."""
     return _mupdf.fz_stext_page_block_iterator_eod_dfs(pos)
+
+def fz_stext_page_block_iterator_eod_rdfs(pos):
+    r"""Class-aware wrapper for `::fz_stext_page_block_iterator_eod_rdfs()`."""
+    return _mupdf.fz_stext_page_block_iterator_eod_rdfs(pos)
 
 def fz_stext_raft_images(stext, options):
     r"""Class-aware wrapper for `::fz_stext_raft_images()`."""
@@ -53839,6 +56530,16 @@ def fz_strverscmp(s1, s2):
     """
     return _mupdf.fz_strverscmp(s1, s2)
 
+def fz_style_document(doc, publisher_css, user_css):
+    r"""
+    Class-aware wrapper for `::fz_style_document()`.
+    	Style reflowable document types.
+
+    	publisher_css: Whether to respect the publisher's styles or not.
+    	user_css: Custom stylesheet to apply.
+    """
+    return _mupdf.fz_style_document(doc, publisher_css, user_css)
+
 def fz_subpixel_adjust(ctm, subpix_ctm, qe, qf):
     r"""
     Class-aware wrapper for `::fz_subpixel_adjust()`.
@@ -53891,21 +56592,21 @@ def fz_sync_bits(stm):
     """
     return _mupdf.fz_sync_bits(stm)
 
-def fz_table_hunt(page):
+def fz_table_hunt(page, opts):
     r"""
     Class-aware wrapper for `::fz_table_hunt()`.
     	Hunt for possible tables on a page, and update the stext with
     	information.
     """
-    return _mupdf.fz_table_hunt(page)
+    return _mupdf.fz_table_hunt(page, opts)
 
-def fz_table_hunt_within_bounds(page, bounds):
+def fz_table_hunt_within_bounds(page, bounds, opts):
     r"""
     Class-aware wrapper for `::fz_table_hunt_within_bounds()`.
     	Hunt for possible tables within a specific rect on a page, and
     	update the stext with information.
     """
-    return _mupdf.fz_table_hunt_within_bounds(page, bounds)
+    return _mupdf.fz_table_hunt_within_bounds(page, bounds, opts)
 
 def fz_tell(stm):
     r"""
@@ -53959,6 +56660,18 @@ def fz_text_language_from_string(str):
     	accepted.
     """
     return _mupdf.fz_text_language_from_string(str)
+
+def fz_throw_on_unused_options(options, prefix):
+    r"""
+    Class-aware wrapper for `::fz_throw_on_unused_options()`.
+    	Throw for any options being unused or invalid.
+
+    	Either this, or fz_warn_on_unused_options should always be called
+    	(in non-error cases at least) before dropping options.
+
+    	Returns 0 if OK, non-zero otherwise.
+    """
+    return _mupdf.fz_throw_on_unused_options(options, prefix)
 
 def fz_tint_pixmap(pix, black, white):
     r"""
@@ -54250,6 +56963,10 @@ def fz_tune_image_decode(image_decode, arg):
     """
     return _mupdf.fz_tune_image_decode(image_decode, arg)
 
+def fz_tune_image_rendering(behavior):
+    r"""Class-aware wrapper for `::fz_tune_image_rendering()`."""
+    return _mupdf.fz_tune_image_rendering(behavior)
+
 def fz_tune_image_scale(image_scale, arg):
     r"""
     Class-aware wrapper for `::fz_tune_image_scale()`.
@@ -54291,9 +57008,76 @@ def fz_unlock(lock):
     """
     return _mupdf.fz_unlock(lock)
 
+def fz_unpack_double(p):
+    r"""Class-aware wrapper for `::fz_unpack_double()`."""
+    return _mupdf.fz_unpack_double(p)
+
+def fz_unpack_double_le(p):
+    r"""Class-aware wrapper for `::fz_unpack_double_le()`."""
+    return _mupdf.fz_unpack_double_le(p)
+
+def fz_unpack_float(p):
+    r"""Class-aware wrapper for `::fz_unpack_float()`."""
+    return _mupdf.fz_unpack_float(p)
+
+def fz_unpack_float_le(p):
+    r"""Class-aware wrapper for `::fz_unpack_float_le()`."""
+    return _mupdf.fz_unpack_float_le(p)
+
+def fz_unpack_int16(p):
+    r"""Class-aware wrapper for `::fz_unpack_int16()`."""
+    return _mupdf.fz_unpack_int16(p)
+
+def fz_unpack_int16_le(p):
+    r"""Class-aware wrapper for `::fz_unpack_int16_le()`."""
+    return _mupdf.fz_unpack_int16_le(p)
+
+def fz_unpack_int32(p):
+    r"""Class-aware wrapper for `::fz_unpack_int32()`."""
+    return _mupdf.fz_unpack_int32(p)
+
+def fz_unpack_int32_le(p):
+    r"""Class-aware wrapper for `::fz_unpack_int32_le()`."""
+    return _mupdf.fz_unpack_int32_le(p)
+
+def fz_unpack_int64(p):
+    r"""Class-aware wrapper for `::fz_unpack_int64()`."""
+    return _mupdf.fz_unpack_int64(p)
+
+def fz_unpack_int64_le(p):
+    r"""Class-aware wrapper for `::fz_unpack_int64_le()`."""
+    return _mupdf.fz_unpack_int64_le(p)
+
 def fz_unpack_stream(src, depth, w, h, n, indexed, pad, skip):
     r"""Class-aware wrapper for `::fz_unpack_stream()`."""
     return _mupdf.fz_unpack_stream(src, depth, w, h, n, indexed, pad, skip)
+
+def fz_unpack_uint16(p):
+    r"""
+    Class-aware wrapper for `::fz_unpack_uint16()`.
+    	Bit unpacking.
+    """
+    return _mupdf.fz_unpack_uint16(p)
+
+def fz_unpack_uint16_le(p):
+    r"""Class-aware wrapper for `::fz_unpack_uint16_le()`."""
+    return _mupdf.fz_unpack_uint16_le(p)
+
+def fz_unpack_uint32(p):
+    r"""Class-aware wrapper for `::fz_unpack_uint32()`."""
+    return _mupdf.fz_unpack_uint32(p)
+
+def fz_unpack_uint32_le(p):
+    r"""Class-aware wrapper for `::fz_unpack_uint32_le()`."""
+    return _mupdf.fz_unpack_uint32_le(p)
+
+def fz_unpack_uint64(p):
+    r"""Class-aware wrapper for `::fz_unpack_uint64()`."""
+    return _mupdf.fz_unpack_uint64(p)
+
+def fz_unpack_uint64_le(p):
+    r"""Class-aware wrapper for `::fz_unpack_uint64_le()`."""
+    return _mupdf.fz_unpack_uint64_le(p)
 
 def fz_unread_byte(stm):
     r"""
@@ -54382,9 +57166,22 @@ def fz_utflen(s):
     """
     return _mupdf.fz_utflen(s)
 
+def fz_validate_options(options, prefix):
+    r"""
+    Class-aware wrapper for `::fz_validate_options()`.
+    	This should be called by any consumer of options after it has looked up
+    	the options it understands. This will throw if any options were found to
+    	be flagged as being invalid.
+    """
+    return _mupdf.fz_validate_options(options, prefix)
+
 def fz_var_imp(arg_0):
     r"""Class-aware wrapper for `::fz_var_imp()`."""
     return _mupdf.fz_var_imp(arg_0)
+
+def fz_verify_stext_page(page, title):
+    r"""Class-aware wrapper for `::fz_verify_stext_page()`."""
+    return _mupdf.fz_verify_stext_page(page, title)
 
 def fz_walk_path(path, walker, arg):
     r"""
@@ -54411,6 +57208,18 @@ def fz_walk_path(path, walker, arg):
 def fz_warn(*args):
     r"""Class-aware wrapper for `::fz_warn()`."""
     return _mupdf.fz_warn(*args)
+
+def fz_warn_on_unused_options(options, prefix):
+    r"""
+    Class-aware wrapper for `::fz_warn_on_unused_options()`.
+    	Warn for any options being unused. Throw if any options are invalid.
+
+    	Either this, or fz_throw_on_unused_options should always be called
+    	(in non-error cases at least) before dropping options.
+
+    	Returns 0 if OK, non-zero otherwise.
+    """
+    return _mupdf.fz_warn_on_unused_options(options, prefix)
 
 def fz_warning_callback(user):
     r"""
@@ -55322,6 +58131,10 @@ def pdf_annot_has_icon_name(annot):
     r"""Class-aware wrapper for `::pdf_annot_has_icon_name()`."""
     return _mupdf.pdf_annot_has_icon_name(annot)
 
+def pdf_annot_has_in_reply_to(annot):
+    r"""Class-aware wrapper for `::pdf_annot_has_in_reply_to()`."""
+    return _mupdf.pdf_annot_has_in_reply_to(annot)
+
 def pdf_annot_has_ink_list(annot):
     r"""Class-aware wrapper for `::pdf_annot_has_ink_list()`."""
     return _mupdf.pdf_annot_has_ink_list(annot)
@@ -55369,6 +58182,10 @@ def pdf_annot_has_rich_contents(annot):
 def pdf_annot_has_rich_defaults(annot):
     r"""Class-aware wrapper for `::pdf_annot_has_rich_defaults()`."""
     return _mupdf.pdf_annot_has_rich_defaults(annot)
+
+def pdf_annot_has_subject(annot):
+    r"""Class-aware wrapper for `::pdf_annot_has_subject()`."""
+    return _mupdf.pdf_annot_has_subject(annot)
 
 def pdf_annot_has_vertices(annot):
     r"""Class-aware wrapper for `::pdf_annot_has_vertices()`."""
@@ -55468,6 +58285,10 @@ def pdf_annot_modification_date(annot):
     r"""Class-aware wrapper for `::pdf_annot_modification_date()`."""
     return _mupdf.pdf_annot_modification_date(annot)
 
+def pdf_annot_name(annot):
+    r"""Class-aware wrapper for `::pdf_annot_name()`."""
+    return _mupdf.pdf_annot_name(annot)
+
 def pdf_annot_needs_resynthesis(annot):
     r"""Class-aware wrapper for `::pdf_annot_needs_resynthesis()`."""
     return _mupdf.pdf_annot_needs_resynthesis(annot)
@@ -55536,6 +58357,10 @@ def pdf_annot_stamp_image_obj(annot):
     r"""Class-aware wrapper for `::pdf_annot_stamp_image_obj()`."""
     return _mupdf.pdf_annot_stamp_image_obj(annot)
 
+def pdf_annot_subject(annot):
+    r"""Class-aware wrapper for `::pdf_annot_subject()`."""
+    return _mupdf.pdf_annot_subject(annot)
+
 def pdf_annot_transform(annot):
     r"""Class-aware wrapper for `::pdf_annot_transform()`."""
     return _mupdf.pdf_annot_transform(annot)
@@ -55571,6 +58396,10 @@ def pdf_append_token(buf, tok, lex):
 def pdf_apply_redaction(annot, opts):
     r"""Class-aware wrapper for `::pdf_apply_redaction()`."""
     return _mupdf.pdf_apply_redaction(annot, opts)
+
+def pdf_apply_write_options(opts, args):
+    r"""Class-aware wrapper for `::pdf_apply_write_options()`."""
+    return _mupdf.pdf_apply_write_options(opts, args)
 
 def pdf_array_contains(array, obj):
     r"""Class-aware wrapper for `::pdf_array_contains()`."""
@@ -55764,6 +58593,10 @@ def pdf_check_digest(verifier, doc, signature):
 def pdf_check_document(doc):
     r"""Class-aware wrapper for `::pdf_check_document()`."""
     return _mupdf.pdf_check_document(doc)
+
+def pdf_check_structure_tree(doc):
+    r"""Class-aware wrapper for `::pdf_check_structure_tree()`."""
+    return _mupdf.pdf_check_structure_tree(doc)
 
 def pdf_check_widget_certificate(verifier, widget):
     r"""Class-aware wrapper for `::pdf_check_widget_certificate()`."""
@@ -56405,9 +59238,17 @@ def pdf_end_operation(doc):
     r"""Class-aware wrapper for `::pdf_end_operation()`."""
     return _mupdf.pdf_end_operation(doc)
 
+def pdf_end_throw_on_repair(doc, xref_base):
+    r"""Class-aware wrapper for `::pdf_end_throw_on_repair()`."""
+    return _mupdf.pdf_end_throw_on_repair(doc, xref_base)
+
 def pdf_end_vmtx(font):
     r"""Class-aware wrapper for `::pdf_end_vmtx()`."""
     return _mupdf.pdf_end_vmtx(font)
+
+def pdf_ensure_indirect(obj):
+    r"""Class-aware wrapper for `::pdf_ensure_indirect()`."""
+    return _mupdf.pdf_ensure_indirect(obj)
 
 def pdf_ensure_solid_xref(doc, num):
     r"""Class-aware wrapper for `::pdf_ensure_solid_xref()`."""
@@ -56535,6 +59376,10 @@ def pdf_find_font_resource(doc, type, encoding, item, key):
     r"""Class-aware wrapper for `::pdf_find_font_resource()`."""
     return _mupdf.pdf_find_font_resource(doc, type, encoding, item, key)
 
+def pdf_find_image_resource(doc, item, key):
+    r"""Class-aware wrapper for `::pdf_find_image_resource()`."""
+    return _mupdf.pdf_find_image_resource(doc, item, key)
+
 def pdf_find_item(drop, key):
     r"""Class-aware wrapper for `::pdf_find_item()`."""
     return _mupdf.pdf_find_item(drop, key)
@@ -56635,6 +59480,10 @@ def pdf_incremental_change_since_signing_widget(widget):
     r"""Class-aware wrapper for `::pdf_incremental_change_since_signing_widget()`."""
     return _mupdf.pdf_incremental_change_since_signing_widget(widget)
 
+def pdf_init_write_options(opts):
+    r"""Class-aware wrapper for `::pdf_init_write_options()`."""
+    return _mupdf.pdf_init_write_options(opts)
+
 def pdf_insert_colorspace_resource(doc, key, obj):
     r"""Class-aware wrapper for `::pdf_insert_colorspace_resource()`."""
     return _mupdf.pdf_insert_colorspace_resource(doc, key, obj)
@@ -56642,6 +59491,10 @@ def pdf_insert_colorspace_resource(doc, key, obj):
 def pdf_insert_font_resource(doc, key, obj):
     r"""Class-aware wrapper for `::pdf_insert_font_resource()`."""
     return _mupdf.pdf_insert_font_resource(doc, key, obj)
+
+def pdf_insert_image_resource(doc, key, obj):
+    r"""Class-aware wrapper for `::pdf_insert_image_resource()`."""
+    return _mupdf.pdf_insert_image_resource(doc, key, obj)
 
 def pdf_insert_page(doc, at, page):
     r"""Class-aware wrapper for `::pdf_insert_page()`."""
@@ -57131,6 +59984,10 @@ def pdf_mark_xref(doc):
     r"""Class-aware wrapper for `::pdf_mark_xref()`."""
     return _mupdf.pdf_mark_xref(doc)
 
+def pdf_maybe_throw_after_repair(doc):
+    r"""Class-aware wrapper for `::pdf_maybe_throw_after_repair()`."""
+    return _mupdf.pdf_maybe_throw_after_repair(doc)
+
 def pdf_metadata(doc):
     r"""Class-aware wrapper for `::pdf_metadata()`."""
     return _mupdf.pdf_metadata(doc)
@@ -57338,6 +60195,10 @@ def pdf_obj_is_dirty(obj):
 def pdf_obj_is_incremental(obj):
     r"""Class-aware wrapper for `::pdf_obj_is_incremental()`."""
     return _mupdf.pdf_obj_is_incremental(obj)
+
+def pdf_obj_is_singleton(obj):
+    r"""Class-aware wrapper for `::pdf_obj_is_singleton()`."""
+    return _mupdf.pdf_obj_is_singleton(obj)
 
 def pdf_obj_marked(obj):
     r"""Class-aware wrapper for `::pdf_obj_marked()`."""
@@ -57557,6 +60418,10 @@ def pdf_parse_stm_obj(doc, f, buf):
 def pdf_parse_write_options(opts, args):
     r"""Class-aware wrapper for `::pdf_parse_write_options()`."""
     return _mupdf.pdf_parse_write_options(opts, args)
+
+def pdf_pattern_uses_blending(dict, cycle_up):
+    r"""Class-aware wrapper for `::pdf_pattern_uses_blending()`."""
+    return _mupdf.pdf_pattern_uses_blending(dict, cycle_up)
 
 def pdf_pin_document(obj):
     r"""Class-aware wrapper for `::pdf_pin_document()`."""
@@ -57961,6 +60826,10 @@ def pdf_set_annot_modification_date(annot, time):
     r"""Class-aware wrapper for `::pdf_set_annot_modification_date()`."""
     return _mupdf.pdf_set_annot_modification_date(annot, time)
 
+def pdf_set_annot_name(annot, name):
+    r"""Class-aware wrapper for `::pdf_set_annot_name()`."""
+    return _mupdf.pdf_set_annot_name(annot, name)
+
 def pdf_set_annot_opacity(annot, opacity):
     r"""Class-aware wrapper for `::pdf_set_annot_opacity()`."""
     return _mupdf.pdf_set_annot_opacity(annot, opacity)
@@ -58000,6 +60869,10 @@ def pdf_set_annot_stamp_image(annot, image):
 def pdf_set_annot_stamp_image_obj(annot, ref):
     r"""Class-aware wrapper for `::pdf_set_annot_stamp_image_obj()`."""
     return _mupdf.pdf_set_annot_stamp_image_obj(annot, ref)
+
+def pdf_set_annot_subject(annot, subject):
+    r"""Class-aware wrapper for `::pdf_set_annot_subject()`."""
+    return _mupdf.pdf_set_annot_subject(annot, subject)
 
 def pdf_set_annot_vertex(annot, i, p):
     r"""Class-aware wrapper for `::pdf_set_annot_vertex()`."""
@@ -58080,6 +60953,10 @@ def pdf_set_str_len(obj, newlen):
 def pdf_set_text_field_value(widget, value):
     r"""Class-aware wrapper for `::pdf_set_text_field_value()`."""
     return _mupdf.pdf_set_text_field_value(widget, value)
+
+def pdf_set_trailer(doc, obj):
+    r"""Class-aware wrapper for `::pdf_set_trailer()`."""
+    return _mupdf.pdf_set_trailer(doc, obj)
 
 def pdf_set_usecmap(cmap, usecmap):
     r"""Class-aware wrapper for `::pdf_set_usecmap()`."""
@@ -58170,6 +61047,15 @@ def pdf_sprint_obj(buf, cap, len, obj, tight, ascii):
     	`pdf_sprint_obj(char *buf, size_t cap, ::pdf_obj *obj, int tight, int ascii)` => `(char *, size_t len)`
     """
     return _mupdf.pdf_sprint_obj(buf, cap, len, obj, tight, ascii)
+
+def pdf_start_throw_on_repair(doc, xref_base):
+    r"""
+    Class-aware wrapper for `::pdf_start_throw_on_repair()`.
+
+    This function has out-params. Python/C# wrappers look like:
+    	`pdf_start_throw_on_repair(::pdf_document *doc)` => int xref_base
+    """
+    return _mupdf.pdf_start_throw_on_repair(doc, xref_base)
 
 def pdf_store_item(key, val, itemsize):
     r"""Class-aware wrapper for `::pdf_store_item()`."""
@@ -58312,6 +61198,14 @@ def pdf_toggle_widget(widget):
     r"""Class-aware wrapper for `::pdf_toggle_widget()`."""
     return _mupdf.pdf_toggle_widget(widget)
 
+def pdf_tos_accumulate_clip(tos):
+    r"""Class-aware wrapper for `::pdf_tos_accumulate_clip()`."""
+    return _mupdf.pdf_tos_accumulate_clip(tos)
+
+def pdf_tos_get_clip_text(tos):
+    r"""Class-aware wrapper for `::pdf_tos_get_clip_text()`."""
+    return _mupdf.pdf_tos_get_clip_text(tos)
+
 def pdf_tos_get_text(tos):
     r"""Class-aware wrapper for `::pdf_tos_get_text()`."""
     return _mupdf.pdf_tos_get_text(tos)
@@ -58418,9 +61312,13 @@ def pdf_validate_changes(doc, version):
     r"""Class-aware wrapper for `::pdf_validate_changes()`."""
     return _mupdf.pdf_validate_changes(doc, version)
 
-def pdf_validate_signature(widget):
+def pdf_validate_signature(doc, field):
     r"""Class-aware wrapper for `::pdf_validate_signature()`."""
-    return _mupdf.pdf_validate_signature(widget)
+    return _mupdf.pdf_validate_signature(doc, field)
+
+def pdf_validate_signature_widget(widget):
+    r"""Class-aware wrapper for `::pdf_validate_signature_widget()`."""
+    return _mupdf.pdf_validate_signature_widget(widget)
 
 def pdf_vectorize_page(page):
     r"""Class-aware wrapper for `::pdf_vectorize_page()`."""
@@ -58888,6 +61786,20 @@ def Pixmap_set_alpha_helper(balen, n, data_len, zero_out, data, pix, premultiply
 
 def page_merge_helper(old_annots, graft_map, doc_des, new_annots, n):
     return _mupdf.page_merge_helper(old_annots, graft_map, doc_des, new_annots, n)
+class ll_fz_apply_search_options_outparams(object):
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+    options = property(_mupdf.ll_fz_apply_search_options_outparams_options_get, _mupdf.ll_fz_apply_search_options_outparams_options_set)
+
+    def __init__(self):
+        _mupdf.ll_fz_apply_search_options_outparams_swiginit(self, _mupdf.new_ll_fz_apply_search_options_outparams())
+    __swig_destroy__ = _mupdf.delete_ll_fz_apply_search_options_outparams
+
+# Register ll_fz_apply_search_options_outparams in _mupdf:
+_mupdf.ll_fz_apply_search_options_outparams_swigregister(ll_fz_apply_search_options_outparams)
+
+def ll_fz_apply_search_options_outparams_fn(opts, outparams):
+    return _mupdf.ll_fz_apply_search_options_outparams_fn(opts, outparams)
 class ll_fz_bidi_fragment_text_outparams(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
@@ -59171,34 +62083,34 @@ _mupdf.ll_fz_dom_get_attribute_outparams_swigregister(ll_fz_dom_get_attribute_ou
 
 def ll_fz_dom_get_attribute_outparams_fn(elt, i, outparams):
     return _mupdf.ll_fz_dom_get_attribute_outparams_fn(elt, i, outparams)
-class ll_fz_drop_imp_outparams(object):
+class ll_fz_drop_imp16_aux_outparams(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
-    refs = property(_mupdf.ll_fz_drop_imp_outparams_refs_get, _mupdf.ll_fz_drop_imp_outparams_refs_set)
+    refs = property(_mupdf.ll_fz_drop_imp16_aux_outparams_refs_get, _mupdf.ll_fz_drop_imp16_aux_outparams_refs_set)
 
     def __init__(self):
-        _mupdf.ll_fz_drop_imp_outparams_swiginit(self, _mupdf.new_ll_fz_drop_imp_outparams())
-    __swig_destroy__ = _mupdf.delete_ll_fz_drop_imp_outparams
+        _mupdf.ll_fz_drop_imp16_aux_outparams_swiginit(self, _mupdf.new_ll_fz_drop_imp16_aux_outparams())
+    __swig_destroy__ = _mupdf.delete_ll_fz_drop_imp16_aux_outparams
 
-# Register ll_fz_drop_imp_outparams in _mupdf:
-_mupdf.ll_fz_drop_imp_outparams_swigregister(ll_fz_drop_imp_outparams)
+# Register ll_fz_drop_imp16_aux_outparams in _mupdf:
+_mupdf.ll_fz_drop_imp16_aux_outparams_swigregister(ll_fz_drop_imp16_aux_outparams)
 
-def ll_fz_drop_imp_outparams_fn(p, outparams):
-    return _mupdf.ll_fz_drop_imp_outparams_fn(p, outparams)
-class ll_fz_drop_imp16_outparams(object):
+def ll_fz_drop_imp16_aux_outparams_fn(p, outparams):
+    return _mupdf.ll_fz_drop_imp16_aux_outparams_fn(p, outparams)
+class ll_fz_drop_imp_aux_outparams(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
-    refs = property(_mupdf.ll_fz_drop_imp16_outparams_refs_get, _mupdf.ll_fz_drop_imp16_outparams_refs_set)
+    refs = property(_mupdf.ll_fz_drop_imp_aux_outparams_refs_get, _mupdf.ll_fz_drop_imp_aux_outparams_refs_set)
 
     def __init__(self):
-        _mupdf.ll_fz_drop_imp16_outparams_swiginit(self, _mupdf.new_ll_fz_drop_imp16_outparams())
-    __swig_destroy__ = _mupdf.delete_ll_fz_drop_imp16_outparams
+        _mupdf.ll_fz_drop_imp_aux_outparams_swiginit(self, _mupdf.new_ll_fz_drop_imp_aux_outparams())
+    __swig_destroy__ = _mupdf.delete_ll_fz_drop_imp_aux_outparams
 
-# Register ll_fz_drop_imp16_outparams in _mupdf:
-_mupdf.ll_fz_drop_imp16_outparams_swigregister(ll_fz_drop_imp16_outparams)
+# Register ll_fz_drop_imp_aux_outparams in _mupdf:
+_mupdf.ll_fz_drop_imp_aux_outparams_swigregister(ll_fz_drop_imp_aux_outparams)
 
-def ll_fz_drop_imp16_outparams_fn(p, outparams):
-    return _mupdf.ll_fz_drop_imp16_outparams_fn(p, outparams)
+def ll_fz_drop_imp_aux_outparams_fn(p, outparams):
+    return _mupdf.ll_fz_drop_imp_aux_outparams_fn(p, outparams)
 class ll_fz_encode_character_with_fallback_outparams(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
@@ -59255,6 +62167,20 @@ _mupdf.ll_fz_fill_pixmap_with_color_outparams_swigregister(ll_fz_fill_pixmap_wit
 
 def ll_fz_fill_pixmap_with_color_outparams_fn(pix, colorspace, color_params, outparams):
     return _mupdf.ll_fz_fill_pixmap_with_color_outparams_fn(pix, colorspace, color_params, outparams)
+class ll_fz_get_option_by_index_outparams(object):
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+    val = property(_mupdf.ll_fz_get_option_by_index_outparams_val_get, _mupdf.ll_fz_get_option_by_index_outparams_val_set)
+
+    def __init__(self):
+        _mupdf.ll_fz_get_option_by_index_outparams_swiginit(self, _mupdf.new_ll_fz_get_option_by_index_outparams())
+    __swig_destroy__ = _mupdf.delete_ll_fz_get_option_by_index_outparams
+
+# Register ll_fz_get_option_by_index_outparams in _mupdf:
+_mupdf.ll_fz_get_option_by_index_outparams_swigregister(ll_fz_get_option_by_index_outparams)
+
+def ll_fz_get_option_by_index_outparams_fn(options, i, outparams):
+    return _mupdf.ll_fz_get_option_by_index_outparams_fn(options, i, outparams)
 class ll_fz_get_pixmap_from_image_outparams(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
@@ -59327,20 +62253,6 @@ _mupdf.ll_fz_grisu_outparams_swigregister(ll_fz_grisu_outparams)
 
 def ll_fz_grisu_outparams_fn(f, s, outparams):
     return _mupdf.ll_fz_grisu_outparams_fn(f, s, outparams)
-class ll_fz_has_option_outparams(object):
-    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
-    __repr__ = _swig_repr
-    val = property(_mupdf.ll_fz_has_option_outparams_val_get, _mupdf.ll_fz_has_option_outparams_val_set)
-
-    def __init__(self):
-        _mupdf.ll_fz_has_option_outparams_swiginit(self, _mupdf.new_ll_fz_has_option_outparams())
-    __swig_destroy__ = _mupdf.delete_ll_fz_has_option_outparams
-
-# Register ll_fz_has_option_outparams in _mupdf:
-_mupdf.ll_fz_has_option_outparams_swigregister(ll_fz_has_option_outparams)
-
-def ll_fz_has_option_outparams_fn(opts, key, outparams):
-    return _mupdf.ll_fz_has_option_outparams_fn(opts, key, outparams)
 class ll_fz_image_resolution_outparams(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
@@ -59356,48 +62268,62 @@ _mupdf.ll_fz_image_resolution_outparams_swigregister(ll_fz_image_resolution_outp
 
 def ll_fz_image_resolution_outparams_fn(image, outparams):
     return _mupdf.ll_fz_image_resolution_outparams_fn(image, outparams)
-class ll_fz_keep_imp_outparams(object):
+class ll_fz_init_search_options_outparams(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
-    refs = property(_mupdf.ll_fz_keep_imp_outparams_refs_get, _mupdf.ll_fz_keep_imp_outparams_refs_set)
+    options = property(_mupdf.ll_fz_init_search_options_outparams_options_get, _mupdf.ll_fz_init_search_options_outparams_options_set)
 
     def __init__(self):
-        _mupdf.ll_fz_keep_imp_outparams_swiginit(self, _mupdf.new_ll_fz_keep_imp_outparams())
-    __swig_destroy__ = _mupdf.delete_ll_fz_keep_imp_outparams
+        _mupdf.ll_fz_init_search_options_outparams_swiginit(self, _mupdf.new_ll_fz_init_search_options_outparams())
+    __swig_destroy__ = _mupdf.delete_ll_fz_init_search_options_outparams
 
-# Register ll_fz_keep_imp_outparams in _mupdf:
-_mupdf.ll_fz_keep_imp_outparams_swigregister(ll_fz_keep_imp_outparams)
+# Register ll_fz_init_search_options_outparams in _mupdf:
+_mupdf.ll_fz_init_search_options_outparams_swigregister(ll_fz_init_search_options_outparams)
 
-def ll_fz_keep_imp_outparams_fn(p, outparams):
-    return _mupdf.ll_fz_keep_imp_outparams_fn(p, outparams)
-class ll_fz_keep_imp16_outparams(object):
+def ll_fz_init_search_options_outparams_fn(outparams):
+    return _mupdf.ll_fz_init_search_options_outparams_fn(outparams)
+class ll_fz_keep_imp16_aux_outparams(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
-    refs = property(_mupdf.ll_fz_keep_imp16_outparams_refs_get, _mupdf.ll_fz_keep_imp16_outparams_refs_set)
+    refs = property(_mupdf.ll_fz_keep_imp16_aux_outparams_refs_get, _mupdf.ll_fz_keep_imp16_aux_outparams_refs_set)
 
     def __init__(self):
-        _mupdf.ll_fz_keep_imp16_outparams_swiginit(self, _mupdf.new_ll_fz_keep_imp16_outparams())
-    __swig_destroy__ = _mupdf.delete_ll_fz_keep_imp16_outparams
+        _mupdf.ll_fz_keep_imp16_aux_outparams_swiginit(self, _mupdf.new_ll_fz_keep_imp16_aux_outparams())
+    __swig_destroy__ = _mupdf.delete_ll_fz_keep_imp16_aux_outparams
 
-# Register ll_fz_keep_imp16_outparams in _mupdf:
-_mupdf.ll_fz_keep_imp16_outparams_swigregister(ll_fz_keep_imp16_outparams)
+# Register ll_fz_keep_imp16_aux_outparams in _mupdf:
+_mupdf.ll_fz_keep_imp16_aux_outparams_swigregister(ll_fz_keep_imp16_aux_outparams)
 
-def ll_fz_keep_imp16_outparams_fn(p, outparams):
-    return _mupdf.ll_fz_keep_imp16_outparams_fn(p, outparams)
-class ll_fz_keep_imp_locked_outparams(object):
+def ll_fz_keep_imp16_aux_outparams_fn(p, outparams):
+    return _mupdf.ll_fz_keep_imp16_aux_outparams_fn(p, outparams)
+class ll_fz_keep_imp_aux_outparams(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
-    refs = property(_mupdf.ll_fz_keep_imp_locked_outparams_refs_get, _mupdf.ll_fz_keep_imp_locked_outparams_refs_set)
+    refs = property(_mupdf.ll_fz_keep_imp_aux_outparams_refs_get, _mupdf.ll_fz_keep_imp_aux_outparams_refs_set)
 
     def __init__(self):
-        _mupdf.ll_fz_keep_imp_locked_outparams_swiginit(self, _mupdf.new_ll_fz_keep_imp_locked_outparams())
-    __swig_destroy__ = _mupdf.delete_ll_fz_keep_imp_locked_outparams
+        _mupdf.ll_fz_keep_imp_aux_outparams_swiginit(self, _mupdf.new_ll_fz_keep_imp_aux_outparams())
+    __swig_destroy__ = _mupdf.delete_ll_fz_keep_imp_aux_outparams
 
-# Register ll_fz_keep_imp_locked_outparams in _mupdf:
-_mupdf.ll_fz_keep_imp_locked_outparams_swigregister(ll_fz_keep_imp_locked_outparams)
+# Register ll_fz_keep_imp_aux_outparams in _mupdf:
+_mupdf.ll_fz_keep_imp_aux_outparams_swigregister(ll_fz_keep_imp_aux_outparams)
 
-def ll_fz_keep_imp_locked_outparams_fn(p, outparams):
-    return _mupdf.ll_fz_keep_imp_locked_outparams_fn(p, outparams)
+def ll_fz_keep_imp_aux_outparams_fn(p, outparams):
+    return _mupdf.ll_fz_keep_imp_aux_outparams_fn(p, outparams)
+class ll_fz_keep_imp_locked_aux_outparams(object):
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+    refs = property(_mupdf.ll_fz_keep_imp_locked_aux_outparams_refs_get, _mupdf.ll_fz_keep_imp_locked_aux_outparams_refs_set)
+
+    def __init__(self):
+        _mupdf.ll_fz_keep_imp_locked_aux_outparams_swiginit(self, _mupdf.new_ll_fz_keep_imp_locked_aux_outparams())
+    __swig_destroy__ = _mupdf.delete_ll_fz_keep_imp_locked_aux_outparams
+
+# Register ll_fz_keep_imp_locked_aux_outparams in _mupdf:
+_mupdf.ll_fz_keep_imp_locked_aux_outparams_swigregister(ll_fz_keep_imp_locked_aux_outparams)
+
+def ll_fz_keep_imp_locked_aux_outparams_fn(p, outparams):
+    return _mupdf.ll_fz_keep_imp_locked_aux_outparams_fn(p, outparams)
 class ll_fz_lookup_base14_font_outparams(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
@@ -59555,6 +62481,90 @@ _mupdf.ll_fz_lookup_noto_symbol2_font_outparams_swigregister(ll_fz_lookup_noto_s
 
 def ll_fz_lookup_noto_symbol2_font_outparams_fn(outparams):
     return _mupdf.ll_fz_lookup_noto_symbol2_font_outparams_fn(outparams)
+class ll_fz_lookup_option_outparams(object):
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+    val = property(_mupdf.ll_fz_lookup_option_outparams_val_get, _mupdf.ll_fz_lookup_option_outparams_val_set)
+
+    def __init__(self):
+        _mupdf.ll_fz_lookup_option_outparams_swiginit(self, _mupdf.new_ll_fz_lookup_option_outparams())
+    __swig_destroy__ = _mupdf.delete_ll_fz_lookup_option_outparams
+
+# Register ll_fz_lookup_option_outparams in _mupdf:
+_mupdf.ll_fz_lookup_option_outparams_swigregister(ll_fz_lookup_option_outparams)
+
+def ll_fz_lookup_option_outparams_fn(options, key, outparams):
+    return _mupdf.ll_fz_lookup_option_outparams_fn(options, key, outparams)
+class ll_fz_lookup_option_boolean_outparams(object):
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+    x = property(_mupdf.ll_fz_lookup_option_boolean_outparams_x_get, _mupdf.ll_fz_lookup_option_boolean_outparams_x_set)
+
+    def __init__(self):
+        _mupdf.ll_fz_lookup_option_boolean_outparams_swiginit(self, _mupdf.new_ll_fz_lookup_option_boolean_outparams())
+    __swig_destroy__ = _mupdf.delete_ll_fz_lookup_option_boolean_outparams
+
+# Register ll_fz_lookup_option_boolean_outparams in _mupdf:
+_mupdf.ll_fz_lookup_option_boolean_outparams_swigregister(ll_fz_lookup_option_boolean_outparams)
+
+def ll_fz_lookup_option_boolean_outparams_fn(options, key, outparams):
+    return _mupdf.ll_fz_lookup_option_boolean_outparams_fn(options, key, outparams)
+class ll_fz_lookup_option_enum_outparams(object):
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+    x = property(_mupdf.ll_fz_lookup_option_enum_outparams_x_get, _mupdf.ll_fz_lookup_option_enum_outparams_x_set)
+
+    def __init__(self):
+        _mupdf.ll_fz_lookup_option_enum_outparams_swiginit(self, _mupdf.new_ll_fz_lookup_option_enum_outparams())
+    __swig_destroy__ = _mupdf.delete_ll_fz_lookup_option_enum_outparams
+
+# Register ll_fz_lookup_option_enum_outparams in _mupdf:
+_mupdf.ll_fz_lookup_option_enum_outparams_swigregister(ll_fz_lookup_option_enum_outparams)
+
+def ll_fz_lookup_option_enum_outparams_fn(options, key, enum_list, outparams):
+    return _mupdf.ll_fz_lookup_option_enum_outparams_fn(options, key, enum_list, outparams)
+class ll_fz_lookup_option_float_outparams(object):
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+    x = property(_mupdf.ll_fz_lookup_option_float_outparams_x_get, _mupdf.ll_fz_lookup_option_float_outparams_x_set)
+
+    def __init__(self):
+        _mupdf.ll_fz_lookup_option_float_outparams_swiginit(self, _mupdf.new_ll_fz_lookup_option_float_outparams())
+    __swig_destroy__ = _mupdf.delete_ll_fz_lookup_option_float_outparams
+
+# Register ll_fz_lookup_option_float_outparams in _mupdf:
+_mupdf.ll_fz_lookup_option_float_outparams_swigregister(ll_fz_lookup_option_float_outparams)
+
+def ll_fz_lookup_option_float_outparams_fn(options, key, outparams):
+    return _mupdf.ll_fz_lookup_option_float_outparams_fn(options, key, outparams)
+class ll_fz_lookup_option_integer_outparams(object):
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+    x = property(_mupdf.ll_fz_lookup_option_integer_outparams_x_get, _mupdf.ll_fz_lookup_option_integer_outparams_x_set)
+
+    def __init__(self):
+        _mupdf.ll_fz_lookup_option_integer_outparams_swiginit(self, _mupdf.new_ll_fz_lookup_option_integer_outparams())
+    __swig_destroy__ = _mupdf.delete_ll_fz_lookup_option_integer_outparams
+
+# Register ll_fz_lookup_option_integer_outparams in _mupdf:
+_mupdf.ll_fz_lookup_option_integer_outparams_swigregister(ll_fz_lookup_option_integer_outparams)
+
+def ll_fz_lookup_option_integer_outparams_fn(options, key, outparams):
+    return _mupdf.ll_fz_lookup_option_integer_outparams_fn(options, key, outparams)
+class ll_fz_lookup_option_unsigned_outparams(object):
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+    x = property(_mupdf.ll_fz_lookup_option_unsigned_outparams_x_get, _mupdf.ll_fz_lookup_option_unsigned_outparams_x_set)
+
+    def __init__(self):
+        _mupdf.ll_fz_lookup_option_unsigned_outparams_swiginit(self, _mupdf.new_ll_fz_lookup_option_unsigned_outparams())
+    __swig_destroy__ = _mupdf.delete_ll_fz_lookup_option_unsigned_outparams
+
+# Register ll_fz_lookup_option_unsigned_outparams in _mupdf:
+_mupdf.ll_fz_lookup_option_unsigned_outparams_swigregister(ll_fz_lookup_option_unsigned_outparams)
+
+def ll_fz_lookup_option_unsigned_outparams_fn(options, key, outparams):
+    return _mupdf.ll_fz_lookup_option_unsigned_outparams_fn(options, key, outparams)
 class ll_fz_match_chapter_page_number_outparams(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
@@ -59838,6 +62848,20 @@ _mupdf.ll_fz_parse_page_range_outparams_swigregister(ll_fz_parse_page_range_outp
 
 def ll_fz_parse_page_range_outparams_fn(s, n, outparams):
     return _mupdf.ll_fz_parse_page_range_outparams_fn(s, n, outparams)
+class ll_fz_parse_search_options_outparams(object):
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+    options = property(_mupdf.ll_fz_parse_search_options_outparams_options_get, _mupdf.ll_fz_parse_search_options_outparams_options_set)
+
+    def __init__(self):
+        _mupdf.ll_fz_parse_search_options_outparams_swiginit(self, _mupdf.new_ll_fz_parse_search_options_outparams())
+    __swig_destroy__ = _mupdf.delete_ll_fz_parse_search_options_outparams
+
+# Register ll_fz_parse_search_options_outparams in _mupdf:
+_mupdf.ll_fz_parse_search_options_outparams_swigregister(ll_fz_parse_search_options_outparams)
+
+def ll_fz_parse_search_options_outparams_fn(args, outparams):
+    return _mupdf.ll_fz_parse_search_options_outparams_fn(args, outparams)
 class ll_fz_pool_array_append_outparams(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
@@ -59852,6 +62876,21 @@ _mupdf.ll_fz_pool_array_append_outparams_swigregister(ll_fz_pool_array_append_ou
 
 def ll_fz_pool_array_append_outparams_fn(arr, outparams):
     return _mupdf.ll_fz_pool_array_append_outparams_fn(arr, outparams)
+class ll_fz_propose_table_within_bounds_outparams(object):
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+    xposp = property(_mupdf.ll_fz_propose_table_within_bounds_outparams_xposp_get, _mupdf.ll_fz_propose_table_within_bounds_outparams_xposp_set)
+    yposp = property(_mupdf.ll_fz_propose_table_within_bounds_outparams_yposp_get, _mupdf.ll_fz_propose_table_within_bounds_outparams_yposp_set)
+
+    def __init__(self):
+        _mupdf.ll_fz_propose_table_within_bounds_outparams_swiginit(self, _mupdf.new_ll_fz_propose_table_within_bounds_outparams())
+    __swig_destroy__ = _mupdf.delete_ll_fz_propose_table_within_bounds_outparams
+
+# Register ll_fz_propose_table_within_bounds_outparams in _mupdf:
+_mupdf.ll_fz_propose_table_within_bounds_outparams_swigregister(ll_fz_propose_table_within_bounds_outparams)
+
+def ll_fz_propose_table_within_bounds_outparams_fn(page, bounds, opts, outparams):
+    return _mupdf.ll_fz_propose_table_within_bounds_outparams_fn(page, bounds, opts, outparams)
 class ll_fz_read_best_outparams(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
@@ -60648,6 +63687,20 @@ _mupdf.ll_pdf_sprint_obj_outparams_swigregister(ll_pdf_sprint_obj_outparams)
 
 def ll_pdf_sprint_obj_outparams_fn(buf, cap, obj, tight, ascii, outparams):
     return _mupdf.ll_pdf_sprint_obj_outparams_fn(buf, cap, obj, tight, ascii, outparams)
+class ll_pdf_start_throw_on_repair_outparams(object):
+    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
+    __repr__ = _swig_repr
+    xref_base = property(_mupdf.ll_pdf_start_throw_on_repair_outparams_xref_base_get, _mupdf.ll_pdf_start_throw_on_repair_outparams_xref_base_set)
+
+    def __init__(self):
+        _mupdf.ll_pdf_start_throw_on_repair_outparams_swiginit(self, _mupdf.new_ll_pdf_start_throw_on_repair_outparams())
+    __swig_destroy__ = _mupdf.delete_ll_pdf_start_throw_on_repair_outparams
+
+# Register ll_pdf_start_throw_on_repair_outparams in _mupdf:
+_mupdf.ll_pdf_start_throw_on_repair_outparams_swigregister(ll_pdf_start_throw_on_repair_outparams)
+
+def ll_pdf_start_throw_on_repair_outparams_fn(doc, outparams):
+    return _mupdf.ll_pdf_start_throw_on_repair_outparams_fn(doc, outparams)
 class ll_pdf_to_string_outparams(object):
     thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc="The membership flag")
     __repr__ = _swig_repr
@@ -61400,6 +64453,25 @@ def exception_info(
 
     if file == 'return':
         return out.getvalue()
+def ll_fz_apply_search_options(opts):
+    """
+    Wrapper for out-params of fz_apply_search_options().
+    Returns: ::fz_search_options options
+    """
+    outparams = ll_fz_apply_search_options_outparams()
+    ret = ll_fz_apply_search_options_outparams_fn(opts, outparams)
+    return outparams.options
+
+def fz_apply_search_options_outparams_fn(opts):
+    """
+    Class-aware helper for out-params of fz_apply_search_options() [fz_apply_search_options()].
+    """
+    options = ll_fz_apply_search_options(opts.m_internal)
+    return options
+
+fz_apply_search_options = fz_apply_search_options_outparams_fn
+
+
 def ll_fz_bidi_fragment_text(text, textlen, callback, arg, flags):
     """
     Wrapper for out-params of fz_bidi_fragment_text().
@@ -61780,22 +64852,22 @@ def fz_dom_get_attribute_outparams_fn(elt, i):
 fz_dom_get_attribute = fz_dom_get_attribute_outparams_fn
 
 
-def ll_fz_drop_imp(p):
+def ll_fz_drop_imp16_aux(p):
     """
-    Wrapper for out-params of fz_drop_imp().
-    Returns: int, int refs
-    """
-    outparams = ll_fz_drop_imp_outparams()
-    ret = ll_fz_drop_imp_outparams_fn(p, outparams)
-    return ret, outparams.refs
-
-def ll_fz_drop_imp16(p):
-    """
-    Wrapper for out-params of fz_drop_imp16().
+    Wrapper for out-params of fz_drop_imp16_aux().
     Returns: int, int16_t refs
     """
-    outparams = ll_fz_drop_imp16_outparams()
-    ret = ll_fz_drop_imp16_outparams_fn(p, outparams)
+    outparams = ll_fz_drop_imp16_aux_outparams()
+    ret = ll_fz_drop_imp16_aux_outparams_fn(p, outparams)
+    return ret, outparams.refs
+
+def ll_fz_drop_imp_aux(p):
+    """
+    Wrapper for out-params of fz_drop_imp_aux().
+    Returns: int, int refs
+    """
+    outparams = ll_fz_drop_imp_aux_outparams()
+    ret = ll_fz_drop_imp_aux_outparams_fn(p, outparams)
     return ret, outparams.refs
 
 def ll_fz_encode_character_with_fallback(font, unicode, script, language):
@@ -61874,6 +64946,25 @@ def fz_fill_pixmap_with_color_outparams_fn(pix, colorspace, color_params):
 fz_fill_pixmap_with_color = fz_fill_pixmap_with_color_outparams_fn
 
 
+def ll_fz_get_option_by_index(options, i):
+    """
+    Wrapper for out-params of fz_get_option_by_index().
+    Returns: const char *, const char *val
+    """
+    outparams = ll_fz_get_option_by_index_outparams()
+    ret = ll_fz_get_option_by_index_outparams_fn(options, i, outparams)
+    return ret, outparams.val
+
+def fz_get_option_by_index_outparams_fn(options, i):
+    """
+    Class-aware helper for out-params of fz_get_option_by_index() [fz_get_option_by_index()].
+    """
+    ret, val = ll_fz_get_option_by_index(options.m_internal, i)
+    return ret, val
+
+fz_get_option_by_index = fz_get_option_by_index_outparams_fn
+
+
 def ll_fz_get_pixmap_from_image(image, subarea, ctm):
     """
     Wrapper for out-params of fz_get_pixmap_from_image().
@@ -61907,7 +64998,7 @@ def fz_get_pixmap_mask_from_image_outparams_fn(image, subarea, ctm, in_smask):
     Class-aware helper for out-params of fz_get_pixmap_mask_from_image() [fz_get_pixmap_mask_from_image()].
     """
     ret, dw, dh = ll_fz_get_pixmap_mask_from_image(image.m_internal, subarea.internal(), ctm.internal(), in_smask)
-    return FzPixmap( ll_fz_keep_pixmap( ret)), dw, dh
+    return FzPixmap(ret), dw, dh
 
 fz_get_pixmap_mask_from_image = fz_get_pixmap_mask_from_image_outparams_fn
 
@@ -61969,25 +65060,6 @@ def fz_grisu_outparams_fn(f, s):
 fz_grisu = fz_grisu_outparams_fn
 
 
-def ll_fz_has_option(opts, key):
-    """
-    Wrapper for out-params of fz_has_option().
-    Returns: int, const char *val
-    """
-    outparams = ll_fz_has_option_outparams()
-    ret = ll_fz_has_option_outparams_fn(opts, key, outparams)
-    return ret, outparams.val
-
-def fz_has_option_outparams_fn(opts, key):
-    """
-    Class-aware helper for out-params of fz_has_option() [fz_has_option()].
-    """
-    ret, val = ll_fz_has_option(opts, key)
-    return ret, val
-
-fz_has_option = fz_has_option_outparams_fn
-
-
 def ll_fz_image_resolution(image):
     """
     Wrapper for out-params of fz_image_resolution().
@@ -62007,31 +65079,50 @@ def fz_image_resolution_outparams_fn(image):
 fz_image_resolution = fz_image_resolution_outparams_fn
 
 
-def ll_fz_keep_imp(p):
+def ll_fz_init_search_options():
     """
-    Wrapper for out-params of fz_keep_imp().
-    Returns: void *, int refs
+    Wrapper for out-params of fz_init_search_options().
+    Returns: ::fz_search_options options
     """
-    outparams = ll_fz_keep_imp_outparams()
-    ret = ll_fz_keep_imp_outparams_fn(p, outparams)
-    return ret, outparams.refs
+    outparams = ll_fz_init_search_options_outparams()
+    ret = ll_fz_init_search_options_outparams_fn(outparams)
+    return outparams.options
 
-def ll_fz_keep_imp16(p):
+def fz_init_search_options_outparams_fn():
     """
-    Wrapper for out-params of fz_keep_imp16().
+    Class-aware helper for out-params of fz_init_search_options() [fz_init_search_options()].
+    """
+    options = ll_fz_init_search_options()
+    return options
+
+fz_init_search_options = fz_init_search_options_outparams_fn
+
+
+def ll_fz_keep_imp16_aux(p):
+    """
+    Wrapper for out-params of fz_keep_imp16_aux().
     Returns: void *, int16_t refs
     """
-    outparams = ll_fz_keep_imp16_outparams()
-    ret = ll_fz_keep_imp16_outparams_fn(p, outparams)
+    outparams = ll_fz_keep_imp16_aux_outparams()
+    ret = ll_fz_keep_imp16_aux_outparams_fn(p, outparams)
     return ret, outparams.refs
 
-def ll_fz_keep_imp_locked(p):
+def ll_fz_keep_imp_aux(p):
     """
-    Wrapper for out-params of fz_keep_imp_locked().
+    Wrapper for out-params of fz_keep_imp_aux().
     Returns: void *, int refs
     """
-    outparams = ll_fz_keep_imp_locked_outparams()
-    ret = ll_fz_keep_imp_locked_outparams_fn(p, outparams)
+    outparams = ll_fz_keep_imp_aux_outparams()
+    ret = ll_fz_keep_imp_aux_outparams_fn(p, outparams)
+    return ret, outparams.refs
+
+def ll_fz_keep_imp_locked_aux(p):
+    """
+    Wrapper for out-params of fz_keep_imp_locked_aux().
+    Returns: void *, int refs
+    """
+    outparams = ll_fz_keep_imp_locked_aux_outparams()
+    ret = ll_fz_keep_imp_locked_aux_outparams_fn(p, outparams)
     return ret, outparams.refs
 
 def ll_fz_lookup_base14_font(name):
@@ -62241,6 +65332,120 @@ def fz_lookup_noto_symbol2_font_outparams_fn():
     return ret, len
 
 fz_lookup_noto_symbol2_font = fz_lookup_noto_symbol2_font_outparams_fn
+
+
+def ll_fz_lookup_option(options, key):
+    """
+    Wrapper for out-params of fz_lookup_option().
+    Returns: int, const char *val
+    """
+    outparams = ll_fz_lookup_option_outparams()
+    ret = ll_fz_lookup_option_outparams_fn(options, key, outparams)
+    return ret, outparams.val
+
+def fz_lookup_option_outparams_fn(options, key):
+    """
+    Class-aware helper for out-params of fz_lookup_option() [fz_lookup_option()].
+    """
+    ret, val = ll_fz_lookup_option(options.m_internal, key)
+    return ret, val
+
+fz_lookup_option = fz_lookup_option_outparams_fn
+
+
+def ll_fz_lookup_option_boolean(options, key):
+    """
+    Wrapper for out-params of fz_lookup_option_boolean().
+    Returns: int, int x
+    """
+    outparams = ll_fz_lookup_option_boolean_outparams()
+    ret = ll_fz_lookup_option_boolean_outparams_fn(options, key, outparams)
+    return ret, outparams.x
+
+def fz_lookup_option_boolean_outparams_fn(options, key):
+    """
+    Class-aware helper for out-params of fz_lookup_option_boolean() [fz_lookup_option_boolean()].
+    """
+    ret, x = ll_fz_lookup_option_boolean(options.m_internal, key)
+    return ret, x
+
+fz_lookup_option_boolean = fz_lookup_option_boolean_outparams_fn
+
+
+def ll_fz_lookup_option_enum(options, key, enum_list):
+    """
+    Wrapper for out-params of fz_lookup_option_enum().
+    Returns: int, int x
+    """
+    outparams = ll_fz_lookup_option_enum_outparams()
+    ret = ll_fz_lookup_option_enum_outparams_fn(options, key, enum_list, outparams)
+    return ret, outparams.x
+
+def fz_lookup_option_enum_outparams_fn(options, key, enum_list):
+    """
+    Class-aware helper for out-params of fz_lookup_option_enum() [fz_lookup_option_enum()].
+    """
+    ret, x = ll_fz_lookup_option_enum(options.m_internal, key, enum_list.m_internal)
+    return ret, x
+
+fz_lookup_option_enum = fz_lookup_option_enum_outparams_fn
+
+
+def ll_fz_lookup_option_float(options, key):
+    """
+    Wrapper for out-params of fz_lookup_option_float().
+    Returns: int, float x
+    """
+    outparams = ll_fz_lookup_option_float_outparams()
+    ret = ll_fz_lookup_option_float_outparams_fn(options, key, outparams)
+    return ret, outparams.x
+
+def fz_lookup_option_float_outparams_fn(options, key):
+    """
+    Class-aware helper for out-params of fz_lookup_option_float() [fz_lookup_option_float()].
+    """
+    ret, x = ll_fz_lookup_option_float(options.m_internal, key)
+    return ret, x
+
+fz_lookup_option_float = fz_lookup_option_float_outparams_fn
+
+
+def ll_fz_lookup_option_integer(options, key):
+    """
+    Wrapper for out-params of fz_lookup_option_integer().
+    Returns: int, int x
+    """
+    outparams = ll_fz_lookup_option_integer_outparams()
+    ret = ll_fz_lookup_option_integer_outparams_fn(options, key, outparams)
+    return ret, outparams.x
+
+def fz_lookup_option_integer_outparams_fn(options, key):
+    """
+    Class-aware helper for out-params of fz_lookup_option_integer() [fz_lookup_option_integer()].
+    """
+    ret, x = ll_fz_lookup_option_integer(options.m_internal, key)
+    return ret, x
+
+fz_lookup_option_integer = fz_lookup_option_integer_outparams_fn
+
+
+def ll_fz_lookup_option_unsigned(options, key):
+    """
+    Wrapper for out-params of fz_lookup_option_unsigned().
+    Returns: int, unsigned int x
+    """
+    outparams = ll_fz_lookup_option_unsigned_outparams()
+    ret = ll_fz_lookup_option_unsigned_outparams_fn(options, key, outparams)
+    return ret, outparams.x
+
+def fz_lookup_option_unsigned_outparams_fn(options, key):
+    """
+    Class-aware helper for out-params of fz_lookup_option_unsigned() [fz_lookup_option_unsigned()].
+    """
+    ret, x = ll_fz_lookup_option_unsigned(options.m_internal, key)
+    return ret, x
+
+fz_lookup_option_unsigned = fz_lookup_option_unsigned_outparams_fn
 
 
 def ll_fz_match_chapter_page_number(doc, chapter, page, needle, hit_bbox, hit_max, options):
@@ -62599,7 +65804,7 @@ def fz_paint_shade_outparams_fn(shade, override_cs, ctm, dest, color_params, bbo
     Class-aware helper for out-params of fz_paint_shade() [fz_paint_shade()].
     """
     cache = ll_fz_paint_shade(shade.m_internal, override_cs.m_internal, ctm.internal(), dest.m_internal, color_params.internal(), bbox.internal(), eop.m_internal)
-    return FzShadeColorCache(ll_fz_keep_shade_color_cache( cache))
+    return FzShadeColorCache( cache)
 
 fz_paint_shade = fz_paint_shade_outparams_fn
 
@@ -62623,6 +65828,25 @@ def fz_parse_page_range_outparams_fn(s, n):
 fz_parse_page_range = fz_parse_page_range_outparams_fn
 
 
+def ll_fz_parse_search_options(args):
+    """
+    Wrapper for out-params of fz_parse_search_options().
+    Returns: fz_search_options *, ::fz_search_options options
+    """
+    outparams = ll_fz_parse_search_options_outparams()
+    ret = ll_fz_parse_search_options_outparams_fn(args, outparams)
+    return ret, outparams.options
+
+def fz_parse_search_options_outparams_fn(args):
+    """
+    Class-aware helper for out-params of fz_parse_search_options() [fz_parse_search_options()].
+    """
+    ret, options = ll_fz_parse_search_options(args)
+    return ret, options
+
+fz_parse_search_options = fz_parse_search_options_outparams_fn
+
+
 def ll_fz_pool_array_append(arr):
     """
     Wrapper for out-params of fz_pool_array_append().
@@ -62640,6 +65864,25 @@ def fz_pool_array_append_outparams_fn(arr):
     return ret, idx
 
 fz_pool_array_append = fz_pool_array_append_outparams_fn
+
+
+def ll_fz_propose_table_within_bounds(page, bounds, opts):
+    """
+    Wrapper for out-params of fz_propose_table_within_bounds().
+    Returns: int, ::fz_stext_grid_positions *xposp, ::fz_stext_grid_positions *yposp
+    """
+    outparams = ll_fz_propose_table_within_bounds_outparams()
+    ret = ll_fz_propose_table_within_bounds_outparams_fn(page, bounds, opts, outparams)
+    return ret, outparams.xposp, outparams.yposp
+
+def fz_propose_table_within_bounds_outparams_fn(page, bounds, opts):
+    """
+    Class-aware helper for out-params of fz_propose_table_within_bounds() [fz_propose_table_within_bounds()].
+    """
+    ret, xposp, yposp = ll_fz_propose_table_within_bounds(page.m_internal, bounds.internal(), opts.internal())
+    return ret, FzStextGridPositions( xposp), FzStextGridPositions( yposp)
+
+fz_propose_table_within_bounds = fz_propose_table_within_bounds_outparams_fn
 
 
 def ll_fz_read_best(stm, initial, worst_case):
@@ -63677,6 +66920,25 @@ def pdf_sprint_obj_outparams_fn(buf, cap, obj, tight, ascii):
 pdf_sprint_obj = pdf_sprint_obj_outparams_fn
 
 
+def ll_pdf_start_throw_on_repair(doc):
+    """
+    Wrapper for out-params of pdf_start_throw_on_repair().
+    Returns: int xref_base
+    """
+    outparams = ll_pdf_start_throw_on_repair_outparams()
+    ret = ll_pdf_start_throw_on_repair_outparams_fn(doc, outparams)
+    return outparams.xref_base
+
+def pdf_start_throw_on_repair_outparams_fn(doc):
+    """
+    Class-aware helper for out-params of pdf_start_throw_on_repair() [pdf_start_throw_on_repair()].
+    """
+    xref_base = ll_pdf_start_throw_on_repair(doc.m_internal)
+    return xref_base
+
+pdf_start_throw_on_repair = pdf_start_throw_on_repair_outparams_fn
+
+
 def ll_pdf_to_string(obj):
     """
     Wrapper for out-params of pdf_to_string().
@@ -63977,7 +67239,7 @@ def FzImage_fz_get_pixmap_mask_from_image_outparams_fn( self, subarea, ctm, in_s
     Helper for out-params of class method fz_image::ll_fz_get_pixmap_mask_from_image() [fz_get_pixmap_mask_from_image()].
     """
     ret, dw, dh = ll_fz_get_pixmap_mask_from_image( self.m_internal, subarea.internal(), ctm.internal(), in_smask)
-    return FzPixmap( ll_fz_keep_pixmap( ret)), dw, dh
+    return FzPixmap(ret), dw, dh
 
 FzImage.fz_get_pixmap_mask_from_image = FzImage_fz_get_pixmap_mask_from_image_outparams_fn
 
@@ -63990,6 +67252,76 @@ def FzImage_fz_image_resolution_outparams_fn( self):
     return xres, yres
 
 FzImage.fz_image_resolution = FzImage_fz_image_resolution_outparams_fn
+
+
+def FzOptions_fz_get_option_by_index_outparams_fn( self, i):
+    """
+    Helper for out-params of class method fz_options::ll_fz_get_option_by_index() [fz_get_option_by_index()].
+    """
+    ret, val = ll_fz_get_option_by_index( self.m_internal, i)
+    return ret, val
+
+FzOptions.fz_get_option_by_index = FzOptions_fz_get_option_by_index_outparams_fn
+
+
+def FzOptions_fz_lookup_option_outparams_fn( self, key):
+    """
+    Helper for out-params of class method fz_options::ll_fz_lookup_option() [fz_lookup_option()].
+    """
+    ret, val = ll_fz_lookup_option( self.m_internal, key)
+    return ret, val
+
+FzOptions.fz_lookup_option = FzOptions_fz_lookup_option_outparams_fn
+
+
+def FzOptions_fz_lookup_option_boolean_outparams_fn( self, key):
+    """
+    Helper for out-params of class method fz_options::ll_fz_lookup_option_boolean() [fz_lookup_option_boolean()].
+    """
+    ret, x = ll_fz_lookup_option_boolean( self.m_internal, key)
+    return ret, x
+
+FzOptions.fz_lookup_option_boolean = FzOptions_fz_lookup_option_boolean_outparams_fn
+
+
+def FzOptions_fz_lookup_option_enum_outparams_fn( self, key, enum_list):
+    """
+    Helper for out-params of class method fz_options::ll_fz_lookup_option_enum() [fz_lookup_option_enum()].
+    """
+    ret, x = ll_fz_lookup_option_enum( self.m_internal, key, enum_list.m_internal)
+    return ret, x
+
+FzOptions.fz_lookup_option_enum = FzOptions_fz_lookup_option_enum_outparams_fn
+
+
+def FzOptions_fz_lookup_option_float_outparams_fn( self, key):
+    """
+    Helper for out-params of class method fz_options::ll_fz_lookup_option_float() [fz_lookup_option_float()].
+    """
+    ret, x = ll_fz_lookup_option_float( self.m_internal, key)
+    return ret, x
+
+FzOptions.fz_lookup_option_float = FzOptions_fz_lookup_option_float_outparams_fn
+
+
+def FzOptions_fz_lookup_option_integer_outparams_fn( self, key):
+    """
+    Helper for out-params of class method fz_options::ll_fz_lookup_option_integer() [fz_lookup_option_integer()].
+    """
+    ret, x = ll_fz_lookup_option_integer( self.m_internal, key)
+    return ret, x
+
+FzOptions.fz_lookup_option_integer = FzOptions_fz_lookup_option_integer_outparams_fn
+
+
+def FzOptions_fz_lookup_option_unsigned_outparams_fn( self, key):
+    """
+    Helper for out-params of class method fz_options::ll_fz_lookup_option_unsigned() [fz_lookup_option_unsigned()].
+    """
+    ret, x = ll_fz_lookup_option_unsigned( self.m_internal, key)
+    return ret, x
+
+FzOptions.fz_lookup_option_unsigned = FzOptions_fz_lookup_option_unsigned_outparams_fn
 
 
 def FzOutput_fz_new_svg_device_with_id_outparams_fn( self, page_width, page_height, text_format, reuse_images):
@@ -64077,7 +67409,7 @@ def FzShade_fz_paint_shade_outparams_fn( self, override_cs, ctm, dest, color_par
     Helper for out-params of class method fz_shade::ll_fz_paint_shade() [fz_paint_shade()].
     """
     cache = ll_fz_paint_shade( self.m_internal, override_cs.m_internal, ctm.internal(), dest.m_internal, color_params.internal(), bbox.internal(), eop.m_internal)
-    return FzShadeColorCache(ll_fz_keep_shade_color_cache( cache))
+    return FzShadeColorCache( cache)
 
 FzShade.fz_paint_shade = FzShade_fz_paint_shade_outparams_fn
 
@@ -64100,6 +67432,16 @@ def FzStextPage_fz_new_buffer_from_flattened_stext_page_outparams_fn( self, flat
     return FzBuffer(ret), FzStextPosition( map)
 
 FzStextPage.fz_new_buffer_from_flattened_stext_page = FzStextPage_fz_new_buffer_from_flattened_stext_page_outparams_fn
+
+
+def FzStextPage_fz_propose_table_within_bounds_outparams_fn( self, bounds, opts):
+    """
+    Helper for out-params of class method fz_stext_page::ll_fz_propose_table_within_bounds() [fz_propose_table_within_bounds()].
+    """
+    ret, xposp, yposp = ll_fz_propose_table_within_bounds( self.m_internal, bounds.internal(), opts.internal())
+    return ret, FzStextGridPositions( xposp), FzStextGridPositions( yposp)
+
+FzStextPage.fz_propose_table_within_bounds = FzStextPage_fz_propose_table_within_bounds_outparams_fn
 
 
 def FzStextPage_fz_search_stext_page_outparams_fn( self, needle, hit_bbox, hit_max):
@@ -64380,6 +67722,16 @@ def PdfDocument_pdf_signature_contents_outparams_fn( self, signature):
     return ret, contents
 
 PdfDocument.pdf_signature_contents = PdfDocument_pdf_signature_contents_outparams_fn
+
+
+def PdfDocument_pdf_start_throw_on_repair_outparams_fn( self):
+    """
+    Helper for out-params of class method pdf_document::ll_pdf_start_throw_on_repair() [pdf_start_throw_on_repair()].
+    """
+    xref_base = ll_pdf_start_throw_on_repair( self.m_internal)
+    return xref_base
+
+PdfDocument.pdf_start_throw_on_repair = PdfDocument_pdf_start_throw_on_repair_outparams_fn
 
 
 def PdfDocument_pdf_undoredo_state_outparams_fn( self):
@@ -65144,10 +68496,14 @@ fz_quad.__str__ = lambda s: to_string_fz_quad(s)
 fz_quad.__repr__ = lambda s: to_string_fz_quad(s)
 fz_rect.__str__ = lambda s: to_string_fz_rect(s)
 fz_rect.__repr__ = lambda s: to_string_fz_rect(s)
+fz_stext_grid_divider.__str__ = lambda s: to_string_fz_stext_grid_divider(s)
+fz_stext_grid_divider.__repr__ = lambda s: to_string_fz_stext_grid_divider(s)
 fz_stext_options.__str__ = lambda s: to_string_fz_stext_options(s)
 fz_stext_options.__repr__ = lambda s: to_string_fz_stext_options(s)
 fz_story_element_position.__str__ = lambda s: to_string_fz_story_element_position(s)
 fz_story_element_position.__repr__ = lambda s: to_string_fz_story_element_position(s)
+fz_table_hunt_options.__str__ = lambda s: to_string_fz_table_hunt_options(s)
+fz_table_hunt_options.__repr__ = lambda s: to_string_fz_table_hunt_options(s)
 fz_transition.__str__ = lambda s: to_string_fz_transition(s)
 fz_transition.__repr__ = lambda s: to_string_fz_transition(s)
 pdf_clean_options.__str__ = lambda s: to_string_pdf_clean_options(s)
@@ -65198,10 +68554,14 @@ FzQuad.__str__ = lambda self: self.to_string()
 FzQuad.__repr__ = lambda self: self.to_string()
 FzRect.__str__ = lambda self: self.to_string()
 FzRect.__repr__ = lambda self: self.to_string()
+FzStextGridDivider.__str__ = lambda self: self.to_string()
+FzStextGridDivider.__repr__ = lambda self: self.to_string()
 FzStextOptions.__str__ = lambda self: self.to_string()
 FzStextOptions.__repr__ = lambda self: self.to_string()
 FzStoryElementPosition.__str__ = lambda self: self.to_string()
 FzStoryElementPosition.__repr__ = lambda self: self.to_string()
+FzTableHuntOptions.__str__ = lambda self: self.to_string()
+FzTableHuntOptions.__repr__ = lambda self: self.to_string()
 FzTransition.__str__ = lambda self: self.to_string()
 FzTransition.__repr__ = lambda self: self.to_string()
 PdfCleanOptions.__str__ = lambda self: self.to_string()
@@ -65333,6 +68693,7 @@ PDF_ENUM_NAME_CheckSum = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_CheckSum))
 PDF_ENUM_NAME_Circle = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Circle))
 PDF_ENUM_NAME_ClosedArrow = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_ClosedArrow))
 PDF_ENUM_NAME_Code = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Code))
+PDF_ENUM_NAME_ColSpan = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_ColSpan))
 PDF_ENUM_NAME_Collection = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Collection))
 PDF_ENUM_NAME_ColorSpace = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_ColorSpace))
 PDF_ENUM_NAME_ColorTransform = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_ColorTransform))
@@ -65431,6 +68792,7 @@ PDF_ENUM_NAME_Fields = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Fields))
 PDF_ENUM_NAME_Figure = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Figure))
 PDF_ENUM_NAME_FileAttachment = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_FileAttachment))
 PDF_ENUM_NAME_FileSize = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_FileSize))
+PDF_ENUM_NAME_FileSpec = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_FileSpec))
 PDF_ENUM_NAME_Filespec = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Filespec))
 PDF_ENUM_NAME_Filter = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Filter))
 PDF_ENUM_NAME_Final = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Final))
@@ -65560,6 +68922,7 @@ PDF_ENUM_NAME_Locked = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Locked))
 PDF_ENUM_NAME_Luminosity = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Luminosity))
 PDF_ENUM_NAME_M = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_M))
 PDF_ENUM_NAME_MCID = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_MCID))
+PDF_ENUM_NAME_MCR = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_MCR))
 PDF_ENUM_NAME_MK = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_MK))
 PDF_ENUM_NAME_ML = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_ML))
 PDF_ENUM_NAME_MMType1 = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_MMType1))
@@ -65576,6 +68939,7 @@ PDF_ENUM_NAME_Movie = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Movie))
 PDF_ENUM_NAME_Msg = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Msg))
 PDF_ENUM_NAME_Multiply = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Multiply))
 PDF_ENUM_NAME_N = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_N))
+PDF_ENUM_NAME_NM = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_NM))
 PDF_ENUM_NAME_Name = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Name))
 PDF_ENUM_NAME_Named = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Named))
 PDF_ENUM_NAME_Names = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Names))
@@ -65593,6 +68957,7 @@ PDF_ENUM_NAME_Note = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Note))
 PDF_ENUM_NAME_NumSections = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_NumSections))
 PDF_ENUM_NAME_Nums = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Nums))
 PDF_ENUM_NAME_O = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_O))
+PDF_ENUM_NAME_OBJR = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_OBJR))
 PDF_ENUM_NAME_OC = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_OC))
 PDF_ENUM_NAME_OCG = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_OCG))
 PDF_ENUM_NAME_OCGs = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_OCGs))
@@ -65685,9 +69050,11 @@ PDF_ENUM_NAME_Registry = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Registry))
 PDF_ENUM_NAME_RelativeColorimetric = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_RelativeColorimetric))
 PDF_ENUM_NAME_ResetForm = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_ResetForm))
 PDF_ENUM_NAME_Resources = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Resources))
+PDF_ENUM_NAME_RichMedia = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_RichMedia))
 PDF_ENUM_NAME_RoleMap = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_RoleMap))
 PDF_ENUM_NAME_Root = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Root))
 PDF_ENUM_NAME_Rotate = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Rotate))
+PDF_ENUM_NAME_RowSpan = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_RowSpan))
 PDF_ENUM_NAME_Rows = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Rows))
 PDF_ENUM_NAME_Ruby = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Ruby))
 PDF_ENUM_NAME_RunLengthDecode = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_RunLengthDecode))
@@ -65726,11 +69093,13 @@ PDF_ENUM_NAME_StmF = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_StmF))
 PDF_ENUM_NAME_StrF = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_StrF))
 PDF_ENUM_NAME_StrikeOut = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_StrikeOut))
 PDF_ENUM_NAME_Strong = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Strong))
+PDF_ENUM_NAME_StructElem = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_StructElem))
 PDF_ENUM_NAME_StructParent = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_StructParent))
 PDF_ENUM_NAME_StructParents = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_StructParents))
 PDF_ENUM_NAME_StructTreeRoot = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_StructTreeRoot))
 PDF_ENUM_NAME_Sub = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Sub))
 PDF_ENUM_NAME_SubFilter = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_SubFilter))
+PDF_ENUM_NAME_Subj = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Subj))
 PDF_ENUM_NAME_Subject = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Subject))
 PDF_ENUM_NAME_Subtype = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Subtype))
 PDF_ENUM_NAME_Subtype2 = PdfObj( obj_enum_to_obj( PDF_ENUM_NAME_Subtype2))
