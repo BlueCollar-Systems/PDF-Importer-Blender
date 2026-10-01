@@ -11,6 +11,11 @@ import tempfile
 import zipfile
 from pathlib import Path
 
+try:
+    from .pymupdf_runtime_smoke import verify_runtime
+except ImportError:
+    from pymupdf_runtime_smoke import verify_runtime
+
 
 REQUIRED_MEMBERS = {
     "pdf_vector_importer/__init__.py",
@@ -30,6 +35,9 @@ REQUIRED_MEMBERS = {
     "pdf_vector_importer/lib/pymupdf/_extra.pyd",
     "pdf_vector_importer/lib/pymupdf/_mupdf.pyd",
     "pdf_vector_importer/lib/pymupdf/mupdfcpp64.dll",
+    "pdf_vector_importer/lib/pymupdf-1.28.2.dist-info/METADATA",
+    "pdf_vector_importer/lib/pymupdf-1.28.2.dist-info/WHEEL",
+    "pdf_vector_importer/lib/pymupdf-1.28.2.dist-info/COPYING",
     "pdf_vector_importer/lib/fontTools/__init__.py",
     "pdf_vector_importer/lib/fontTools/ttLib/__init__.py",
     "pdf_vector_importer/lib/fontTools/cffLib/__init__.py",
@@ -117,20 +125,7 @@ def main() -> int:
                     % sys.platform
                 )
             if sys.platform == "win32":
-                lib_dir = str(lib_dir)
-                code = (
-                    "import sys; "
-                    f"sys.path.insert(0, r'{tmp}'); "
-                    "from pdf_vector_importer.pdfcadcore.fitz_loader import import_fitz; "
-                    f"fitz = import_fitz(prefer_lib_dir=r'{lib_dir}'); "
-                    "assert callable(getattr(fitz, 'open', None))"
-                )
-                proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
-                if proc.returncode != 0:
-                    raise SystemExit(
-                        "Vendored PyMuPDF import failed from release ZIP: "
-                        + (proc.stderr.strip() or proc.stdout.strip())
-                    )
+                verify_runtime(sys.executable, lib_dir, Path(tmp))
 
     print(f"Release ZIP smoke passed: {zip_path.name}")
     return 0

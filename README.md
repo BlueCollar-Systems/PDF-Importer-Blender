@@ -42,6 +42,11 @@ source/development tool that warns and requires confirmation before pip may use
 the network and replace private package files. Customers should reinstall the
 official release ZIP for any runtime damage beyond the bundled helper repair.
 
+The bundled Windows runtime is PyMuPDF 1.28.2. It fixes the upstream repeated
+text-trace reference-count failure; release checks exercise repeated extraction
+and require a clean interpreter shutdown. Source installations require 1.28.2
+or newer. The bundled `extra.py` and its repair copy remain byte-identical.
+
 **Offline install:** Release ZIPs from GitHub work without internet after download.
 
 ## Upgrading / skipping versions

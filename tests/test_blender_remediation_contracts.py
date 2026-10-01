@@ -336,7 +336,8 @@ def test_engine_propagates_cancel_to_geometry_and_writes_resume_checkpoint(
         def link(self, value):
             self.items.append(value)
 
-    class Collection:
+    class Collection(dict):
+        __eq__ = object.__eq__
         def __init__(self, name):
             self.name = name
             self.children = Children()
@@ -477,7 +478,8 @@ def test_engine_resume_reuses_root_and_only_builds_unfinished_pages(
         def link(self, value):
             self.items.append(value)
 
-    class Collection:
+    class Collection(dict):
+        __eq__ = object.__eq__
         def __init__(self, name):
             self.name = name
             self.children = Children()
