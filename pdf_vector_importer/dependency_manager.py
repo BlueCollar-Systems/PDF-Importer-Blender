@@ -253,7 +253,7 @@ def install_pymupdf(*, clear_vendored: bool = True) -> bool:
                     "--target",
                     str(lib_dir),
                     "--upgrade",
-                    "PyMuPDF>=1.24,<2.0",
+                    "PyMuPDF>=1.28.2,<2.0",
                 ],
                 timeout=300,
             )

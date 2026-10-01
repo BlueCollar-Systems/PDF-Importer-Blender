@@ -30,14 +30,42 @@ acyclic, and contain no peer aliases.
 | Labels | Stable item ID plus Blender host/version capability evidence showing that Blender exposes no persistent, renderable, model-scaled Label entity for that item. | A horizontal annotation, relabeled `FONT`, or visual mismatch. |
 | Text | The span's immutable extraction record proves that no exact usable source font program exists: missing, malformed, unsupported, or ambiguous embedded/Base-14 font evidence with source font name and xref. | Font-load exception, system-font substitution, wrong transform, or broken object creation. |
 | 3D Text | The same item-specific exact-font evidence as Text. Blender supports extrusion; failure to create or verify positive extrusion is a failure, not impossibility. | Zero extrusion, a flat `FONT` relabeled as 3D, or a generic exception. |
-| Glyphs | Exact-font evidence is unavailable, or the running Blender host lacks the evaluated `Object.to_curve` capability. The record includes item ID and capability/font evidence. | Empty splines, wrong transform/dimensions, or a conversion exception. |
-| Geometry | Exact-font evidence is unavailable, or the running Blender host lacks `bpy.data.meshes.new_from_object`. The record includes item ID and capability/font evidence. | Empty vertices, wrong transform/dimensions, or a conversion exception. |
+| Glyphs | Exact-font evidence is unavailable and the bounded source-outline route cannot qualify that item, or the host lacks the required conversion capability. Unsupported source topology must be proved before allocation, with complete source/item bindings. | Empty splines, wrong transform/dimensions, or a conversion exception. |
+| Geometry | Exact-font evidence is unavailable and the bounded source-outline route cannot qualify that item, or the host lacks the required conversion capability. The record retains source/item evidence. | Empty vertices, wrong transform/dimensions, or a conversion exception. |
 | Raster | No transition exists. Missing/empty pixels, an unwritten clip, wrong placement, missing plane identity, or rollback failure is an explicit terminal failure. | Assuming that raster is always achievable. |
 
 An unavailable exact source program is source-item evidence: inventing a
 similar operating-system font would change glyph shape and is prohibited. The
 free local FontTools path may deterministically wrap/repair the exact embedded
 program; it never substitutes a font by name.
+
+When the original extraction positively proves an empty or absent font program,
+Glyphs and Geometry can instead use the same PDF's MuPDF SVG outlines. This
+route requires a complete page-wide, one-to-one match of original Unicode,
+glyph ID and float32 origin to canonical characters. Opaque fill, original
+line/cubic controls, transformed clips, counters and native readback are verified
+separately. Unsupported effects, ambiguous matches and unproved contours retain
+explicit fallback evidence. Corrupt or ambiguous font programs do not enable
+this additional route.
+
+An extra SVG occurrence without a canonical character is retained in a single
+page-owned evidence ledger only when its original trace occurrence is unique
+and its definition is empty or its complete control hull is strictly clipped.
+Canonical and omitted occurrences cannot reuse a trace occurrence. Per-item
+hash references bind that ledger through final verification and reporting;
+these omissions do not increase delivered or zero-ink item counts.
+
+Clip qualification supports exact rectangles and an even-odd outer rectangle
+with strictly contained, disjoint rectangular holes. A whole control hull must
+be proved inside the active fill or strictly excluded. Touching or partial hole
+crossings remain unsupported. Nonglyph paint branches are ignored by this text
+qualifier only after their complete reference graph proves they contain no
+glyph paint; unsupported effects on glyph ancestors still fail qualification.
+
+These objects carry `source_renderer_svg` provenance and no embedded-font
+authenticity claim. Glyphs are filled, editable `CURVE` objects; Geometry is a
+`MESH` with an authenticated finite tessellation boundary. A 3D Text request
+delivered this way is explicitly reported as a downgrade to flat Glyphs.
 
 ## Verification oracle
 
@@ -46,14 +74,23 @@ program; it never substitutes a font by name.
 | Labels | A persistent, renderable, model-scaled native label with verified source transform. Blender currently cannot satisfy this oracle, so the capability attempt is recorded as impossible per item. |
 | Text | `Object.type == "FONT"`, exact body including edge whitespace, exact source font asset/hash, zero extrusion, source page/item identity, and verified anchor, rotation, width, and height. |
 | 3D Text | The Text oracle plus positive extrusion. |
-| Glyphs | The exact-font Text candidate first passes its oracle; conversion then yields a nonempty real `CURVE`, preserves exact source-text metadata, and independently re-verifies anchor, rotation, width, and height. |
-| Geometry | The exact-font Text candidate first passes its oracle; conversion then yields a nonempty real `MESH`, preserves exact source-text metadata, and independently re-verifies anchor, rotation, width, and height. |
+| Glyphs | A verified exact-font conversion or the qualified source-outline route yields a nonempty real `CURVE`. Source text/occurrences, exact native controls, filled ink, material and final page transform are verified. |
+| Geometry | A verified exact-font conversion or the qualified source-outline route yields a nonempty real `MESH`. Source text/occurrences, finite boundary and triangle coverage, material and final page transform are verified. |
 | Raster | The exact source span bbox renders nonempty pixels to a nonempty file; a real `MESH` image plane has stable item identity and the target bbox placement/dimensions. |
 
 Whitespace-only source spans legitimately have no visible geometry. Text and
 3D Text still verify the exact editable body and transform without inventing
 visible characters. Structural conversions with no real splines/vertices do
 not fabricate delivery.
+
+For positively absent fonts, a whitespace-only item may have complete original
+SVG-empty or extraction-added-space evidence and no visible or clipped glyph.
+Such items use `status: verified_zero_ink`, a null final representation and no
+entity IDs. Their canonical body and identity remain in the source roster;
+`verified_zero_ink_items` is separate from native delivery counts. A hash-bound
+ledger on the owning page collection must agree with the report before READY.
+Whitespace text alone, a missing occurrence, a stale ledger or an unsupported
+paint effect cannot authorize this accounting.
 
 ## Rollback ownership
 

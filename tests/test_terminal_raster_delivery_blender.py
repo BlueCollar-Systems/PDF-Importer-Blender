@@ -2423,6 +2423,7 @@ def test_report_preserves_every_item_attempt_and_summarizes_failures_loudly(
     assert delivery["summary"] == {
         "source_items": 3,
         "delivered_items": 2,
+        "verified_zero_ink_items": 0,
         "fallback_items": 1,
         "failed_items": 1,
         "requested_counts": {"text": 3},

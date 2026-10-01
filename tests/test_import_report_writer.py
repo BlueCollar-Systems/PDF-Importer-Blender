@@ -226,6 +226,7 @@ class TestImportReportWriter(unittest.TestCase):
                     "verified": True,
                     "source_items": 1,
                     "delivered_items": 1,
+                    "verified_zero_ink_items": 0,
                     "failed_items": 0,
                 },
             )

@@ -445,7 +445,44 @@ def _delivered_item_raster_count(provenance_opts: Any) -> int:
     return count
 
 
-def _text_delivery_from_provenance(provenance_opts: Any) -> Dict[str, Any]:
+def _verify_source_page_ledger(record, cache, *, source_pdf_path=None):
+    """Authenticate each page once per final/report pass, never cache native reads across passes."""
+    from .source_text_outlines import digest, verify_page_ledger_collection
+
+    if record.get('status') == 'verified_zero_ink':
+        reference = record['zero_ink_proof']['source_record'].get('source_page_ledger')
+        owner = record.get('page_collection')
+    else:
+        attempt = next((row for row in reversed(record.get('attempts', ()))
+                        if row.get('status') == 'delivered'), {})
+        evidence = attempt.get('evidence', {})
+        reference = evidence.get('source_page_ledger')
+        owner = evidence.get('page_collection')
+        for entity in record.get('final_state_verification', {}).get('entities', ()):
+            native_reference = entity.get('source_outline', {}).get('source_page_ledger')
+            if native_reference != reference:
+                raise ValueError('final native source page occurrence reference differs')
+    if reference is None:
+        return None
+    if record.get('page') != reference.get('page_number'):
+        raise ValueError('source page occurrence reference belongs to another page')
+    key = (owner, digest(reference))
+    if key not in cache:
+        collection = bpy.data.collections.get(owner)
+        if collection is None:
+            raise ValueError('source page occurrence collection missing')
+        proof = verify_page_ledger_collection(collection, reference, collections=bpy.data.collections)
+        ledger = json.loads(collection['pdf_source_page_ledger_json'])['ledger']
+        if source_pdf_path is not None and _sha256_path(source_pdf_path) != reference['pdf_sha256']:
+            raise ValueError('source PDF changed after page occurrence qualification')
+        cache[key] = proof, set(ledger['canonical_item_ids'])
+    proof, item_ids = cache[key]
+    if record.get('item_id') not in item_ids:
+        raise ValueError('canonical item is absent from source page occurrence ledger')
+    return proof
+
+
+def _text_delivery_from_provenance(provenance_opts: Any, *, source_pdf_path=None) -> Dict[str, Any]:
     """Build the complete, item-scoped text delivery report payload."""
     try:
         raw_records = list(getattr(provenance_opts, "_text_delivery_records", []) or [])
@@ -455,9 +492,16 @@ def _text_delivery_from_provenance(provenance_opts: Any) -> Dict[str, Any]:
     requested_counts: Dict[str, int] = {}
     final_counts: Dict[str, int] = {}
     delivered = 0
+    verified_zero_ink = 0
     fallback = 0
     failed_ids = []
+    page_ledger_cache = {}
     for record in records:
+        if record.get('status') in ('delivered', 'verified_zero_ink'):
+            try:
+                _verify_source_page_ledger(record, page_ledger_cache, source_pdf_path=source_pdf_path)
+            except (AttributeError, KeyError, TypeError, ValueError, RuntimeError, OSError) as exc:
+                record.update(status='failed', reason='source_page_ledger_unverified', detail=str(exc))
         requested = str(record.get("requested_representation") or "").strip().lower()
         final = str(record.get("final_representation") or "").strip().lower()
         status = str(record.get("status") or "failed").strip().lower()
@@ -469,6 +513,21 @@ def _text_delivery_from_provenance(provenance_opts: Any) -> Dict[str, Any]:
             delivered += 1
             if bool(record.get("fallback_used")) and final != requested:
                 fallback += 1
+        elif status == 'verified_zero_ink':
+            try:
+                from .source_text_outlines import verify_zero_ink_delivery, verify_zero_ink_collection
+
+                verify_zero_ink_delivery(record)
+                if sum(row.get('item_id') == record['item_id'] for row in records) != 1:
+                    raise ValueError('duplicate canonical zero-ink identity')
+                collection = bpy.data.collections.get(record['page_collection'])
+                if collection is None:
+                    raise ValueError('zero-ink page collection missing')
+                peers = [row for row in records if row.get('page_collection') == collection.name]
+                verify_zero_ink_collection(collection, peers)
+                verified_zero_ink += 1
+            except (AttributeError, KeyError, TypeError, ValueError, RuntimeError):
+                failed_ids.append(str(record.get('item_id') or '<unknown>'))
         else:
             failed_ids.append(str(record.get("item_id") or "<unknown>"))
     return {
@@ -476,6 +535,7 @@ def _text_delivery_from_provenance(provenance_opts: Any) -> Dict[str, Any]:
         "summary": {
             "source_items": len(records),
             "delivered_items": delivered,
+            "verified_zero_ink_items": verified_zero_ink,
             "fallback_items": fallback,
             "failed_items": len(failed_ids),
             "requested_counts": dict(sorted(requested_counts.items())),
@@ -554,10 +614,11 @@ def _terminal_import_failures(config: Dict, stats: Dict, provenance_opts: Any) -
     recorded = int(summary["source_items"])
     delivered = int(summary["delivered_items"])
     failed = int(summary["failed_items"])
-    if required > 0 and (recorded != required or delivered != required or failed != 0):
+    zero_ink = int(summary['verified_zero_ink_items'])
+    if required > 0 and (recorded != required or delivered + zero_ink != required or failed != 0):
         failures.append(
             "text delivery failed "
-            f"(required={required}, recorded={recorded}, delivered={delivered}, failed={failed})"
+            f"(required={required}, recorded={recorded}, delivered={delivered}, zero_ink={zero_ink}, failed={failed})"
         )
 
     raster_failures = list(stats.get("raster_delivery_failures") or [])
@@ -795,7 +856,7 @@ def write_import_report(
         or _default_import_report_path(filepath)
     )
     elapsed = float(stats.get("elapsed", 0.0) or 0.0)
-    text_delivery = _text_delivery_from_provenance(provenance_opts)
+    text_delivery = _text_delivery_from_provenance(provenance_opts, source_pdf_path=filepath)
     text_delivery_summary = text_delivery["summary"]
     text_fallback = _text_fallback_from_provenance(provenance_opts)
     raster_delivery_failures = []
@@ -892,13 +953,14 @@ def write_import_report(
     import_text_enabled = bool(config.get("import_text", True)) and text_mode != "none"
     delivery_source_items = int(text_delivery_summary["source_items"])
     delivery_delivered_items = int(text_delivery_summary["delivered_items"])
+    delivery_zero_ink_items = int(text_delivery_summary['verified_zero_ink_items'])
     delivery_failed_items = int(text_delivery_summary["failed_items"])
     text_delivery_required = bool(import_text_enabled and text_source_spans > 0)
     text_delivery_verified = bool(
         not text_delivery_required
         or (
             delivery_source_items == text_source_spans
-            and delivery_delivered_items == delivery_source_items
+            and delivery_delivered_items + delivery_zero_ink_items == delivery_source_items
             and delivery_failed_items == 0
         )
     )
@@ -908,6 +970,7 @@ def write_import_report(
             "required_source_items": text_source_spans,
             "recorded_source_items": delivery_source_items,
             "delivered_items": delivery_delivered_items,
+            'verified_zero_ink_items': delivery_zero_ink_items,
             "failed_items": delivery_failed_items,
             "failed_item_ids": list(text_delivery_summary["failed_item_ids"]),
         }
@@ -965,6 +1028,7 @@ def write_import_report(
             "verified": text_delivery_verified,
             "source_items": delivery_source_items,
             "delivered_items": delivery_delivered_items,
+            "verified_zero_ink_items": delivery_zero_ink_items,
             "failed_items": delivery_failed_items,
         }
     if raster_delivery_failures:
@@ -1071,6 +1135,23 @@ def write_import_report(
     if isinstance(diagnostics, dict) and int(text_delivery_summary["source_items"]) > 0:
         signals = list(diagnostics.get("signals") or [])
         actions = list(diagnostics.get("recommended_actions") or [])
+        if (text_delivery_verified and delivery_zero_ink_items == text_source_spans > 0
+                and delivery_delivered_items == 0 and int(stats.get('text_items', 0) or 0) == 0):
+            # The shared report cannot inspect Blender's persistent page ledger.
+            # Exempt only this entire, revalidated source roster and current PDF.
+            try:
+                actual_pdf_hash = _sha256_path(filepath)
+                all_bound = all(row['zero_ink_proof']['source_record']['pdf_sha256'] == actual_pdf_hash
+                                for row in text_delivery['items'])
+            except (OSError, KeyError, TypeError, ValueError):
+                all_bound = False
+            if all_bound:
+                signals = [signal for signal in signals
+                           if signal != 'source_text_seen_but_no_text_entities_created']
+                actions = [action for action in actions if action != (
+                    'Treat missing delivered text entities as a failed import; inspect the '
+                    'item attempt history without changing the requested representation.')]
+                signals.append('source_zero_ink_items_verified')
         if int(text_delivery_summary["fallback_items"]) > 0:
             if "text_representation_fallback_used" not in signals:
                 signals.append("text_representation_fallback_used")
@@ -3239,6 +3320,10 @@ def _object_world_location(obj):
 
 def _delivery_expected_locations(attempt_evidence, entity_ids):
     expected = {}
+    for placement in tuple(attempt_evidence.get('placements') or ()):
+        location = placement.get('actual_location_m')
+        if isinstance(location, (list, tuple)) and len(location) >= 2:
+            expected[str(placement.get('entity_id'))] = (float(location[0]), float(location[1]))
     for character in tuple(attempt_evidence.get("character_entities") or ()):
         verification = dict(character.get("verification") or {})
         location = verification.get("actual_location_m")
@@ -3341,6 +3426,7 @@ def _reverify_text_delivery_after_stack(
     registry = getattr(getattr(bpy, "data", None), "objects", None)
     lookup = _ObjectNameLookup(registry)
     getter = lookup.get
+    page_ledger_cache = {}
     for record in tuple(delivery_records or ()):
         if (
             int(record.get("page", 0) or 0) != int(page_number)
@@ -3359,6 +3445,10 @@ def _reverify_text_delivery_after_stack(
         expected_type = expected_types.get(representation)
         entity_proofs = []
         record_failures = []
+        try:
+            _verify_source_page_ledger(record, page_ledger_cache)
+        except (AttributeError, KeyError, TypeError, ValueError, RuntimeError) as exc:
+            record_failures.append(f'final_source_page_ledger_unverified:{exc}')
         for entity_id in entity_ids:
             obj = getter(entity_id) if callable(getter) else None
             if obj is None:
@@ -3403,6 +3493,27 @@ def _reverify_text_delivery_after_stack(
                     )
                 except (AttributeError, KeyError, ReferenceError, RuntimeError, TypeError, ValueError) as error:
                     record_failures.append(f"final_entity_page_clip_unverified:{entity_id}:{error}")
+            if prior_evidence.get('outline_source') == 'source_renderer_svg':
+                try:
+                    from .bl_source_outline_builder import verify_source_outline_entity
+
+                    bindings = [row for row in prior_evidence.get('placements', ())
+                                if row.get('entity_id') == entity_id]
+                    if len(bindings) != 1:
+                        raise ValueError('source outline creation transform is unbound')
+                    expected_matrix = [list(row) for row in bindings[0]['creation_world_matrix']]
+                    expected_matrix[1][3] += float(stack_offset_m)
+                    proof['source_outline'] = verify_source_outline_entity(
+                        obj, expected_world_matrix=expected_matrix,
+                        page_clip_verified=bool(proof.get('source_page_viewport')),
+                    )
+                    for key in ('source_outline_sha256', 'source_placement_index'):
+                        if proof['source_outline'].get(key) != bindings[0].get(key) or key not in bindings[0]:
+                            raise ValueError(f'original outline occurrence binding changed: {key}')
+                    if proof['source_outline'].get('source_page_ledger') != prior_evidence.get('source_page_ledger'):
+                        raise ValueError('original source page occurrence ledger binding changed')
+                except (AttributeError, KeyError, IndexError, ReferenceError, RuntimeError, TypeError, ValueError) as error:
+                    record_failures.append(f'final_source_outline_unverified:{entity_id}:{error}')
             prior_location = expected_locations.get(entity_id)
             if prior_location is not None:
                 expected_location = [
@@ -4208,6 +4319,13 @@ def import_pdf(
                     )
                 try:
                     page_raster_renderer = _PageDisplayListRenderer(page)
+                    from .source_text_outlines import page_record_provider
+
+                    source_outline_provider = page_record_provider(
+                        page, page_data.text_items, page_number=page_num,
+                        width_mm=page_data.width, height_mm=page_data.height,
+                        flip_y=import_cfg.flip_y, pdf_sha256=source_sha256, collection=page_col,
+                    )
                     text_count = build_all_text(
                         page_data.text_items,
                         page_col,
@@ -4218,6 +4336,7 @@ def import_pdf(
                         text_mode=import_cfg.text_mode,
                         progress_callback=_text_progress,
                         provenance_opts=import_cfg,
+                        source_outline_callback=source_outline_provider,
                         terminal_raster_callback=(
                         lambda text_item, collection, callback_page_number, item_id,
                         _page=page, _cfg=import_cfg, _dir=image_dir, _z=text_z_offset_m,
