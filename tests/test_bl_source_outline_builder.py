@@ -10,6 +10,13 @@ import pytest
 from pdf_vector_importer import bl_source_outline_builder as b
 
 
+@pytest.fixture(autouse=True)
+def clear_qualification_cache():
+    b._clear_qualification_cache()
+    yield
+    b._clear_qualification_cache()
+
+
 def polygon(points):
     return {"start": list(points[0]), "segments": [["L", list(p)] for p in points[1:]+points[:1]], "closed": True}
 
@@ -491,3 +498,170 @@ def test_authenticated_optional_page_ledger_is_returned_for_independent_owner_ch
     result = b.build_source_outlines(value, NS(objects=NS(link=lambda obj: None)), representation="glyphs", requested="glyphs")
     assert result.status == "delivered", result.evidence
     assert b.verify_source_outline_entity(result.entity)["source_page_ledger"] == value["source_page_ledger"]
+
+
+def qualification_counter(monkeypatch):
+    calls = []
+    original = b._qualify_contours
+    def observed(*args, **kwargs):
+        calls.append((deepcopy(args), dict(kwargs)))
+        return original(*args, **kwargs)
+    monkeypatch.setattr(b, "_qualify_contours", observed)
+    return calls
+
+
+def test_cached_math_cold_warm_fraction_parity_and_return_isolation(monkeypatch):
+    calls = qualification_counter(monkeypatch)
+    contours = deepcopy([OUTER, INNER])
+    cold = b.qualify_contours(contours, "evenodd")
+    original = deepcopy(cold)
+    cold["segments"][0].clear()
+    cold["depth"][0] = 99
+    warm = b.qualify_contours(contours, "evenodd")
+    assert warm == original and isinstance(warm["area_m2"], Fraction)
+    warm["segments"].clear()
+    assert b.qualify_contours(contours, "evenodd") == original
+    assert len(calls) == 1
+
+
+def test_cold_key_and_math_use_same_detached_snapshot(monkeypatch):
+    contours = deepcopy([OUTER])
+    expected = b._qualify_contours(deepcopy(contours), "nonzero", native=False,
+                                   coordinates_in_metres=False, segment_limit=512)
+    original = b._qualify_contours
+    def mutate_caller(detached, *args, **kwargs):
+        assert detached is not contours and detached[0] is not contours[0]
+        contours[0]["closed"] = False
+        return original(detached, *args, **kwargs)
+    monkeypatch.setattr(b, "_qualify_contours", mutate_caller)
+    assert b.qualify_contours(contours, "nonzero") == expected
+    with pytest.raises(b.OutlineVerificationError, match="not explicitly closed"):
+        b.qualify_contours(contours, "nonzero")
+
+
+@pytest.mark.parametrize("change", ["controls", "fill", "native", "units", "segment_limit",
+                                   "schema", "resolution", "pieces", "candidates"])
+def test_every_math_input_or_domain_change_misses_cache(monkeypatch, change):
+    calls = qualification_counter(monkeypatch)
+    contours, rule = deepcopy([OUTER]), "nonzero"
+    options = dict(native=False, coordinates_in_metres=False, segment_limit=512)
+    b._cached_qualify_contours(contours, rule, **options)
+    if change == "controls": contours = [polygon([(0, 0), (4, 0), (4, 3), (0, 3)])]
+    elif change == "fill": rule = "evenodd"
+    elif change == "native": options["native"] = True
+    elif change == "units": options["coordinates_in_metres"] = True
+    elif change == "segment_limit": options["segment_limit"] = 513
+    elif change == "schema": monkeypatch.setattr(b, "_QUALIFICATION_SCHEMA", "different-algorithm")
+    elif change == "resolution": monkeypatch.setattr(b, "RESOLUTION", b.RESOLUTION+1)
+    elif change == "pieces": monkeypatch.setattr(b, "MAX_PIECES", b.MAX_PIECES+1)
+    else: monkeypatch.setattr(b, "MAX_GEOMETRY_CANDIDATES", b.MAX_GEOMETRY_CANDIDATES+1)
+    b._cached_qualify_contours(contours, rule, **options)
+    assert len(calls) == 2
+
+
+def test_exact_keys_distinguish_types_signed_zero_order_and_nested_metadata():
+    key = lambda value: b._qualification_snapshot(value, [0, 0], set())[1]
+    values = [False, 0, 0., -0., [0], (0,), {"a": 0, "b": 1}, {"b": 1, "a": 0}]
+    assert len({key(value) for value in values}) == len(values)
+    assert key({"frame": [1., 0.]}) != key({"frame": [0., 1.]})
+
+
+@pytest.mark.parametrize("invalid", [dict(OUTER, closed=False), dict(OUTER, start=[float("nan"), 0])])
+def test_primed_valid_input_cannot_admit_or_cache_invalid_input(monkeypatch, invalid):
+    calls = qualification_counter(monkeypatch)
+    b.qualify_contours([OUTER], "nonzero")
+    for _ in range(2):
+        with pytest.raises((b.OutlineVerificationError, ValueError)):
+            b.qualify_contours([invalid], "nonzero")
+    assert len(calls) == 3 and len(b._qualification_cache) == 1
+
+
+def test_custom_and_cyclic_inputs_follow_original_uncached_path(monkeypatch):
+    calls = qualification_counter(monkeypatch)
+    class CustomList(list):
+        pass
+    for _ in range(2): assert b.qualify_contours(CustomList([OUTER]), "nonzero")["area_m2"] > 0
+    cyclic = []
+    cyclic.append(cyclic)
+    for _ in range(2):
+        with pytest.raises(AttributeError): b.qualify_contours(cyclic, "nonzero")
+    assert len(calls) == 4 and not b._qualification_cache
+
+
+def test_input_snapshot_work_bounds_fall_back_without_changing_math(monkeypatch):
+    calls = qualification_counter(monkeypatch)
+    monkeypatch.setattr(b, "_CACHE_INPUT_MAX_NODES", 1)
+    first = b.qualify_contours([OUTER], "nonzero")
+    assert b.qualify_contours([OUTER], "nonzero") == first
+    assert len(calls) == 2 and not b._qualification_cache
+
+
+def test_unsupported_custom_input_does_not_invoke_custom_size_hook(monkeypatch):
+    calls = qualification_counter(monkeypatch)
+    class CustomList(list):
+        def __sizeof__(self):
+            raise AssertionError("cache must not inspect custom object internals")
+    value = CustomList([OUTER])
+    assert b.qualify_contours(value, "nonzero")["area_m2"] > 0
+    assert b.qualify_contours(value, "nonzero")["area_m2"] > 0
+    assert len(calls) == 2 and not b._qualification_cache
+
+
+def test_snapshot_byte_budget_includes_complete_dictionary_keys(monkeypatch):
+    calls = qualification_counter(monkeypatch)
+    value = dict(OUTER, **{"x"*4096: None})
+    monkeypatch.setattr(b, "_CACHE_INPUT_MAX_BYTES", 1024)
+    assert b.qualify_contours([value], "nonzero")["area_m2"] > 0
+    assert b.qualify_contours([value], "nonzero")["area_m2"] > 0
+    assert len(calls) == 2 and not b._qualification_cache
+
+
+def test_cache_lru_eviction_and_byte_limit_are_bounded(monkeypatch):
+    calls = qualification_counter(monkeypatch)
+    monkeypatch.setattr(b, "_CACHE_MAX_ENTRIES", 2)
+    contours = [[polygon([(x, 0), (x+3, 0), (x+3, 3), (x, 3)])] for x in (0, 4, 8)]
+    for row in contours: b.qualify_contours(row, "nonzero")
+    assert len(b._qualification_cache) == 2
+    b.qualify_contours(contours[1], "nonzero")
+    assert len(calls) == 3
+    b.qualify_contours(contours[0], "nonzero")
+    assert len(calls) == 4 and len(b._qualification_cache) == 2
+    assert b._qualification_cache_bytes + sys.getsizeof(b._qualification_cache) <= b._CACHE_MAX_BYTES
+    b._clear_qualification_cache()
+    monkeypatch.setattr(b, "_CACHE_MAX_BYTES", 1)
+    b.qualify_contours(contours[0], "nonzero")
+    b.qualify_contours(contours[0], "nonzero")
+    assert len(calls) == 6 and not b._qualification_cache and b._qualification_cache_bytes == 0
+
+
+def test_fraction_integer_payloads_are_included_in_retained_byte_accounting():
+    value = Fraction(2**2048+1, 2**1024+3)
+    assert b._qualification_retained_bytes(value) == (sys.getsizeof(value)
+           + sys.getsizeof(value.numerator) + sys.getsizeof(value.denominator))
+
+
+def test_retained_byte_cap_evicts_successful_old_entries(monkeypatch):
+    calls = qualification_counter(monkeypatch)
+    b.qualify_contours([OUTER], "nonzero")
+    one_cost = next(iter(b._qualification_cache.values()))[1]
+    monkeypatch.setattr(b, "_CACHE_MAX_BYTES", one_cost*2+2048)
+    for width in range(4, 12):
+        b.qualify_contours([polygon([(0, 0), (width, 0), (width, 3), (0, 3)])], "nonzero")
+        assert b._qualification_cache_bytes + sys.getsizeof(b._qualification_cache) <= b._CACHE_MAX_BYTES
+    assert len(b._qualification_cache) < len(calls)
+    before = len(calls)
+    b.qualify_contours([OUTER], "nonzero")
+    assert len(calls) == before+1
+
+
+@pytest.mark.parametrize("damage", ["control", "mesh", "shader"])
+def test_warm_expected_math_never_hides_actual_native_corruption(host, monkeypatch, damage):
+    outcome = build(host, "geometry" if damage == "mesh" else "glyphs")
+    assert outcome.status == "delivered", outcome.evidence
+    calls = qualification_counter(monkeypatch)
+    obj = outcome.entity
+    if damage == "control": obj.data.splines[0].bezier_points[0].co = (.1, 0., 0.)
+    elif damage == "mesh": obj.data.vertices[0].co = (.1, 0., 0.)
+    else: obj.data.materials[0].node_tree.nodes[0].inputs["Strength"].default_value = 2.
+    with pytest.raises(b.OutlineVerificationError): b.verify_source_outline_entity(obj)
+    assert calls == []  # Expected math hit; the independent native check still failed.

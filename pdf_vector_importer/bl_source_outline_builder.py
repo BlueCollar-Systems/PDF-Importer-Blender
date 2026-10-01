@@ -6,19 +6,127 @@ an oriented triangle chain against the same native curve tessellation.
 """
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, OrderedDict
 from bisect import bisect_left, bisect_right
+from copy import deepcopy
 from fractions import Fraction as F
 import hashlib
 import json
 import math
 import struct
+import sys
+from threading import RLock
 
 from .text_delivery import AttemptOutcome
 
 RESOLUTION = 32
 MAX_PIECES = 4096
 MAX_GEOMETRY_CANDIDATES = 2_000_000
+_QUALIFICATION_SCHEMA = "source-outline-exact-qualification/1"
+_CACHE_MAX_ENTRIES = 2048
+_CACHE_MAX_BYTES = 32 * 1024 * 1024
+_CACHE_INPUT_MAX_BYTES = 1024 * 1024
+_CACHE_INPUT_MAX_NODES = 65536
+_qualification_cache = OrderedDict()
+_qualification_cache_bytes = 0
+_qualification_cache_lock = RLock()
+
+
+class _UncacheableInput(Exception):
+    pass
+
+
+def _qualification_snapshot(value, budget, active, depth=0):
+    """Detach plain inputs and form an exact typed key from that same snapshot."""
+    kind = type(value)
+    if kind not in (type(None), bool, int, float, str, list, tuple, dict):
+        raise _UncacheableInput
+    budget[0] += 1
+    budget[1] += sys.getsizeof(value)
+    if depth > 32 or budget[0] > _CACHE_INPUT_MAX_NODES or budget[1] > _CACHE_INPUT_MAX_BYTES:
+        raise _UncacheableInput
+    if value is None:
+        return None, ("none",)
+    if kind in (bool, int, str):
+        return value, (kind.__name__, value)
+    if kind is float:
+        if not math.isfinite(value):
+            raise _UncacheableInput
+        return value, ("float64", struct.pack(">d", value))
+    if id(value) in active:
+        raise _UncacheableInput
+    active.add(id(value))
+    try:
+        if kind is dict:
+            if any(type(key) is not str for key in value):
+                raise _UncacheableInput
+            rows = []
+            for key, item in value.items():
+                _qualification_snapshot(key, budget, active, depth+1)
+                rows.append((key, _qualification_snapshot(item, budget, active, depth+1)))
+            # Preserve dictionary order as well as the ordered contour tree.
+            return {key: item[0] for key, item in rows}, ("dict", tuple((key, item[1]) for key, item in rows))
+        rows = [_qualification_snapshot(item, budget, active, depth+1) for item in value]
+        return (tuple(item[0] for item in rows) if kind is tuple else [item[0] for item in rows],
+                (kind.__name__, tuple(item[1] for item in rows)))
+    finally:
+        active.remove(id(value))
+
+
+def _qualification_retained_bytes(value):
+    """Conservative retained graph accounting; shared objects may be counted twice."""
+    size = sys.getsizeof(value)
+    if type(value) is F:
+        return size + sys.getsizeof(value.numerator) + sys.getsizeof(value.denominator)
+    if type(value) in (list, tuple):
+        return size + sum(_qualification_retained_bytes(item) for item in value)
+    if type(value) is dict:
+        return size + sum(_qualification_retained_bytes(k) + _qualification_retained_bytes(v)
+                          for k, v in value.items())
+    if type(value) in (type(None), bool, int, float, str, bytes):
+        return size
+    raise _UncacheableInput
+
+
+def _clear_qualification_cache():
+    global _qualification_cache_bytes
+    with _qualification_cache_lock:
+        _qualification_cache.clear()
+        _qualification_cache_bytes = 0
+
+
+def _cached_qualify_contours(contours, fill_rule, *, native, coordinates_in_metres, segment_limit):
+    """Memoize only successful pure math, never native reads or delivery outcomes."""
+    global _qualification_cache_bytes
+    values = (contours, fill_rule, native, coordinates_in_metres, segment_limit,
+              _QUALIFICATION_SCHEMA, RESOLUTION, MAX_PIECES, MAX_GEOMETRY_CANDIDATES)
+    try:
+        detached, key = _qualification_snapshot(values, [0, 0], set())
+    except (_UncacheableInput, RuntimeError):
+        return _qualify_contours(contours, fill_rule, native=native,
+                                 coordinates_in_metres=coordinates_in_metres, segment_limit=segment_limit)
+    with _qualification_cache_lock:
+        entry = _qualification_cache.get(key)
+        if entry is not None:
+            _qualification_cache.move_to_end(key)
+            return deepcopy(entry[0])
+    result = _qualify_contours(detached[0], detached[1], native=detached[2],
+                               coordinates_in_metres=detached[3], segment_limit=detached[4])
+    retained = deepcopy(result)
+    cost = (_qualification_retained_bytes(key) + _qualification_retained_bytes(retained)
+            + sys.getsizeof((retained, 0)) + sys.getsizeof(0))
+    with _qualification_cache_lock:
+        if cost + sys.getsizeof(_qualification_cache) <= _CACHE_MAX_BYTES and _CACHE_MAX_ENTRIES > 0:
+            previous = _qualification_cache.pop(key, None)
+            if previous is not None:
+                _qualification_cache_bytes -= previous[1]
+            _qualification_cache[key] = (retained, cost)
+            _qualification_cache_bytes += cost
+            while (_qualification_cache and (len(_qualification_cache) > _CACHE_MAX_ENTRIES
+                    or _qualification_cache_bytes + sys.getsizeof(_qualification_cache) > _CACHE_MAX_BYTES)):
+                _, (_, removed_cost) = _qualification_cache.popitem(last=False)
+                _qualification_cache_bytes -= removed_cost
+    return deepcopy(result)
 
 
 class OutlineVerificationError(ValueError):
@@ -185,7 +293,7 @@ def qualify_contours(contours, fill_rule, *, native=False, coordinates_in_metres
     Unknown touching/intersecting hulls fail closed; subdivisions never replace
     the retained source controls. Work is bounded per glyph.
     """
-    return _qualify_contours(contours, fill_rule, native=native,
+    return _cached_qualify_contours(contours, fill_rule, native=native,
                              coordinates_in_metres=coordinates_in_metres, segment_limit=512)
 
 
@@ -303,7 +411,7 @@ def _polygon_qualification(polygons, expected_depth):
     _topology(0 < sum(map(len, polygons)) <= MAX_PIECES, "native polygon work bound exceeded")
     contours = [{"start": ring[0], "closed": True,
                  "segments": [["L", p] for p in ring[1:]+ring[:1]]} for ring in polygons]
-    proof = _qualify_contours(contours, "nonzero", native=False,
+    proof = _cached_qualify_contours(contours, "nonzero", native=False,
                               coordinates_in_metres=True, segment_limit=MAX_PIECES)
     _topology(proof["depth"] == expected_depth, "native tessellation changes source counter nesting")
     return proof
