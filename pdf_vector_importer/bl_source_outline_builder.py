@@ -22,9 +22,9 @@ from .text_delivery import AttemptOutcome
 RESOLUTION = 32
 MAX_PIECES = 4096
 MAX_GEOMETRY_CANDIDATES = 2_000_000
-_QUALIFICATION_SCHEMA = "source-outline-exact-qualification/1"
-_CACHE_MAX_ENTRIES = 2048
-_CACHE_MAX_BYTES = 32 * 1024 * 1024
+_QUALIFICATION_SCHEMA = "source-outline-exact-qualification/2"
+_CACHE_MAX_ENTRIES = 8192
+_CACHE_MAX_BYTES = 256 * 1024 * 1024
 _CACHE_INPUT_MAX_BYTES = 1024 * 1024
 _CACHE_INPUT_MAX_NODES = 65536
 _qualification_cache = OrderedDict()
@@ -37,7 +37,7 @@ class _UncacheableInput(Exception):
 
 
 def _qualification_snapshot(value, budget, active, depth=0):
-    """Detach plain inputs and form an exact typed key from that same snapshot."""
+    """Detach inputs; key equivalent sequences and mappings without changing values."""
     kind = type(value)
     if kind not in (type(None), bool, int, float, str, list, tuple, dict):
         raise _UncacheableInput
@@ -64,11 +64,14 @@ def _qualification_snapshot(value, budget, active, depth=0):
             for key, item in value.items():
                 _qualification_snapshot(key, budget, active, depth+1)
                 rows.append((key, _qualification_snapshot(item, budget, active, depth+1)))
-            # Preserve dictionary order as well as the ordered contour tree.
-            return {key: item[0] for key, item in rows}, ("dict", tuple((key, item[1]) for key, item in rows))
+            # Qualification reads fixed fields, so only the key ignores mapping order.
+            # The detached cold operand retains the caller's original insertion order.
+            return {key: item[0] for key, item in rows}, ("dict", tuple(sorted((key, item[1]) for key, item in rows)))
         rows = [_qualification_snapshot(item, budget, active, depth+1) for item in value]
+        # Geometry consumes sequence order, not list/tuple identity. Retain that
+        # original container in the detached cold operand, including nested points.
         return (tuple(item[0] for item in rows) if kind is tuple else [item[0] for item in rows],
-                (kind.__name__, tuple(item[1] for item in rows)))
+                ("sequence", tuple(item[1] for item in rows)))
     finally:
         active.remove(id(value))
 

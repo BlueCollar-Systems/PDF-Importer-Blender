@@ -1,6 +1,7 @@
 """Bounded native-outline contracts; no Blender process is launched."""
 from copy import deepcopy
 from fractions import Fraction
+import json
 import math
 import sys
 from types import SimpleNamespace as NS
@@ -559,11 +560,54 @@ def test_every_math_input_or_domain_change_misses_cache(monkeypatch, change):
     assert len(calls) == 2
 
 
-def test_exact_keys_distinguish_types_signed_zero_order_and_nested_metadata():
+def test_exact_keys_distinguish_values_signed_zero_sequence_order_and_metadata():
     key = lambda value: b._qualification_snapshot(value, [0, 0], set())[1]
-    values = [False, 0, 0., -0., [0], (0,), {"a": 0, "b": 1}, {"b": 1, "a": 0}]
+    values = [False, 0, 0., -0., [0], {"a": 0, "b": 1}]
     assert len({key(value) for value in values}) == len(values)
+    assert key([0]) == key((0,))
+    assert key({"a": 0, "b": 1}) == key({"b": 1, "a": 0})
     assert key({"frame": [1., 0.]}) != key({"frame": [0., 1.]})
+    assert key({"frame": [1., 0.]}) != key({"frame": [1, 0.]})
+    assert key({"frame": [1., 0.]}) != key({"other": [1., 0.]})
+    assert key({"frame": [1., 0.]}) != key({"frame": [1., 0.], "extra": None})
+
+
+@pytest.mark.parametrize("contours,rule", [([OUTER], "nonzero"), ([OUTER, INNER], "evenodd"),
+                                          ([LENS], "nonzero")])
+@pytest.mark.parametrize("native", [False, True])
+@pytest.mark.parametrize("json_first", [False, True])
+def test_producer_and_saved_containers_share_exact_proof_with_original_cold_form(
+        monkeypatch, contours, rule, native, json_first):
+    from pdf_vector_importer.source_text_outlines import IDENTITY, map_contours
+    produced = map_contours(deepcopy(contours), IDENTITY)
+    saved = json.loads(json.dumps(produced, sort_keys=True))
+    assert type(produced[0]["start"]) is tuple and type(saved[0]["start"]) is list
+    assert list(produced[0]) != list(saved[0])
+    options = dict(native=native, coordinates_in_metres=False, segment_limit=512)
+    expected = b._qualify_contours(produced, rule, **options)
+    assert b._qualify_contours(saved, rule, **options) == expected
+    first, second = (saved, produced) if json_first else (produced, saved)
+    original = b._qualify_contours
+    observed = []
+    def observe(detached, *args, **kwargs):
+        observed.append((type(detached[0]["start"]), type(detached[0]["segments"][0]), list(detached[0])))
+        assert detached is not first and detached[0] is not first[0]
+        return original(detached, *args, **kwargs)
+    monkeypatch.setattr(b, "_qualify_contours", observe)
+    cold = b.qualify_contours(first, rule, native=native)
+    assert cold == expected
+    cold["segments"][0].clear()
+    assert b.qualify_contours(second, rule, native=native) == expected
+    assert observed == [(type(first[0]["start"]), type(first[0]["segments"][0]), list(first[0]))]
+
+
+def test_cached_polygon_proof_still_checks_current_expected_counter_depth(monkeypatch):
+    polygons = [[(0., 0.), (3., 0.), (3., 3.), (0., 3.)]]
+    b._polygon_qualification(polygons, [0])
+    calls = qualification_counter(monkeypatch)
+    with pytest.raises(b.OutlineTopologyUnavailable, match="counter nesting"):
+        b._polygon_qualification(polygons, [1])
+    assert calls == []
 
 
 @pytest.mark.parametrize("invalid", [dict(OUTER, closed=False), dict(OUTER, start=[float("nan"), 0])])
