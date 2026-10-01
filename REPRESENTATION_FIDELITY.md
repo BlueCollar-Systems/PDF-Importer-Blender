@@ -48,6 +48,20 @@ separately. Unsupported effects, ambiguous matches and unproved contours retain
 explicit fallback evidence. Corrupt or ambiguous font programs do not enable
 this additional route.
 
+An extra SVG occurrence without a canonical character is retained in a single
+page-owned evidence ledger only when its original trace occurrence is unique
+and its definition is empty or its complete control hull is strictly clipped.
+Canonical and omitted occurrences cannot reuse a trace occurrence. Per-item
+hash references bind that ledger through final verification and reporting;
+these omissions do not increase delivered or zero-ink item counts.
+
+Clip qualification supports exact rectangles and an even-odd outer rectangle
+with strictly contained, disjoint rectangular holes. A whole control hull must
+be proved inside the active fill or strictly excluded. Touching or partial hole
+crossings remain unsupported. Nonglyph paint branches are ignored by this text
+qualifier only after their complete reference graph proves they contain no
+glyph paint; unsupported effects on glyph ancestors still fail qualification.
+
 These objects carry `source_renderer_svg` provenance and no embedded-font
 authenticity claim. Glyphs are filled, editable `CURVE` objects; Geometry is a
 `MESH` with an authenticated finite tessellation boundary. A 3D Text request

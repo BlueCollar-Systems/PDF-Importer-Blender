@@ -217,10 +217,39 @@ class Registry(list):
         self[:] = [row for row in self if row is not value]
 
 
+class Sockets(dict):
+    def __iter__(self):
+        return iter(self.values())
+
+
+class Nodes(list):
+    def new(self, *, type):
+        names = (["Color", "Strength"] if type == "ShaderNodeEmission"
+                 else ["Surface", "Volume", "Displacement", "Thickness"])
+        node = NS(bl_idname=type, mute=False, is_active_output=False, target="ALL")
+        node.inputs = Sockets({name: NS(node=node, name=name, is_linked=False,
+                                       default_value=(0., 0., 0.) if name == "Displacement" else 0.)
+                               for name in names})
+        node.outputs = Sockets({"Emission": NS(node=node, name="Emission", is_linked=False)})
+        self.append(node)
+        return node
+
+
+class Links(list):
+    def new(self, source, target):
+        source.is_linked = target.is_linked = True
+        self.append(NS(from_node=source.node, to_node=target.node, from_socket=source,
+                       to_socket=target, is_valid=True, is_muted=False))
+
+
+def material(name):
+    return NS(name=name, node_tree=NS(nodes=Nodes(), links=Links()))
+
+
 @pytest.fixture
 def host(monkeypatch):
     data = NS(curves=Registry(lambda name, kind: NS(name=name, splines=Splines(), materials=[])),
-              objects=Registry(Object), materials=Registry(lambda name: NS(name=name)))
+              objects=Registry(Object), materials=Registry(material))
     fake = NS(data=data, context=NS(view_layer=NS(update=lambda: None)))
     monkeypatch.setitem(sys.modules, "bpy", fake)
     # Straight synthetic contours do not invoke Blender's cubic evaluator.
@@ -265,7 +294,7 @@ def test_builder_delivers_requested_native_outline_with_honest_provenance(host, 
     lambda o: setattr(o.data, "taper_object", object()),
     lambda o: setattr(o.data, "render_resolution_u", 1),
     lambda o: setattr(o.data.materials[0], "diffuse_color", (1., 0., 0., .5)),
-    lambda o: setattr(o.data.materials[0], "use_nodes", True),
+    lambda o: setattr(o.data.materials[0], "use_nodes", False),
     lambda o: o.__setitem__("pdf_text_source", "B"),
     lambda o: setattr(o, "location", (0., 1., 0.)),
     lambda o: o.modifiers.append(NS(type="BEVEL")),
@@ -358,3 +387,107 @@ def test_storage_bound_reports_only_exact_float32_conversion():
     assert Fraction(bound["euclidean_upper_bound_m"]) >= exact
     point = b._point(OUTER["segments"][0][1])
     assert sum(abs(Fraction(b._f32(x))-Fraction(x)) for x in point) <= exact
+
+
+def test_expanded_native_polygon_has_separate_finite_bound():
+    ring = [(math.cos(2*math.pi*i/548), math.sin(2*math.pi*i/548)) for i in range(548)]
+    with pytest.raises(b.OutlineTopologyUnavailable, match="segment count"):
+        b.qualify_contours([polygon(ring)], "nonzero")
+    assert b._polygon_qualification([ring], [0])["depth"] == [0]
+    with pytest.raises(b.OutlineTopologyUnavailable, match="native polygon work bound"):
+        b._polygon_qualification([[(0, 0)]*(b.MAX_PIECES+1)], [0])
+    with pytest.raises(b.OutlineTopologyUnavailable, match="counter nesting"):
+        b._polygon_qualification([ring], [1])
+
+
+def tee_mesh():
+    # A real triangulation pattern: two exactly collinear triangles connect
+    # differently subdivided edges along a T's crossbar and upright.
+    vertices = [[2., 2., 0.], [3., 2., 0.], [3., 3., 0.], [0., 3., 0.],
+                [0., 2., 0.], [1., 2., 0.], [1., 0., 0.], [2., 0., 0.]]
+    triangles = [(4, 2, 3), (4, 1, 2), (5, 1, 4), (6, 0, 5), (0, 1, 5), (6, 7, 0)]
+    return vertices, triangles, [[tuple(p[:2]) for p in vertices]]
+
+
+def test_exact_zero_triangles_preserve_complete_positive_fill_chain():
+    vertices, triangles, expected = tee_mesh()
+    original = deepcopy((vertices, triangles, expected))
+    proof = b.verify_mesh_ink(vertices, triangles, expected)
+    assert (vertices, triangles, expected) == original
+    assert proof["positive_triangles"] == 4 and proof["exact_zero_area_triangles"] == 2
+    assert proof["area_m2"] == 5 and proof["boundary_cycles"] == 1
+    assert proof["degenerate_segments_in_positive_fill"]
+    assert proof["mesh_sha256"] == b._digest({"vertices": vertices, "triangles": triangles})
+
+
+def test_zero_only_vertex_must_be_covered_by_complete_positive_support():
+    v, t, expected = tee_mesh()
+    v.append([1.5, 2., 0.]); t.append((4, 8, 1))
+    assert b.verify_mesh_ink(v, t, expected)["exact_zero_area_triangles"] == 3
+    v[-1] = [4., 2., 0.]
+    with pytest.raises(b.OutlineVerificationError, match="zero-area native edge"):
+        b.verify_mesh_ink(v, t, expected)
+
+
+def test_zero_segment_cannot_bridge_counter_despite_inside_endpoints():
+    v, t, expected = ring_mesh()
+    v.extend([[.5, 1.5, 0.], [2.5, 1.5, 0.], [1.5, 1.5, 0.]])
+    t.append((8, 9, 10))
+    with pytest.raises(b.OutlineVerificationError, match="zero-area native edge"):
+        b.verify_mesh_ink(v, t, expected)
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda v, t: t.append(t[0]),
+    lambda v, t: t.pop(0),
+    lambda v, t: v[5].__setitem__(1, math.nextafter(2., 3.)),
+    lambda v, t: v[5].__setitem__(2, math.nextafter(0., 1.)),
+    lambda v, t: t.__setitem__(2, (5, 5, 4)),
+    lambda v, t: t.__setitem__(2, (5, 1, len(v))),
+])
+def test_degenerate_accounting_keeps_all_physical_negative_gates(mutation):
+    v, t, expected = tee_mesh(); mutation(v, t)
+    with pytest.raises(b.OutlineVerificationError):
+        b.verify_mesh_ink(v, t, expected)
+
+
+def test_geometry_proofs_fail_closed_at_candidate_work_limit(monkeypatch):
+    monkeypatch.setattr(b, "MAX_GEOMETRY_CANDIDATES", 1)
+    with pytest.raises(b.OutlineVerificationError, match="candidate work bound"):
+        b.verify_mesh_ink(*tee_mesh())
+    with pytest.raises(b.OutlineTopologyUnavailable, match="candidate work bound"):
+        b.qualify_contours([OUTER], "nonzero")
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda m: setattr(m.node_tree.nodes[0].inputs["Color"], "default_value", (0., 0., 0., 1.)),
+    lambda m: setattr(m.node_tree.nodes[0].inputs["Color"], "default_value", (1., 0., 0., .5)),
+    lambda m: setattr(m.node_tree.nodes[0].inputs["Strength"], "default_value", math.nextafter(1., 2.)),
+    lambda m: setattr(m.node_tree.nodes[0].inputs["Color"], "is_linked", True),
+    lambda m: setattr(m.node_tree.nodes[0], "bl_idname", "ShaderNodeBsdfPrincipled"),
+    lambda m: setattr(m.node_tree.nodes[0], "mute", True),
+    lambda m: setattr(m.node_tree.nodes[1], "is_active_output", False),
+    lambda m: setattr(m.node_tree.nodes[1], "target", "CYCLES"),
+    lambda m: setattr(m.node_tree.nodes[1].inputs["Displacement"], "default_value", (.001, 0., 0.)),
+    lambda m: setattr(m.node_tree.nodes[1].inputs["Volume"], "is_linked", True),
+    lambda m: setattr(m.node_tree.links[0], "is_muted", True),
+    lambda m: setattr(m.node_tree.links[0], "is_valid", False),
+    lambda m: setattr(m.node_tree.links[0], "to_socket", m.node_tree.nodes[1].inputs["Volume"]),
+    lambda m: m.node_tree.nodes.append(NS(bl_idname="ShaderNodeTexImage")),
+    lambda m: setattr(m.node_tree, "animation_data", object()),
+    lambda m: setattr(m, "animation_data", object()),
+])
+def test_exact_constant_emission_readback_rejects_graph_changes(host, mutation):
+    result = build(host); assert result.status == "delivered", result.evidence
+    assert b.verify_source_outline_entity(result.entity)["material"]["shader"] == "constant_emission"
+    mutation(result.entity.data.materials[0])
+    with pytest.raises(b.OutlineVerificationError):
+        b.verify_source_outline_entity(result.entity)
+
+
+def test_authenticated_optional_page_ledger_is_returned_for_independent_owner_check(host):
+    value = record(); value["source_page_ledger"] = {"schema": "test", "ledger_sha256": "4"*64}
+    value["source_outline_sha256"] = b._digest({k: v for k, v in value.items() if k != "source_outline_sha256"})
+    result = b.build_source_outlines(value, NS(objects=NS(link=lambda obj: None)), representation="glyphs", requested="glyphs")
+    assert result.status == "delivered", result.evidence
+    assert b.verify_source_outline_entity(result.entity)["source_page_ledger"] == value["source_page_ledger"]

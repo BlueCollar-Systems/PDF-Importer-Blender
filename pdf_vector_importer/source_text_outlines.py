@@ -104,6 +104,8 @@ def _rgb(value):
 
 
 def _style(node, inherited, matrix):
+    if any(node.get(key) is not None for key in ('mix-blend-mode', 'isolation')):
+        raise OutlineUnavailable('unsupported source glyph style')
     result = dict(inherited)
     declarations = {}
     for entry in node.get('style', '').split(';'):
@@ -246,7 +248,7 @@ def _contained(points, quad):
                               zip(quad, quad[1:]+quad[:1], strict=True)] for point in points))
 
 
-def _clip_quad(reference, ids, matrix):
+def _clip_region(reference, ids, matrix):
     match = re.fullmatch(r'url\(#([^)]*)\)', reference)
     clip = ids.get(match.group(1)) if match else None
     if (clip is None or _local(clip) != 'clipPath' or len(clip) != 1
@@ -258,11 +260,131 @@ def _clip_quad(reference, ids, matrix):
             or path.get('clip-rule', 'nonzero') not in ('nonzero', 'evenodd')):
         raise OutlineUnavailable('unsupported source glyph clip path')
     transform = _exact_compose(matrix, _matrix(path.get('transform'), exact=True))
-    quad = [_exact_point(transform, p) for p in _rectangle_clip_points(path.get('d', ''), exact=True)]
-    turns = [_cross(quad[i], quad[(i+1) % 4], quad[(i+2) % 4]) for i in range(4)]
-    if not (all(v > 0 for v in turns) or all(v < 0 for v in turns)):
-        raise OutlineUnavailable('source clip lost its convex bounds')
-    return quad
+    holes = []
+    try:
+        outer = _rectangle_clip_points(path.get('d', ''), exact=True)
+    except ValueError as exc:
+        if path.get('clip-rule', 'nonzero') != 'evenodd':
+            raise OutlineUnavailable('unsupported nonzero source clip region') from exc
+        loops, rectangles = _rectangle_clip_loops(path.get('d', ''))
+        if not 2 <= len(rectangles) <= 16:
+            raise OutlineUnavailable('source clip hole count outside bound') from exc
+        largest = max(range(len(rectangles)), key=lambda i:
+                      (rectangles[i][2]-rectangles[i][0])*(rectangles[i][3]-rectangles[i][1]))
+        bounds = rectangles[largest]
+        for i, box in enumerate(rectangles):
+            if i == largest:
+                continue
+            if not (bounds[0] < box[0] < box[2] < bounds[2]
+                    and bounds[1] < box[1] < box[3] < bounds[3]):
+                raise OutlineUnavailable('source clip hole is not strictly contained') from exc
+            holes.append(loops[i][:4])
+        hole_boxes = [box for i, box in enumerate(rectangles) if i != largest]
+        for i, first in enumerate(hole_boxes):
+            for second in hole_boxes[i+1:]:
+                if not (first[2] < second[0] or second[2] < first[0]
+                        or first[3] < second[1] or second[3] < first[1]):
+                    raise OutlineUnavailable('source clip holes overlap or touch') from exc
+        outer = loops[largest][:4]
+    quads = [[_exact_point(transform, p) for p in points] for points in [outer, *holes]]
+    for quad in quads:
+        turns = [_cross(quad[i], quad[(i+1) % 4], quad[(i+2) % 4]) for i in range(4)]
+        if not (all(v > 0 for v in turns) or all(v < 0 for v in turns)):
+            raise OutlineUnavailable('source clip lost its convex bounds')
+    return quads[0], quads[1:]
+
+
+def _clip_quad(reference, ids, matrix):
+    outer, holes = _clip_region(reference, ids, matrix)
+    if holes:
+        raise OutlineUnavailable('source clip has holes')
+    return outer
+
+
+def _strictly_inside(points, quad):
+    sign = 1 if _cross(quad[0], quad[1], quad[2]) > 0 else -1
+    return all(_cross(a, b, p)*sign > 0 for p in points
+               for a, b in zip(quad, quad[1:]+quad[:1], strict=True))
+
+
+def _strictly_separated(points, quad):
+    # All controls on the outside of ONE supporting line prove the entire
+    # Bezier convex hull outside, even under a shear or reflection.
+    sign = 1 if _cross(quad[0], quad[1], quad[2]) > 0 else -1
+    return any(all(_cross(a, b, p)*sign < 0 for p in points)
+               for a, b in zip(quad, quad[1:]+quad[:1], strict=True))
+
+
+def _clip_control_hull(points, region):
+    outer, holes = region
+    if not points:
+        return None
+    box, clip_box = _bbox(points), _bbox(outer)
+    if (box[2] < clip_box[0] or clip_box[2] < box[0]
+            or box[3] < clip_box[1] or clip_box[3] < box[1]):
+        return {'control_bounds': [str(v) for v in box],
+                'clip_bounds': [str(v) for v in clip_box],
+                'proof': 'exact_source_control_hull_strictly_outside_clip'}
+    if not _contained(points, outer):
+        raise OutlineUnavailable('source glyph partially crosses unsupported clip')
+    for hole in holes:
+        if _strictly_inside(points, hole):
+            return {'control_bounds': [str(v) for v in box],
+                    'hole_quad': [[str(v) for v in point] for point in hole],
+                    'proof': 'exact_source_control_hull_strictly_inside_evenodd_hole'}
+        if not _strictly_separated(points, hole):
+            raise OutlineUnavailable('source glyph partially crosses unsupported clip hole')
+    return None
+
+
+def _glyph_reference_graph(root, ids):
+    """Authenticate every reference before ignoring non-glyph paint branches."""
+    nodes = list(root.iter())
+    if len(nodes) > 200000:
+        raise OutlineUnavailable('source SVG node count limit')
+    references = {}
+    for node in nodes:
+        if _local(node) in {'text', 'tspan', 'textPath'}:
+            raise OutlineUnavailable('unproved non-outline source text')
+        href, xlink = node.get('href'), node.get('{http://www.w3.org/1999/xlink}href')
+        if href is not None and xlink is not None and href != xlink:
+            raise OutlineUnavailable('ambiguous source SVG reference')
+        refs = []
+        for key, value in node.attrib.items():
+            if key.rsplit('}', 1)[-1] == 'href':
+                if value.startswith('#'):
+                    refs.append(value[1:])
+                elif not (_local(node) == 'image' and value.startswith(
+                        ('data:image/png;base64,', 'data:image/jpeg;base64,'))):
+                    raise OutlineUnavailable('unproved external source reference')
+            urls = re.findall(r'url\(([^)]*)\)', value)
+            if value.count('url(') != len(urls):
+                raise OutlineUnavailable('malformed source reference')
+            for ref in urls:
+                if not re.fullmatch(r'#[^\s()]+', ref):
+                    raise OutlineUnavailable('unproved source paint reference')
+                refs.append(ref[1:])
+        if any(ref not in ids for ref in refs):
+            raise OutlineUnavailable('missing source SVG reference')
+        references[node] = [ids[ref] for ref in refs]
+    state, live = {}, {}
+
+    def walk(node, depth=0):
+        if depth > 64 or state.get(node) == 1:
+            raise OutlineUnavailable('cyclic or deep source reference graph')
+        if state.get(node) == 2:
+            return live[node]
+        state[node] = 1
+        children = [child for child in node if _local(child) != 'defs']
+        result = bool(GLYPH.fullmatch(node.get('id', '')))
+        for target in children + references[node]:
+            result = walk(target, depth+1) or result
+        state[node], live[node] = 2, result
+        return result
+
+    for node in nodes:
+        walk(node)
+    return live
 
 
 def svg_placements(svg):
@@ -281,10 +403,11 @@ def svg_placements(svg):
     viewbox = _numbers(root.get('viewBox', ''))
     if len(viewbox) != 4 or viewbox[2] <= 0 or viewbox[3] <= 0:
         raise OutlineUnavailable('invalid source SVG viewBox')
-    placements, definitions = [], {}
+    live = _glyph_reference_graph(root, ids)
+    placements, definitions, clip_cache = [], {}, {}
 
     def visit(node, inherited, matrix, exact_matrix):
-        if _local(node) == 'defs':
+        if _local(node) == 'defs' or not live[node]:
             return
         matrix = _compose(matrix, _matrix(node.get('transform')))
         exact_matrix = _exact_compose(exact_matrix, _matrix(node.get('transform'), exact=True))
@@ -308,19 +431,14 @@ def svg_placements(svg):
             contours = map_contours(definitions[identity], matrix)
             points = [_exact_point(exact_matrix, p) for p in control_points(definitions[identity])]
             empty = not points
-            clips = [_clip_quad(ref, ids, clip_matrix) for ref, clip_matrix in style.get('clips', ())]
             outside = []
-            for quad in clips:
-                if not points or _contained(points, quad):
-                    continue
-                box, clip_box = _bbox(points), _bbox(quad)
-                if (box[2] < clip_box[0] or clip_box[2] < box[0]
-                        or box[3] < clip_box[1] or clip_box[3] < box[1]):
-                    outside.append({'control_bounds': [str(v) for v in box],
-                                    'clip_bounds': [str(v) for v in clip_box],
-                                    'proof': 'exact_source_control_hull_strictly_outside_clip'})
-                else:
-                    raise OutlineUnavailable('source glyph partially crosses unsupported clip')
+            for ref, clip_matrix in style.get('clips', ()):
+                key = (ref, clip_matrix)
+                if key not in clip_cache:
+                    clip_cache[key] = _clip_region(ref, ids, clip_matrix)
+                excluded = _clip_control_hull(points, clip_cache[key])
+                if excluded is not None:
+                    outside.append(excluded)
             placements.append({'index': len(placements), 'glyph_id': int(match.group(1)),
                 'unicode': node.get('data-text'), 'definition_id': identity,
                 'definition_sha256': hashlib.sha256(definition.get('d', '').encode()).hexdigest(),
@@ -394,12 +512,14 @@ def _source_character_inventory(page):
                             raise OutlineUnavailable('unknown synthetic extraction character')
                         synthetic.add((span['font'], char['c'], tuple(char['origin']), tuple(char['bbox'])))
     trace = defaultdict(list)
-    for span in page.get_texttrace():
-        for codepoint, glyph_id, origin, bbox in span['chars']:
+    for span_index, span in enumerate(page.get_texttrace()):
+        for character_index, (codepoint, glyph_id, origin, bbox) in enumerate(span['chars']):
             if not isinstance(codepoint, int) or not 0 <= codepoint <= 0x10ffff:
                 raise OutlineUnavailable('invalid original character codepoint')
             trace[(chr(codepoint), tuple(origin))].append(
-                {'glyph_id': int(glyph_id), 'bbox': tuple(bbox), 'font': span['font']})
+                {'glyph_id': int(glyph_id), 'bbox': tuple(bbox), 'font': span['font'],
+                 'trace_id': [span_index, character_index], 'seqno': span.get('seqno'),
+                 'unicode': chr(codepoint), 'source_origin': tuple(origin)})
     return synthetic, trace
 
 
@@ -415,7 +535,14 @@ def qualify_page(page, items, *, page_number, width_mm, height_mm, flip_y=True, 
              (y0+h)*sy if flip_y else -y0*sy)
     rotation = tuple(page.rotation_matrix)
     synthetic, trace = _source_character_inventory(page)
-    consumed_synthetic = set()
+    consumed_synthetic, canonical_trace_ids, consumed_trace_ids = set(), set(), set()
+    trace_by_key = defaultdict(list)
+    for occurrences in trace.values():
+        for occurrence in occurrences:
+            origin = _point(rotation, occurrence['source_origin'])
+            key = (occurrence['unicode'], occurrence['glyph_id'], *map(_float32, origin))
+            trace_by_key[key].append(occurrence)
+    omissions, ownership = [], []
     source_by_key, records = defaultdict(list), {}
     for item in items:
         item_id = f'page:{page_number}:text:{int(item.id)}'
@@ -448,10 +575,14 @@ def qualify_page(page, items, *, page_number, width_mm, height_mm, flip_y=True, 
             source = trace.get((char.text, tuple(char.source_origin_pdf)), ())
             if len(source) != 1 or source[0]['font'] != item.font_name:
                 raise OutlineUnavailable('canonical character trace identity is missing or ambiguous')
+            trace_id = tuple(source[0]['trace_id'])
+            if trace_id in canonical_trace_ids:
+                raise OutlineUnavailable('original trace occurrence has duplicate canonical owners')
+            canonical_trace_ids.add(trace_id)
             origin = _point(rotation, char.source_origin_pdf)
             source_by_key[(char.text, source[0]['glyph_id'])].append(
                 {'item_id': item_id, 'character_index': index, 'origin': origin,
-                 'target_origin': tuple(char.target_origin), 'matched': False})
+                 'target_origin': tuple(char.target_origin), 'matched': False, 'trace_id': trace_id})
     for placement in placements:
         origin = placement['origin']
         candidates = []
@@ -462,9 +593,31 @@ def qualify_page(page, items, *, page_number, width_mm, height_mm, flip_y=True, 
             bounds = [_float32_ulp(char['origin'][i]) * .5 for i in (0, 1)]
             if all(_float32(origin[i]) == _float32(char['origin'][i]) for i in (0, 1)):
                 candidates.append((char, bounds))
+        if not candidates:
+            key = (placement['unicode'], placement['glyph_id'], *map(_float32, origin))
+            sources = trace_by_key.get(key, ())
+            if (len(sources) != 1 or not (placement['empty'] or placement['fully_clipped'])
+                    or tuple(sources[0]['trace_id']) in canonical_trace_ids
+                    or tuple(sources[0]['trace_id']) in consumed_trace_ids):
+                raise OutlineUnavailable('source glyph ownership is missing or ambiguous')
+            source = sources[0]
+            consumed_trace_ids.add(tuple(source['trace_id']))
+            omissions.append({
+                'placement': {k: v for k, v in placement.items() if k != 'contours_svg'},
+                'original_trace': source,
+                'reason': 'empty_source_definition' if placement['empty'] else 'strictly_clipped_source_hull',
+                'binding_method': 'exact_float32_source_origin_roundtrip',
+                'native_entities_created': 0,
+            })
+            continue
         if len(candidates) != 1 or candidates[0][0]['matched']:
             raise OutlineUnavailable('source glyph ownership is missing or ambiguous')
         char, bounds = candidates[0]
+        if char['trace_id'] in consumed_trace_ids:
+            raise OutlineUnavailable('original trace occurrence was already consumed')
+        consumed_trace_ids.add(char['trace_id'])
+        ownership.append({'index': placement['index'], 'item_id': char['item_id'],
+                          'character_index': char['character_index'], 'trace_id': char['trace_id']})
         char['matched'] = True
         mapped = _point(model, origin)
         if not all(abs(mapped[i]-char['target_origin'][i]) <= abs((sx, sy)[i])*bounds[i]+1e-12
@@ -485,15 +638,125 @@ def qualify_page(page, items, *, page_number, width_mm, height_mm, flip_y=True, 
     unmatched = [row for rows in source_by_key.values() for row in rows if not row['matched']]
     if unmatched:
         raise OutlineUnavailable('canonical characters are absent from source SVG')
+    ledger = None
+    if omissions:
+        ledger = {'schema': 'bcs.blender.source_page_occurrences/1', 'page_number': page_number,
+                  'pdf_sha256': pdf_sha256, 'svg_sha256': hashlib.sha256(svg.encode()).hexdigest(),
+                  'placement_count': len(placements), 'rotation_matrix': rotation,
+                  'canonical_ownership': ownership,
+                  'omissions': omissions, 'canonical_item_ids': list(records)}
+        reference = page_ledger_reference(ledger)
+        for record in records.values():
+            record['source_page_ledger'] = reference
     for record in records.values():
         record['source_outline_sha256'] = digest(record)
     return {'schema': 'bcs.blender.source_text_outlines/1', 'pdf_sha256': pdf_sha256,
             'svg_sha256': hashlib.sha256(svg.encode()).hexdigest(), 'records': records,
             'placement_count': len(placements), 'canonical_character_count':
-            sum(len(rows) for rows in source_by_key.values()), 'model_matrix': model}
+            sum(len(rows) for rows in source_by_key.values()), 'model_matrix': model,
+            'page_occurrence_ledger': ledger}
 
 
-def page_record_provider(page, items, **options):
+def page_ledger_reference(ledger):
+    """Bind a complete page census once, without replicating it per item."""
+    if (ledger.get('schema') != 'bcs.blender.source_page_occurrences/1'
+            or type(ledger.get('page_number')) is not int or ledger['page_number'] < 1
+            or type(ledger.get('placement_count')) is not int
+            or not 0 < ledger['placement_count'] <= 200000):
+        raise OutlineUnavailable('invalid source page occurrence ledger')
+    for field in ('pdf_sha256', 'svg_sha256'):
+        if not re.fullmatch('[0-9a-f]{64}', str(ledger.get(field, ''))):
+            raise OutlineUnavailable('source page ledger byte binding is absent')
+    item_ids = ledger['canonical_item_ids']
+    if (len(set(item_ids)) != len(item_ids) or not item_ids
+            or any(not re.fullmatch(f"page:{ledger['page_number']}:text:[0-9]+", value)
+                   for value in item_ids)):
+        raise OutlineUnavailable('source page ledger canonical roster differs')
+    indices, traces, characters = [], [], set()
+    for row in ledger['canonical_ownership']:
+        pair = (row['item_id'], row['character_index'])
+        if (row['item_id'] not in item_ids or type(row['character_index']) is not int
+                or row['character_index'] < 0 or pair in characters):
+            raise OutlineUnavailable('duplicate source page ledger canonical owner')
+        characters.add(pair)
+        indices.append(row['index'])
+        traces.append(tuple(row['trace_id']))
+    rotation = _finite(ledger['rotation_matrix'])
+    if len(rotation) != 6:
+        raise OutlineUnavailable('source page ledger rotation is invalid')
+    if not ledger['omissions']:
+        raise OutlineUnavailable('empty orphan ledger is unnecessary')
+    for row in ledger['omissions']:
+        placed, original = row['placement'], row['original_trace']
+        if (row.get('native_entities_created') != 0 or type(row['native_entities_created']) is not int
+                or row.get('binding_method') != 'exact_float32_source_origin_roundtrip'
+                or original['unicode'] != placed['unicode'] or original['glyph_id'] != placed['glyph_id']
+                or not isinstance(original['font'], str) or not original['font']
+                or not re.fullmatch('[0-9a-f]{64}', str(placed.get('definition_sha256', '')))
+                or not GLYPH.fullmatch(placed['definition_id'])):
+            raise OutlineUnavailable('orphan source occurrence binding differs')
+        source_origin = _point(rotation, original['source_origin'])
+        if any(_float32(source_origin[i]) != _float32(placed['origin'][i]) for i in (0, 1)):
+            raise OutlineUnavailable('orphan source occurrence origin differs')
+        if row['reason'] == 'empty_source_definition':
+            valid = placed.get('empty') is True and not placed.get('fully_clipped')
+        elif row['reason'] == 'strictly_clipped_source_hull':
+            valid = placed.get('empty') is False and bool(placed.get('fully_clipped'))
+            valid = valid and all(proof.get('proof') in {
+                'exact_source_control_hull_strictly_outside_clip',
+                'exact_source_control_hull_strictly_inside_evenodd_hole',
+            } for proof in placed['fully_clipped'])
+        else:
+            valid = False
+        if not valid:
+            raise OutlineUnavailable('orphan source occurrence has no invisible-ink proof')
+        indices.append(placed['index'])
+        traces.append(tuple(original['trace_id']))
+    if (any(type(index) is not int for index in indices)
+            or sorted(indices) != list(range(ledger['placement_count']))
+            or any(len(key) != 2 or any(type(v) is not int or v < 0 for v in key) for key in traces)
+            or len(set(traces)) != len(traces)):
+        raise OutlineUnavailable('source page occurrence census is incomplete or reused')
+    return {'schema': 'bcs.blender.source_page_occurrences_ref/1',
+            'page_number': ledger['page_number'], 'pdf_sha256': ledger['pdf_sha256'],
+            'svg_sha256': ledger['svg_sha256'], 'ledger_sha256': digest(ledger)}
+
+
+def persist_page_ledger(collection, ledger):
+    reference = page_ledger_reference(ledger)
+    wrapper = {'page_collection': collection.name, 'ledger': ledger}
+    raw = json.dumps(wrapper, sort_keys=True, separators=(',', ':'), allow_nan=False)
+    old = collection.get('pdf_source_page_ledger_json')
+    if old is not None and old != raw:
+        raise RuntimeError('source page occurrence ledger already has different ownership')
+    collection['pdf_source_page_ledger_json'] = raw
+    collection['pdf_source_page_ledger_sha256'] = digest(wrapper)
+    verify_page_ledger_collection(collection, reference)
+
+
+def verify_page_ledger_collection(collection, reference, *, collections=()):
+    """Re-read the owned ledger, rejecting copies of the same owner after reopen."""
+    raw = collection.get('pdf_source_page_ledger_json')
+    if not isinstance(raw, str):
+        raise OutlineUnavailable('source page occurrence ledger is missing')
+    wrapper = json.loads(raw)
+    if (wrapper.get('page_collection') != collection.name
+            or digest(wrapper) != collection.get('pdf_source_page_ledger_sha256')
+            or page_ledger_reference(wrapper['ledger']) != reference):
+        raise OutlineUnavailable('source page occurrence ledger ownership or hash differs')
+    for other in collections:
+        if other.name == collection.name:
+            continue
+        duplicate = other.get('pdf_source_page_ledger_json')
+        if duplicate is not None:
+            content = json.loads(duplicate)
+            if content.get('page_collection') == collection.name:
+                raise OutlineUnavailable('duplicate source page occurrence ledger carrier')
+    return {'verified': True, **reference, 'page_collection': collection.name,
+            'orphan_omissions': len(wrapper['ledger']['omissions'])}
+
+
+def page_record_provider(page, items, *, collection=None, **options):
     """Lazily qualify once; every later rung uses the same complete page proof."""
     qualified, unavailable = None, None
 
@@ -509,6 +772,11 @@ def page_record_provider(page, items, **options):
             except (ValueError, ET.ParseError, OverflowError) as exc:
                 unavailable = f'{type(exc).__name__}: {exc}'
                 raise OutlineUnavailable(unavailable) from exc
+            if collection is not None and qualified['page_occurrence_ledger'] is not None:
+                try:
+                    persist_page_ledger(collection, qualified['page_occurrence_ledger'])
+                except (AttributeError, KeyError, TypeError, ValueError, RuntimeError) as exc:
+                    raise RuntimeError('source page occurrence ledger persistence failed') from exc
         key = f"page:{options['page_number']}:text:{int(item.id)}"
         record = qualified['records'][key]
         if record['source_font_absence'] != missing_font_evidence(item, options['page_number']):
@@ -599,7 +867,7 @@ def verify_zero_ink_collection(collection, records):
 
 
 # Exact rectangular-union qualification shared by reviewed FreeCAD source.
-def _rectangle_clip_points(path_data, *, exact=False):
+def _rectangle_clip_loops(path_data):
     """Read one rectangle or an exact rectangular tiling, plus move-only tails.
 
     A move with no drawing segments contributes no clip area. Every drawn
@@ -673,6 +941,11 @@ def _rectangle_clip_points(path_data, *, exact=False):
         ):
             raise ValueError("nonrectangular source glyph clip is unsupported")
         rectangles.append((min(xs), min(ys), max(xs), max(ys)))
+    return loops, rectangles
+
+
+def _rectangle_clip_points(path_data, *, exact=False):
+    loops, rectangles = _rectangle_clip_loops(path_data)
     for index, first in enumerate(rectangles):
         for second in rectangles[index + 1:]:
             if (

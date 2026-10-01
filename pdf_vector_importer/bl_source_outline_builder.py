@@ -7,6 +7,7 @@ an oriented triangle chain against the same native curve tessellation.
 from __future__ import annotations
 
 from collections import Counter
+from bisect import bisect_left, bisect_right
 from fractions import Fraction as F
 import hashlib
 import json
@@ -17,6 +18,7 @@ from .text_delivery import AttemptOutcome
 
 RESOLUTION = 32
 MAX_PIECES = 4096
+MAX_GEOMETRY_CANDIDATES = 2_000_000
 
 
 class OutlineVerificationError(ValueError):
@@ -183,6 +185,11 @@ def qualify_contours(contours, fill_rule, *, native=False, coordinates_in_metres
     Unknown touching/intersecting hulls fail closed; subdivisions never replace
     the retained source controls. Work is bounded per glyph.
     """
+    return _qualify_contours(contours, fill_rule, native=native,
+                             coordinates_in_metres=coordinates_in_metres, segment_limit=512)
+
+
+def _qualify_contours(contours, fill_rule, *, native, coordinates_in_metres, segment_limit):
     _require(fill_rule in {"nonzero", "evenodd"}, "unsupported fill rule")
     _require(0 < len(contours) <= 64, "source contour count outside bound")
     rings, whole, pieces = [], [], []
@@ -192,7 +199,7 @@ def qualify_contours(contours, fill_rule, *, native=False, coordinates_in_metres
                                   (tuple(p) if coordinates_in_metres else _point(p)))
         start = convert(contour["start"])
         current, segments, parts = start, [], []
-        _require(0 < len(contour["segments"]) <= 512, "source segment count outside bound")
+        _topology(0 < len(contour["segments"]) <= segment_limit, "source segment count outside bound")
         for segment in contour["segments"]:
             _require(segment[0] in {"L", "C"} and len(segment) == (2 if segment[0] == "L" else 4),
                      "unsupported source curve command")
@@ -216,10 +223,14 @@ def qualify_contours(contours, fill_rule, *, native=False, coordinates_in_metres
         whole.append(segments)
     _require(len(pieces) <= MAX_PIECES, "source topology work bound exceeded")
     ordered = sorted(pieces, key=lambda p: p[4])
+    candidates = 0
     for i, a in enumerate(ordered):
-        for b in ordered[i+1:]:
+        for j in range(i+1, len(ordered)):
+            b = ordered[j]
             if b[4] > a[5]:
                 break
+            candidates += 1
+            _topology(candidates <= MAX_GEOMETRY_CANDIDATES, "source topology candidate work bound exceeded")
             if b[6] > a[7] or a[6] > b[7]:
                 continue
             if a[0] == b[0] and (a[1]-b[1]) % a[2] in {1, a[2]-1}:
@@ -287,9 +298,13 @@ def _native_polygons(segments):
 
 
 def _polygon_qualification(polygons, expected_depth):
+    # Cubics have already been qualified as complete source controls. Their
+    # native finite boundary has RESOLUTION samples per cubic, not one command.
+    _topology(0 < sum(map(len, polygons)) <= MAX_PIECES, "native polygon work bound exceeded")
     contours = [{"start": ring[0], "closed": True,
                  "segments": [["L", p] for p in ring[1:]+ring[:1]]} for ring in polygons]
-    proof = qualify_contours(contours, "nonzero", coordinates_in_metres=True)
+    proof = _qualify_contours(contours, "nonzero", native=False,
+                              coordinates_in_metres=True, segment_limit=MAX_PIECES)
     _topology(proof["depth"] == expected_depth, "native tessellation changes source counter nesting")
     return proof
 
@@ -315,26 +330,110 @@ def _cycle_key(polygon):
     return tuple(polygon[first:]+polygon[:first])
 
 
+def _segment_triangle_interval(a, b, triangle):
+    """Exact closed parameter interval lying in a positive oriented triangle."""
+    low, high = F(0), F(1)
+    for p, q in zip(triangle, triangle[1:]+triangle[:1], strict=True):
+        start, end = _cross(p, q, a), _cross(p, q, b)
+        delta = end-start
+        if delta == 0:
+            if start < 0:
+                return None
+        elif delta > 0:
+            low = max(low, -start/delta)
+        else:
+            high = min(high, -start/delta)
+        if low > high:
+            return None
+    return low, high
+
+
+def _prove_degenerate_support(zero_triangles, positive_triangles, budget):
+    # An exact zero integral alone does not certify a harmless native edge:
+    # its entire segment must lie in the positively certified filled support.
+    for triangle in zero_triangles:
+        for a, b in zip(triangle, triangle[1:]+triangle[:1], strict=True):
+            intervals = []
+            for positive in positive_triangles:
+                budget[0] += 1
+                _require(budget[0] <= MAX_GEOMETRY_CANDIDATES, "native fill candidate work bound")
+                if any(max(a[k], b[k]) < min(p[k] for p in positive)
+                       or min(a[k], b[k]) > max(p[k] for p in positive) for k in range(2)):
+                    continue
+                interval = _segment_triangle_interval(a, b, positive)
+                if interval is not None:
+                    intervals.append(interval)
+            covered = F(0)
+            for low, high in sorted(intervals):
+                _require(low <= covered, "zero-area native edge crosses unfilled source region")
+                covered = max(covered, high)
+                if covered == 1:
+                    break
+            _require(covered == 1, "zero-area native edge outside certified fill")
+
+
+def _atomic_triangle_edges(triangles, points, budget):
+    # Split collinear edges at actual native vertices so a long edge and its
+    # oppositely oriented short neighbors cancel as the same geometric chain.
+    # No coordinate or area is changed; broad-phase indexes only limit work.
+    unique = sorted({p[:2] for p in points})
+    axes = [sorted(unique, key=lambda p: p[k]) for k in range(2)]
+    values = [[p[k] for p in axes[k]] for k in range(2)]
+    result = Counter()
+    for triangle in triangles:
+        for a, b in zip(triangle, triangle[1:]+triangle[:1], strict=True):
+            a, b = a[:2], b[:2]
+            spans = [(bisect_left(values[k], min(a[k], b[k])),
+                      bisect_right(values[k], max(a[k], b[k]))) for k in range(2)]
+            axis = min(range(2), key=lambda k: spans[k][1]-spans[k][0])
+            low, high = spans[axis]
+            parameter_axis = 0 if a[0] != b[0] else 1
+            split = []
+            for i in range(low, high):
+                budget[0] += 1
+                _require(budget[0] <= MAX_GEOMETRY_CANDIDATES, "native fill candidate work bound")
+                p = axes[axis][i]
+                if (min(a[1-axis], b[1-axis]) <= p[1-axis] <= max(a[1-axis], b[1-axis])
+                        and _cross(a, b, p) == 0):
+                    split.append(((p[parameter_axis]-a[parameter_axis]) /
+                                  (b[parameter_axis]-a[parameter_axis]), p))
+            split.sort()
+            _require(split[0] == (0, a) and split[-1] == (1, b), "native edge endpoints missing")
+            for (_, p), (_, q) in zip(split, split[1:], strict=False):
+                result[(p, q)] += 1
+    return result
+
+
 def verify_mesh_ink(vertices, triangles, expected_polygons):
     """Exact oriented triangle-chain boundary, not counts or bounding boxes."""
     points = [tuple(F(float(x)) for x in p) for p in vertices]
     _require(points and len(points) <= 200000 and 0 < len(triangles) <= 400000, "native fill work bound")
     _require(all(len(p) == 3 and p[2] == 0 for p in points), "native ink has nonzero depth")
-    edges, area, used = Counter(), F(0), set()
+    area, used = F(0), set()
+    positive_triangles, zero_triangles = [], []
     signs = set()
     for triangle in triangles:
         _require(len(triangle) == 3 and len(set(triangle)) == 3, "invalid native fill triangle")
         _require(all(type(i) is int and 0 <= i < len(points) for i in triangle), "invalid native vertex index")
         a, b, c = (points[i] for i in triangle)
         signed = _cross(a, b, c)
-        _require(signed != 0, "zero-area native triangle")
+        used.update(triangle)
+        if signed == 0:
+            zero_triangles.append((a, b, c))
+            continue
         signs.add(signed > 0)
         area += abs(signed)/2
-        used.update(triangle)
         oriented = triangle if signed > 0 else tuple(reversed(triangle))
-        for i, j in zip(oriented, oriented[1:]+oriented[:1], strict=False):
-            edges[(points[i][:2], points[j][:2])] += 1
+        positive_triangles.append(tuple(points[i] for i in oriented))
     _require(len(signs) == 1 and len(used) == len(points), "mixed winding or orphaned native vertices")
+    budget = [0]
+    if zero_triangles:
+        edges = _atomic_triangle_edges(positive_triangles, points, budget)
+    else:
+        # Ordinary triangulations retain the original exact chain proof. The
+        # additional subdivision is needed only for collapsed native faces.
+        edges = Counter((a[:2], b[:2]) for triangle in positive_triangles
+                        for a, b in zip(triangle, triangle[1:]+triangle[:1], strict=True))
     boundary = {}
     for (a, b), count in edges.items():
         _require(count == 1, "duplicate overlapping triangle edge")
@@ -352,8 +451,11 @@ def verify_mesh_ink(vertices, triangles, expected_polygons):
     _require(Counter(cycles) == Counter(expected), "native filled boundary/counters differ from source tessellation")
     expected_area = sum(_area(list(ring)) for ring in expected)
     _require(area == expected_area > 0, "native filled area differs from complete source boundary")
+    _prove_degenerate_support(zero_triangles, positive_triangles, budget)
     return {"vertices": len(points), "triangles": len(triangles), "boundary_cycles": len(cycles),
             "area_m2": float(area), "exact_oriented_boundary_chain": True,
+            "positive_triangles": len(positive_triangles), "exact_zero_area_triangles": len(zero_triangles),
+            "degenerate_segments_in_positive_fill": True, "candidate_checks": budget[0],
             "mesh_sha256": _digest({"vertices": vertices, "triangles": triangles})}
 
 
@@ -396,11 +498,40 @@ def _verify_material(obj, color):
     expected = tuple(_f32(v) for v in color)+(1.,)
     _require(len(obj.data.materials) == 1, "source material slot changed")
     mat = obj.data.materials[0]
-    _require(mat.name == obj["pdf_text_material"] and not mat.use_nodes,
-             "source material replaced or textured")
+    _require(mat.name == obj["pdf_text_material"] and mat.use_nodes,
+             "source material replaced or shader disabled")
     _require(tuple(mat.diffuse_color) == expected and tuple(obj.color) == expected,
              "native opaque source color changed")
-    return {"material": mat.name, "rgba": list(expected), "opaque": True}
+    tree = mat.node_tree
+    _require(tree is not None and len(tree.nodes) == 2 and len(tree.links) == 1,
+             "source emission graph changed")
+    emitters = [node for node in tree.nodes if node.bl_idname == "ShaderNodeEmission"]
+    outputs = [node for node in tree.nodes if node.bl_idname == "ShaderNodeOutputMaterial"]
+    _require(len(emitters) == len(outputs) == 1, "source constant emission nodes changed")
+    emission, output = emitters[0], outputs[0]
+    _require(not emission.mute and not output.mute and output.is_active_output and output.target == "ALL",
+             "source emission output inactive")
+    _require(tuple(emission.inputs["Color"].default_value) == expected
+             and emission.inputs["Strength"].default_value == 1
+             and all(not socket.is_linked for socket in emission.inputs),
+             "source constant emission color or strength changed")
+    link = next(iter(tree.links))
+    _require(link.from_node == emission and link.to_node == output
+             and link.from_socket == emission.outputs["Emission"]
+             and link.to_socket == output.inputs["Surface"]
+             and link.is_valid and not getattr(link, "is_muted", False), "source emission link changed")
+    _require(all(socket.is_linked == (socket == output.inputs["Surface"]) for socket in output.inputs),
+             "source output has extra shader inputs")
+    for name, value in (("Displacement", (0., 0., 0.)), ("Thickness", 0.)):
+        socket = output.inputs.get(name)
+        if socket is not None:
+            actual = socket.default_value
+            _require((tuple(actual) if isinstance(value, tuple) else actual) == value,
+                     "source output decoration changed")
+    _require(getattr(mat, "animation_data", None) is None and getattr(tree, "animation_data", None) is None,
+             "animated source material unsupported")
+    return {"material": mat.name, "rgba": list(expected), "opaque": True,
+            "shader": "constant_emission", "strength": 1., "exact_node_graph": True}
 
 
 def verify_source_outline_entity(obj, *, expected_world_matrix=None, page_clip_verified=False):
@@ -443,7 +574,7 @@ def verify_source_outline_entity(obj, *, expected_world_matrix=None, page_clip_v
     else:
         ink = _mesh_readback(obj.data, polygons)
     _require(ink["mesh_sha256"] == saved["initial_mesh_sha256"], "native underlying fill geometry changed")
-    return {"verified": True, "actual_object_type": obj.type, "outline_source": "source_renderer_svg",
+    result = {"verified": True, "actual_object_type": obj.type, "outline_source": "source_renderer_svg",
             "font_program_authenticity": "absent", "source_outline_sha256": record["source_outline_sha256"],
             "source_placement_index": placement["index"], "material": material, "native_ink": ink,
             "entity_id": obj.name, "creation_world_matrix": saved["creation_matrix"],
@@ -452,6 +583,9 @@ def verify_source_outline_entity(obj, *, expected_world_matrix=None, page_clip_v
             "source_cubic_area_m2": float(qualified["area_m2"]), "hole_count": qualified["holes"],
             "native_tessellation_area_difference_m2": ink["area_m2"]-float(qualified["area_m2"]),
             "finite_native_tessellation": True, "source_controls_float32_exact": obj.type == "CURVE"}
+    if "source_page_ledger" in record:
+        result["source_page_ledger"] = record["source_page_ledger"]
+    return result
 
 
 def build_source_outlines(record, collection, *, representation, requested, z_offset_m=0.0):
@@ -525,7 +659,15 @@ def build_source_outlines(record, collection, *, representation, requested, z_of
             _require(len(color) == 3 and all(math.isfinite(v) and 0 <= v <= 1 for v in color), "invalid source color")
             rgba = tuple(_f32(v) for v in color)+(1.,)
             material = bpy.data.materials.new(name+"_ink"); blocks.append(material)
-            material.use_nodes = False; material.diffuse_color = rgba
+            material.use_nodes = True; material.diffuse_color = rgba
+            nodes, links = material.node_tree.nodes, material.node_tree.links
+            nodes.clear()
+            emission = nodes.new(type="ShaderNodeEmission")
+            output = nodes.new(type="ShaderNodeOutputMaterial")
+            output.is_active_output = True; output.target = "ALL"
+            emission.inputs["Color"].default_value = rgba
+            emission.inputs["Strength"].default_value = 1.
+            links.new(emission.outputs["Emission"], output.inputs["Surface"])
             obj.data.materials.append(material); obj.color = rgba
             bpy.context.view_layer.update()
             creation_matrix = _creation_matrix(z_offset_m)

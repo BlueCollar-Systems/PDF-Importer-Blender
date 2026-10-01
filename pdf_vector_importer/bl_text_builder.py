@@ -4412,10 +4412,23 @@ def _attempt_one_representation(
                 return outcome
             from .bl_source_outline_builder import build_source_outlines
 
-            return build_source_outlines(
+            reference = source_record.get('source_page_ledger')
+            if reference is not None:
+                from .source_text_outlines import verify_page_ledger_collection
+
+                try:
+                    verify_page_ledger_collection(collection, reference)
+                except (AttributeError, KeyError, TypeError, ValueError, RuntimeError) as exc:
+                    return AttemptOutcome.failed('source_page_ledger_persistence_failed',
+                        evidence={'detail': str(exc)})
+            outcome = build_source_outlines(
                 source_record, collection, representation=representation,
                 requested=requested, z_offset_m=z_offset_m,
             )
+            if reference is not None:
+                outcome.evidence['source_page_ledger'] = reference
+                outcome.evidence['page_collection'] = collection.name
+            return outcome
     if (
         representation in {"text", "3d_text", "glyphs", "geometry"}
         and bool(getattr(text_item, "requires_individual_positioning", False))
@@ -4623,6 +4636,10 @@ def build_text(
                 }
                 zero_record = json.loads(json.dumps(zero_record, allow_nan=False))
                 try:
+                    if source_record.get('source_page_ledger') is not None:
+                        from .source_text_outlines import verify_page_ledger_collection
+
+                        verify_page_ledger_collection(collection, source_record['source_page_ledger'])
                     ledger = json.loads(collection.get('pdf_verified_zero_ink_json', '[]'))
                     if not isinstance(ledger, list) or any(row['item_id'] == item_id for row in ledger):
                         raise ValueError('duplicate zero-ink collection record')

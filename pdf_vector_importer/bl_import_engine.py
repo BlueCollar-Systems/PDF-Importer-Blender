@@ -445,7 +445,44 @@ def _delivered_item_raster_count(provenance_opts: Any) -> int:
     return count
 
 
-def _text_delivery_from_provenance(provenance_opts: Any) -> Dict[str, Any]:
+def _verify_source_page_ledger(record, cache, *, source_pdf_path=None):
+    """Authenticate each page once per final/report pass, never cache native reads across passes."""
+    from .source_text_outlines import digest, verify_page_ledger_collection
+
+    if record.get('status') == 'verified_zero_ink':
+        reference = record['zero_ink_proof']['source_record'].get('source_page_ledger')
+        owner = record.get('page_collection')
+    else:
+        attempt = next((row for row in reversed(record.get('attempts', ()))
+                        if row.get('status') == 'delivered'), {})
+        evidence = attempt.get('evidence', {})
+        reference = evidence.get('source_page_ledger')
+        owner = evidence.get('page_collection')
+        for entity in record.get('final_state_verification', {}).get('entities', ()):
+            native_reference = entity.get('source_outline', {}).get('source_page_ledger')
+            if native_reference != reference:
+                raise ValueError('final native source page occurrence reference differs')
+    if reference is None:
+        return None
+    if record.get('page') != reference.get('page_number'):
+        raise ValueError('source page occurrence reference belongs to another page')
+    key = (owner, digest(reference))
+    if key not in cache:
+        collection = bpy.data.collections.get(owner)
+        if collection is None:
+            raise ValueError('source page occurrence collection missing')
+        proof = verify_page_ledger_collection(collection, reference, collections=bpy.data.collections)
+        ledger = json.loads(collection['pdf_source_page_ledger_json'])['ledger']
+        if source_pdf_path is not None and _sha256_path(source_pdf_path) != reference['pdf_sha256']:
+            raise ValueError('source PDF changed after page occurrence qualification')
+        cache[key] = proof, set(ledger['canonical_item_ids'])
+    proof, item_ids = cache[key]
+    if record.get('item_id') not in item_ids:
+        raise ValueError('canonical item is absent from source page occurrence ledger')
+    return proof
+
+
+def _text_delivery_from_provenance(provenance_opts: Any, *, source_pdf_path=None) -> Dict[str, Any]:
     """Build the complete, item-scoped text delivery report payload."""
     try:
         raw_records = list(getattr(provenance_opts, "_text_delivery_records", []) or [])
@@ -458,7 +495,13 @@ def _text_delivery_from_provenance(provenance_opts: Any) -> Dict[str, Any]:
     verified_zero_ink = 0
     fallback = 0
     failed_ids = []
+    page_ledger_cache = {}
     for record in records:
+        if record.get('status') in ('delivered', 'verified_zero_ink'):
+            try:
+                _verify_source_page_ledger(record, page_ledger_cache, source_pdf_path=source_pdf_path)
+            except (AttributeError, KeyError, TypeError, ValueError, RuntimeError, OSError) as exc:
+                record.update(status='failed', reason='source_page_ledger_unverified', detail=str(exc))
         requested = str(record.get("requested_representation") or "").strip().lower()
         final = str(record.get("final_representation") or "").strip().lower()
         status = str(record.get("status") or "failed").strip().lower()
@@ -813,7 +856,7 @@ def write_import_report(
         or _default_import_report_path(filepath)
     )
     elapsed = float(stats.get("elapsed", 0.0) or 0.0)
-    text_delivery = _text_delivery_from_provenance(provenance_opts)
+    text_delivery = _text_delivery_from_provenance(provenance_opts, source_pdf_path=filepath)
     text_delivery_summary = text_delivery["summary"]
     text_fallback = _text_fallback_from_provenance(provenance_opts)
     raster_delivery_failures = []
@@ -3383,6 +3426,7 @@ def _reverify_text_delivery_after_stack(
     registry = getattr(getattr(bpy, "data", None), "objects", None)
     lookup = _ObjectNameLookup(registry)
     getter = lookup.get
+    page_ledger_cache = {}
     for record in tuple(delivery_records or ()):
         if (
             int(record.get("page", 0) or 0) != int(page_number)
@@ -3401,6 +3445,10 @@ def _reverify_text_delivery_after_stack(
         expected_type = expected_types.get(representation)
         entity_proofs = []
         record_failures = []
+        try:
+            _verify_source_page_ledger(record, page_ledger_cache)
+        except (AttributeError, KeyError, TypeError, ValueError, RuntimeError) as exc:
+            record_failures.append(f'final_source_page_ledger_unverified:{exc}')
         for entity_id in entity_ids:
             obj = getter(entity_id) if callable(getter) else None
             if obj is None:
@@ -3462,6 +3510,8 @@ def _reverify_text_delivery_after_stack(
                     for key in ('source_outline_sha256', 'source_placement_index'):
                         if proof['source_outline'].get(key) != bindings[0].get(key) or key not in bindings[0]:
                             raise ValueError(f'original outline occurrence binding changed: {key}')
+                    if proof['source_outline'].get('source_page_ledger') != prior_evidence.get('source_page_ledger'):
+                        raise ValueError('original source page occurrence ledger binding changed')
                 except (AttributeError, KeyError, IndexError, ReferenceError, RuntimeError, TypeError, ValueError) as error:
                     record_failures.append(f'final_source_outline_unverified:{entity_id}:{error}')
             prior_location = expected_locations.get(entity_id)
@@ -4274,7 +4324,7 @@ def import_pdf(
                     source_outline_provider = page_record_provider(
                         page, page_data.text_items, page_number=page_num,
                         width_mm=page_data.width, height_mm=page_data.height,
-                        flip_y=import_cfg.flip_y, pdf_sha256=source_sha256,
+                        flip_y=import_cfg.flip_y, pdf_sha256=source_sha256, collection=page_col,
                     )
                     text_count = build_all_text(
                         page_data.text_items,
