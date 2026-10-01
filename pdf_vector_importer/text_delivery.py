@@ -180,6 +180,36 @@ def _impossibility_proof_failures(
                 failures.append(f"label_{field}_absence_unproven")
         return failures
 
+    if reason == 'source_outline_topology_unavailable_for_item':
+        if attempted_representation not in {'glyphs', 'geometry'}:
+            failures.append('outline_proof_not_valid_for_rung')
+        if evidence.get('proof_category') != 'source_outline_topology_unsupported':
+            failures.append('outline_topology_category_unbound')
+        if type(evidence.get('native_entities_created')) is not int or evidence['native_entities_created'] != 0:
+            failures.append('outline_preallocation_absence_unproven')
+        if (outcome.entity is not None or outcome.entity_ids or outcome.owned_objects
+                or outcome.owned_datablocks or outcome.owned_artifacts):
+            failures.append('outline_native_allocation_prevents_fallback')
+        for field in ('source_outline_sha256', 'pdf_sha256', 'svg_sha256'):
+            value = evidence.get(field)
+            if not isinstance(value, str) or len(value) != 64 or any(c not in '0123456789abcdef' for c in value):
+                failures.append(f'outline_{field}_unbound')
+        absence = evidence.get('source_font_absence') or {}
+        positive = (
+            absence.get('reason') == 'embedded_font_asset_build_failed'
+            and absence.get('proof_category') == 'source_specific_impossibility'
+            and absence.get('detail') == 'embedded font stream is empty'
+            and type(absence.get('source_xref')) is int and absence['source_xref'] > 0
+        ) or (
+            absence.get('reason') == 'no_exact_embedded_font_match'
+            and absence.get('proof_category') == 'source_font_absent_for_item'
+        )
+        if not positive or absence.get('source_page') != page_number or not absence.get('font_name'):
+            failures.append('outline_source_font_absence_unproven')
+        if not str(evidence.get('detail') or '').strip():
+            failures.append('outline_topology_detail_missing')
+        return failures
+
     if reason == "exact_source_font_unavailable_for_item":
         if attempted_representation not in {"text", "3d_text", "glyphs", "geometry"}:
             failures.append("font_proof_not_valid_for_rung")

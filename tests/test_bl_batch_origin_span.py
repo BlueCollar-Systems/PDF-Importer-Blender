@@ -10,6 +10,7 @@ is stale/collapsed.
 from __future__ import annotations
 
 import importlib
+from contextlib import nullcontext
 import sys
 import types
 from pathlib import Path
@@ -172,6 +173,12 @@ class _Vector:
         self.x = float(seq[0])
         self.y = float(seq[1])
         self.z = float(seq[2])
+
+    def __add__(self, other):
+        return _Vector((self.x + other.x, self.y + other.y, self.z + other.z))
+
+    def __mul__(self, value):
+        return _Vector((self.x * value, self.y * value, self.z * value))
 
 
 def _install_blender32_curve_host() -> types.SimpleNamespace:
@@ -475,3 +482,103 @@ def test_focus_path_does_not_call_view_selected_when_spline_bounds_exist():
     ).read_text(encoding="utf-8")
     builder = _reload_builder()
     assert builder._MAX_OPEN_CURVE_RUNS_PER_OBJECT == 400
+
+
+@pytest.mark.parametrize("projection_xy", [(2.5, 1.0), (1.0, 2.5), (4.0, 0.4)])
+@pytest.mark.parametrize("sheet_xy", [(1.2, 0.9), (0.2, 4.0), (8.0, 0.2)])
+def test_final_orthographic_view_contains_sheet_for_each_viewport(projection_xy, sheet_xy):
+    _reload_builder()
+    sys.modules.pop("pdf_vector_importer.bl_import_engine", None)
+    engine = importlib.import_module("pdf_vector_importer.bl_import_engine")
+
+    class Region:
+        view_distance = 10.0
+        view_rotation = (0.7, 0.7, 0.0, 0.0)
+        view_perspective = "PERSP"
+
+        def update(self):
+            # Native orthographic projection scales inversely with view_distance.
+            # Different lens/aspect combinations affect X and Y independently.
+            self.window_matrix = (
+                (projection_xy[0] / self.view_distance, 0, 0, 0),
+                (0, projection_xy[1] / self.view_distance, 0, 0),
+                (0, 0, -1, 0), (0, 0, 0, 1),
+            )
+
+    region = Region()
+    lower = _Vector((12.0, -30.0, 0.0))
+    upper = _Vector((12.0 + sheet_xy[0], -30.0 + sheet_xy[1], 0.1))
+    engine._frame_sheet_view(region, lower, upper)
+    region.update()
+    assert region.view_rotation == (1.0, 0.0, 0.0, 0.0)
+    assert region.view_perspective == "ORTHO"
+    assert region.view_location.x == pytest.approx(12.0 + sheet_xy[0] / 2)
+    assert region.view_location.y == pytest.approx(-30.0 + sheet_xy[1] / 2)
+    projected = [sheet_xy[i] * abs(region.window_matrix[i][i]) / 2 for i in (0, 1)]
+    assert max(projected) == pytest.approx(1 / 1.10)
+    assert all(value < 1 for value in projected)
+
+
+@pytest.mark.parametrize("material_preview", [False, True])
+def test_focus_finishes_all_batch_viewports_without_animated_axis_operator(monkeypatch, material_preview):
+    _reload_builder()
+    sys.modules.pop("pdf_vector_importer.bl_import_engine", None)
+    engine = importlib.import_module("pdf_vector_importer.bl_import_engine")
+    selected = []
+
+    class Drawing(dict):
+        type = "CURVE"
+        name = "ImportedBatch"
+
+        def select_set(self, value):
+            selected.append(value)
+
+        def hide_set(self, _value):
+            pass
+
+    class ObjectList(list):
+        active = None
+
+    drawing = Drawing()
+    collection = types.SimpleNamespace(all_objects=[drawing])
+    viewport_regions = [object(), object()]
+    areas = [types.SimpleNamespace(
+        type="VIEW_3D", regions=[types.SimpleNamespace(type="WINDOW")],
+        spaces=types.SimpleNamespace(active=types.SimpleNamespace(
+            region_3d=region, local_view=None, clip_start=0.01, clip_end=1000,
+            shading=types.SimpleNamespace(
+                type="SOLID", light="STUDIO", color_type="RANDOM",
+                show_shadows=True, show_cavity=True, show_object_outline=True,
+                show_specular_highlight=True,
+            ),
+        )),
+    ) for region in viewport_regions]
+    engine.bpy.context = types.SimpleNamespace(
+        view_layer=types.SimpleNamespace(objects=ObjectList([drawing])),
+        window_manager=types.SimpleNamespace(windows=[types.SimpleNamespace(
+            screen=types.SimpleNamespace(areas=areas),
+        )]),
+        scene=object(), temp_override=lambda **_kwargs: nullcontext(),
+    )
+    calls = []
+    monkeypatch.setattr(engine, "_unhide_collection_tree", lambda _root: None)
+    monkeypatch.setattr(engine, "_world_bounds_for_objects", lambda _objects: (
+        _Vector((0, 0, 0)), _Vector((2, 10, 0)),
+    ))
+    monkeypatch.setattr(engine, "_frame_sheet_view", lambda region, _lo, _hi: calls.append(region) or True)
+    # No ops API is provided: framing must finish synchronously without view_axis.
+    assert engine._focus_view_on_import(collection, prefer_material_preview=material_preview) is True
+    assert calls == viewport_regions
+    assert selected[-1] is False
+    for area in areas:
+        shading = area.spaces.active.shading
+        if material_preview:
+            assert shading.type == "MATERIAL"
+            assert shading.color_type == "TEXTURE"
+            assert shading.light == "STUDIO"
+        else:
+            assert shading.type == "SOLID"
+            assert shading.light == "FLAT"
+            assert shading.color_type == "MATERIAL"
+            assert not any(getattr(shading, name) for name in (
+                "show_shadows", "show_cavity", "show_object_outline", "show_specular_highlight"))

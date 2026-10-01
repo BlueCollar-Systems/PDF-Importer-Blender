@@ -38,9 +38,21 @@ def _write_synthetic_release_zip(
             "def register():\n    pass\n"
         ),
         "pdf_vector_importer/pdfcadcore/fitz_loader.py": (
-            "class _Fitz:\n    open = staticmethod(lambda *_a, **_k: None)\n"
-            "def import_fitz(**_kwargs):\n    return _Fitz()\n"
+            "def import_fitz(**_kwargs):\n    import pymupdf\n    return pymupdf\n"
         ),
+        "pdf_vector_importer/lib/pymupdf/__init__.py": (
+            "__version__ = '1.28.2'\n"
+            "class Document:\n"
+            "    def __enter__(self): return self\n"
+            "    def __exit__(self, *args): pass\n"
+            "    def new_page(self): return self\n"
+            "    def insert_text(self, *args): pass\n"
+            "    def get_texttrace(self): return [{} for _ in range(10)]\n"
+            "def open(): return Document()\n"
+        ),
+        "pdf_vector_importer/lib/pymupdf-1.28.2.dist-info/METADATA": "Name: PyMuPDF\nVersion: 1.28.2\n",
+        "pdf_vector_importer/lib/pymupdf-1.28.2.dist-info/WHEEL": "Tag: cp310-abi3-win_amd64\n",
+        "pdf_vector_importer/lib/pymupdf-1.28.2.dist-info/COPYING": "Upstream license\n",
         "pdf_vector_importer/lib/pymupdf/extra.py": "# controlled helper\n",
         "pdf_vector_importer/_vendored_pymupdf_extra.py": (
             "# controlled helper\n" if repair_helper_matches else "# stale helper\n"

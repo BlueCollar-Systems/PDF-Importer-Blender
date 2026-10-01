@@ -43,6 +43,9 @@ _REQUIRED_RUNTIME_FILES = (
     _VENDORED_LIB / "pymupdf" / "_extra.pyd",
     _VENDORED_LIB / "pymupdf" / "_mupdf.pyd",
     _VENDORED_LIB / "pymupdf" / "mupdfcpp64.dll",
+    _VENDORED_LIB / "pymupdf-1.28.2.dist-info" / "METADATA",
+    _VENDORED_LIB / "pymupdf-1.28.2.dist-info" / "WHEEL",
+    _VENDORED_LIB / "pymupdf-1.28.2.dist-info" / "COPYING",
     PKG / "_vendored_pymupdf_extra.py",
     _VENDORED_LIB / "fontTools" / "ttLib" / "__init__.py",
     _VENDORED_LIB / "fontTools" / "cffLib" / "__init__.py",
@@ -139,18 +142,9 @@ def _verify_vendored_pymupdf() -> None:
             f"skipping binary import check on {sys.platform}."
         )
         return
-    code = (
-        "import sys; "
-        f"sys.path.insert(0, r'{LIB_DIR}'); "
-        "import pymupdf as fitz; "
-        "print(getattr(fitz, '__version__', '') or getattr(fitz, 'VersionBind', ''))"
-    )
-    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
-    if proc.returncode != 0 or not proc.stdout.strip():
-        raise RuntimeError(
-            "Vendored PyMuPDF could not be imported from pdf_vector_importer/lib. "
-            f"stderr: {proc.stderr.strip()}"
-        )
+    from scripts.pymupdf_runtime_smoke import verify_runtime
+
+    verify_runtime(sys.executable, LIB_DIR)
 
 
 def _prune_vendored_pymupdf() -> None:

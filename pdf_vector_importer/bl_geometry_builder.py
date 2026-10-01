@@ -106,17 +106,14 @@ def _points_m_from_mm(points) -> list:
 # ── Material cache ───────────────────────────────────────────────────
 
 def _color_key(color: Optional[Tuple[float, float, float]]) -> str:
-    """Identity for a shared material.
+    """Share only identical source colors, including the default black paint.
 
-    Three decimal places merge source colors the opaque-fill check still
-    treats as different (about 1/255 apart). Those fills then abort the page
-    because the shared material no longer matches each source color. Nine
-    digits stay inside that check's tolerance, so only colors it accepts
-    share a material.
+    PDF stroke and fill conversions can differ below three decimal places.
+    Rounding their cache identity replaced one actual paint with the other and
+    made the source-fill verification reject an otherwise valid page.
     """
-    if color is None:
-        return "0.000000000_0.000000000_0.000000000"
-    return f"{float(color[0]):.9f}_{float(color[1]):.9f}_{float(color[2]):.9f}"
+    rgb = color if color is not None else (0.0, 0.0, 0.0)
+    return "_".join(float(value).hex() for value in rgb)
 
 
 def _normalize_style(style: str) -> str:

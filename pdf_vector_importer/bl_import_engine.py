@@ -9,6 +9,7 @@ optional recognition, and Blender geometry/text building.
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
 import json
 import math
@@ -172,6 +173,68 @@ def _discard_page_collection(page_collection) -> None:
             pass
     except (AttributeError, RuntimeError, ValueError):
         pass
+
+
+def _fail_text_page_guarded(page_collection, provenance_opts, stats, *, page_number,
+                            reason, stage):
+    """Roll back only the failed page; an unavailable check is never proof."""
+    failure = {"page": page_number, "reason": reason, "stage": stage}
+    for record in getattr(provenance_opts, "_text_delivery_records", ()):
+        if record.get("page") != page_number:
+            continue
+        record["status"] = "failed"
+        record["reason"] = "source_page_verification_failed"
+        record["final_representation"] = None
+        record["entity_ids"] = []
+        record["page_viewport_failure"] = failure
+    try:
+        owned_names = [obj.name for obj in page_collection.all_objects]
+        collection_name = page_collection.name
+        _discard_page_collection(page_collection)
+        object_get = bpy.data.objects.get
+        collection_get = bpy.data.collections.get
+        if not callable(object_get) or not callable(collection_get):
+            raise ValueError("Native rollback registry is unavailable")
+        remaining = [name for name in owned_names if object_get(name) is not None]
+        remaining_collection = collection_get(collection_name) is not None
+        failure["rollback"] = "failed" if remaining or remaining_collection else "verified"
+        failure["remaining_owned_entities"] = remaining
+        failure["remaining_page_collection"] = remaining_collection
+    except Exception as error:
+        failure["rollback"] = "unverified"
+        failure["rollback_error"] = f"{type(error).__name__}: {error}"
+    stats.setdefault("text_page_viewport_failures", []).append(failure)
+    return False
+
+
+def _clip_text_page_guarded(page_collection, provenance_opts, stats, *, page_number,
+                            width_mm, height_mm):
+    from .text_page_clip import clip_delivered_page_text
+
+    try:
+        clip_delivered_page_text(
+            page_collection, getattr(provenance_opts, "_text_delivery_records", ()),
+            page_number=page_number, width_mm=width_mm, height_mm=height_mm)
+        return True
+    except Exception as error:
+        return _fail_text_page_guarded(
+            page_collection, provenance_opts, stats, page_number=page_number,
+            reason=f"{type(error).__name__}: {error}", stage="page_viewport")
+
+
+def _checkpoint_failed_text_page(stats, root_collection, checkpoint_path, safe_state):
+    """Resume only the previous completed state after positively verified rollback."""
+    failures = stats.get("text_page_viewport_failures") or []
+    if all(failure.get("rollback") == "verified" for failure in failures):
+        stats["resume"] = safe_state
+        stats["resume_checkpoint_path"] = checkpoint_path
+        _write_resume_checkpoint_guarded(checkpoint_path, safe_state, stats)
+    else:
+        stats["resume_unavailable"] = "Failed page rollback was not verified"
+        root_collection["pdf_import_resume_blocked"] = stats["resume_unavailable"]
+    remaining = list(safe_state.get("remaining_pages") or [])
+    for failure in failures:
+        failure["remaining_requested_pages"] = remaining
 
 
 def _importer_version() -> str:
@@ -382,7 +445,44 @@ def _delivered_item_raster_count(provenance_opts: Any) -> int:
     return count
 
 
-def _text_delivery_from_provenance(provenance_opts: Any) -> Dict[str, Any]:
+def _verify_source_page_ledger(record, cache, *, source_pdf_path=None):
+    """Authenticate each page once per final/report pass, never cache native reads across passes."""
+    from .source_text_outlines import digest, verify_page_ledger_collection
+
+    if record.get('status') == 'verified_zero_ink':
+        reference = record['zero_ink_proof']['source_record'].get('source_page_ledger')
+        owner = record.get('page_collection')
+    else:
+        attempt = next((row for row in reversed(record.get('attempts', ()))
+                        if row.get('status') == 'delivered'), {})
+        evidence = attempt.get('evidence', {})
+        reference = evidence.get('source_page_ledger')
+        owner = evidence.get('page_collection')
+        for entity in record.get('final_state_verification', {}).get('entities', ()):
+            native_reference = entity.get('source_outline', {}).get('source_page_ledger')
+            if native_reference != reference:
+                raise ValueError('final native source page occurrence reference differs')
+    if reference is None:
+        return None
+    if record.get('page') != reference.get('page_number'):
+        raise ValueError('source page occurrence reference belongs to another page')
+    key = (owner, digest(reference))
+    if key not in cache:
+        collection = bpy.data.collections.get(owner)
+        if collection is None:
+            raise ValueError('source page occurrence collection missing')
+        proof = verify_page_ledger_collection(collection, reference, collections=bpy.data.collections)
+        ledger = json.loads(collection['pdf_source_page_ledger_json'])['ledger']
+        if source_pdf_path is not None and _sha256_path(source_pdf_path) != reference['pdf_sha256']:
+            raise ValueError('source PDF changed after page occurrence qualification')
+        cache[key] = proof, set(ledger['canonical_item_ids'])
+    proof, item_ids = cache[key]
+    if record.get('item_id') not in item_ids:
+        raise ValueError('canonical item is absent from source page occurrence ledger')
+    return proof
+
+
+def _text_delivery_from_provenance(provenance_opts: Any, *, source_pdf_path=None) -> Dict[str, Any]:
     """Build the complete, item-scoped text delivery report payload."""
     try:
         raw_records = list(getattr(provenance_opts, "_text_delivery_records", []) or [])
@@ -392,9 +492,16 @@ def _text_delivery_from_provenance(provenance_opts: Any) -> Dict[str, Any]:
     requested_counts: Dict[str, int] = {}
     final_counts: Dict[str, int] = {}
     delivered = 0
+    verified_zero_ink = 0
     fallback = 0
     failed_ids = []
+    page_ledger_cache = {}
     for record in records:
+        if record.get('status') in ('delivered', 'verified_zero_ink'):
+            try:
+                _verify_source_page_ledger(record, page_ledger_cache, source_pdf_path=source_pdf_path)
+            except (AttributeError, KeyError, TypeError, ValueError, RuntimeError, OSError) as exc:
+                record.update(status='failed', reason='source_page_ledger_unverified', detail=str(exc))
         requested = str(record.get("requested_representation") or "").strip().lower()
         final = str(record.get("final_representation") or "").strip().lower()
         status = str(record.get("status") or "failed").strip().lower()
@@ -406,6 +513,21 @@ def _text_delivery_from_provenance(provenance_opts: Any) -> Dict[str, Any]:
             delivered += 1
             if bool(record.get("fallback_used")) and final != requested:
                 fallback += 1
+        elif status == 'verified_zero_ink':
+            try:
+                from .source_text_outlines import verify_zero_ink_delivery, verify_zero_ink_collection
+
+                verify_zero_ink_delivery(record)
+                if sum(row.get('item_id') == record['item_id'] for row in records) != 1:
+                    raise ValueError('duplicate canonical zero-ink identity')
+                collection = bpy.data.collections.get(record['page_collection'])
+                if collection is None:
+                    raise ValueError('zero-ink page collection missing')
+                peers = [row for row in records if row.get('page_collection') == collection.name]
+                verify_zero_ink_collection(collection, peers)
+                verified_zero_ink += 1
+            except (AttributeError, KeyError, TypeError, ValueError, RuntimeError):
+                failed_ids.append(str(record.get('item_id') or '<unknown>'))
         else:
             failed_ids.append(str(record.get("item_id") or "<unknown>"))
     return {
@@ -413,6 +535,7 @@ def _text_delivery_from_provenance(provenance_opts: Any) -> Dict[str, Any]:
         "summary": {
             "source_items": len(records),
             "delivered_items": delivered,
+            "verified_zero_ink_items": verified_zero_ink,
             "fallback_items": fallback,
             "failed_items": len(failed_ids),
             "requested_counts": dict(sorted(requested_counts.items())),
@@ -491,10 +614,11 @@ def _terminal_import_failures(config: Dict, stats: Dict, provenance_opts: Any) -
     recorded = int(summary["source_items"])
     delivered = int(summary["delivered_items"])
     failed = int(summary["failed_items"])
-    if required > 0 and (recorded != required or delivered != required or failed != 0):
+    zero_ink = int(summary['verified_zero_ink_items'])
+    if required > 0 and (recorded != required or delivered + zero_ink != required or failed != 0):
         failures.append(
             "text delivery failed "
-            f"(required={required}, recorded={recorded}, delivered={delivered}, failed={failed})"
+            f"(required={required}, recorded={recorded}, delivered={delivered}, zero_ink={zero_ink}, failed={failed})"
         )
 
     raster_failures = list(stats.get("raster_delivery_failures") or [])
@@ -510,6 +634,8 @@ def _terminal_import_failures(config: Dict, stats: Dict, provenance_opts: Any) -
     ]
     if geometry_failures:
         failures.append(f"geometry delivery failed ({len(geometry_failures)} primitive(s))")
+    if stats.get("text_page_viewport_failures"):
+        failures.append("source page text verification failed")
 
     return failures
 
@@ -730,7 +856,7 @@ def write_import_report(
         or _default_import_report_path(filepath)
     )
     elapsed = float(stats.get("elapsed", 0.0) or 0.0)
-    text_delivery = _text_delivery_from_provenance(provenance_opts)
+    text_delivery = _text_delivery_from_provenance(provenance_opts, source_pdf_path=filepath)
     text_delivery_summary = text_delivery["summary"]
     text_fallback = _text_fallback_from_provenance(provenance_opts)
     raster_delivery_failures = []
@@ -827,13 +953,14 @@ def write_import_report(
     import_text_enabled = bool(config.get("import_text", True)) and text_mode != "none"
     delivery_source_items = int(text_delivery_summary["source_items"])
     delivery_delivered_items = int(text_delivery_summary["delivered_items"])
+    delivery_zero_ink_items = int(text_delivery_summary['verified_zero_ink_items'])
     delivery_failed_items = int(text_delivery_summary["failed_items"])
     text_delivery_required = bool(import_text_enabled and text_source_spans > 0)
     text_delivery_verified = bool(
         not text_delivery_required
         or (
             delivery_source_items == text_source_spans
-            and delivery_delivered_items == delivery_source_items
+            and delivery_delivered_items + delivery_zero_ink_items == delivery_source_items
             and delivery_failed_items == 0
         )
     )
@@ -843,6 +970,7 @@ def write_import_report(
             "required_source_items": text_source_spans,
             "recorded_source_items": delivery_source_items,
             "delivered_items": delivery_delivered_items,
+            'verified_zero_ink_items': delivery_zero_ink_items,
             "failed_items": delivery_failed_items,
             "failed_item_ids": list(text_delivery_summary["failed_item_ids"]),
         }
@@ -850,6 +978,8 @@ def write_import_report(
         terminal_failure["raster_delivery"] = list(raster_delivery_failures)
     if geometry_delivery_failures:
         terminal_failure["geometry_delivery"] = list(geometry_delivery_failures)
+    if stats.get("text_page_viewport_failures"):
+        terminal_failure["text_page_viewport"] = list(stats["text_page_viewport_failures"])
     # Recorded, but NOT as a terminal failure: it would otherwise stamp the
     # report result_status "incomplete" for an import that delivered every page
     # and now finishes successfully. See _terminal_import_failures.
@@ -872,6 +1002,7 @@ def write_import_report(
         "terminal_triangle_paint_order": stats.get("terminal_triangle_paint_order", []),
         "compound_fill_paint_order": stats.get("compound_fill_paint_order", []),
         "display_aids": stats.get("display_aids", []),
+        "text_page_viewport_failures": stats.get("text_page_viewport_failures", []),
         "scale_hints": stats.get("scale_hints"),
         "fallback_attempted": bool(fallback_attempted),
         "result_status": (
@@ -897,6 +1028,7 @@ def write_import_report(
             "verified": text_delivery_verified,
             "source_items": delivery_source_items,
             "delivered_items": delivery_delivered_items,
+            "verified_zero_ink_items": delivery_zero_ink_items,
             "failed_items": delivery_failed_items,
         }
     if raster_delivery_failures:
@@ -1003,6 +1135,23 @@ def write_import_report(
     if isinstance(diagnostics, dict) and int(text_delivery_summary["source_items"]) > 0:
         signals = list(diagnostics.get("signals") or [])
         actions = list(diagnostics.get("recommended_actions") or [])
+        if (text_delivery_verified and delivery_zero_ink_items == text_source_spans > 0
+                and delivery_delivered_items == 0 and int(stats.get('text_items', 0) or 0) == 0):
+            # The shared report cannot inspect Blender's persistent page ledger.
+            # Exempt only this entire, revalidated source roster and current PDF.
+            try:
+                actual_pdf_hash = _sha256_path(filepath)
+                all_bound = all(row['zero_ink_proof']['source_record']['pdf_sha256'] == actual_pdf_hash
+                                for row in text_delivery['items'])
+            except (OSError, KeyError, TypeError, ValueError):
+                all_bound = False
+            if all_bound:
+                signals = [signal for signal in signals
+                           if signal != 'source_text_seen_but_no_text_entities_created']
+                actions = [action for action in actions if action != (
+                    'Treat missing delivered text entities as a failed import; inspect the '
+                    'item attempt history without changing the requested representation.')]
+                signals.append('source_zero_ink_items_verified')
         if int(text_delivery_summary["fallback_items"]) > 0:
             if "text_representation_fallback_used" not in signals:
                 signals.append("text_representation_fallback_used")
@@ -1202,6 +1351,31 @@ def _sheet_view_radius(min_v, max_v) -> float:
     if span_z > planar * 2.0 and max(span_x, span_y) <= 0.25:
         return max(span_z, 0.25)
     return planar
+
+
+def _frame_sheet_view(region_3d, min_v, max_v) -> bool:
+    """Fit sheet XY to the actual orthographic projection of this viewport."""
+    # Assign the final orientation directly: view_axis can start a smooth-view
+    # animation whose later tick overwrites the distance set after import.
+    region_3d.view_rotation = (1.0, 0.0, 0.0, 0.0)
+    region_3d.view_perspective = "ORTHO"
+    if min_v is None or max_v is None:
+        return False
+    region_3d.view_location = (min_v + max_v) * 0.5
+    region_3d.view_distance = max(_sheet_view_radius(min_v, max_v), 0.4)
+    region_3d.update()
+    projection = region_3d.window_matrix
+    projected_half_extent = max(
+        abs(float(max_v.x) - float(min_v.x)) * abs(float(projection[0][0])) * 0.5,
+        abs(float(max_v.y) - float(min_v.y)) * abs(float(projection[1][1])) * 0.5,
+    )
+    if not math.isfinite(projected_half_extent) or projected_half_extent <= 0.0:
+        return False
+    # Orthographic projection is inversely proportional to view_distance.
+    # Using the native matrix incorporates both lens and viewport aspect ratio.
+    region_3d.view_distance *= projected_half_extent * 1.10
+    region_3d.update()
+    return True
 
 
 def _world_bounds_for_objects(objects):
@@ -1423,6 +1597,26 @@ def _looks_like_page_frame_only(page_data) -> bool:
     return big_frames >= 1
 
 
+def _configure_sheet_view_shading(space, prefer_material_preview: bool) -> None:
+    """Show source paint without adding Workbench mask silhouettes or lighting."""
+    shading = space.shading
+    if prefer_material_preview:
+        # Images and transparent source paint need the real material shaders.
+        shading.type = "MATERIAL"
+        if hasattr(shading, "color_type"):
+            shading.color_type = "TEXTURE"
+        return
+    shading.type = "SOLID"
+    shading.light = "FLAT"
+    shading.color_type = "MATERIAL"
+    for name in ("show_shadows", "show_cavity", "show_object_outline",
+                 "show_specular_highlight"):
+        if hasattr(shading, name):
+            setattr(shading, name, False)
+    # These are viewport settings only. The scene's color-management transform
+    # remains the user's choice, so this is not a calibrated PDF color preview.
+
+
 def _focus_view_on_import(
     root_collection: bpy.types.Collection,
     keep_selected: bool = False,
@@ -1477,6 +1671,21 @@ def _focus_view_on_import(
             or str(obj.name) in carrier_names
         )
         is_replaced_stroke = bool(obj.get("pdf_display_replaced_by", ""))
+        is_page_clip_helper = bool(obj.get("pdf_page_clip_helper", False))
+        if is_page_clip_helper:
+            # Geometry Nodes still evaluates this owned operand. Keep it out of
+            # the drawing and framing without disabling dependency evaluation.
+            try:
+                obj.hide_set(True)
+            except RuntimeError:
+                bpy.context.view_layer.update()
+                try:
+                    obj.hide_set(True)
+                except RuntimeError as error:
+                    raise RuntimeError("Cannot hide source text page operand") from error
+            obj.hide_render = True
+            obj.hide_select = True
+            continue
         if is_carrier or is_replaced_stroke:
             # Same guard as the carrier build: an object outside the view
             # layer cannot take hide_set, and the object-level toggle below
@@ -1582,27 +1791,15 @@ def _focus_view_on_import(
                     except Exception:
                         pass
 
-                    try:
-                        bpy.ops.view3d.view_axis(type="TOP", align_active=False)
-                    except Exception:
-                        pass
-                    # Prefer orthographic for plan-like PDF drawings.
+                    frame_ready = False
                     try:
                         rv3d = area.spaces.active.region_3d
                         if rv3d is not None:
-                            rv3d.view_perspective = "ORTHO"
-                            if min_v is not None and max_v is not None:
-                                center = (min_v + max_v) * 0.5
-                                radius = _sheet_view_radius(min_v, max_v)
-                                rv3d.view_location = center
-                                rv3d.view_distance = max(radius * 1.35, 0.4)
-                        if prefer_material_preview:
-                            try:
-                                space.shading.type = "MATERIAL"
-                                if hasattr(space.shading, "color_type"):
-                                    space.shading.color_type = "TEXTURE"
-                            except Exception:
-                                pass
+                            frame_ready = _frame_sheet_view(rv3d, min_v, max_v)
+                        try:
+                            _configure_sheet_view_shading(space, prefer_material_preview)
+                        except Exception:
+                            pass
                     except Exception:
                         pass
                     # bound_box is often collapsed on batched curves. Spline-aware
@@ -1611,9 +1808,10 @@ def _focus_view_on_import(
                     if min_v is None or max_v is None:
                         try:
                             bpy.ops.view3d.view_selected(use_all_regions=False)
+                            frame_ready = True
                         except Exception:
                             pass
-                focused = True
+                focused = focused or frame_ready
             except Exception:
                 continue
 
@@ -1645,31 +1843,24 @@ def _focus_view_on_import(
                                 bpy.ops.view3d.localview(frame_selected=False)
                         except Exception:
                             pass
-                        bpy.ops.view3d.view_axis(type="TOP", align_active=False)
+                        frame_ready = False
                         try:
                             rv3d = area.spaces.active.region_3d
                             if rv3d is not None:
-                                rv3d.view_perspective = "ORTHO"
-                                if min_v is not None and max_v is not None:
-                                    center = (min_v + max_v) * 0.5
-                                    radius = _sheet_view_radius(min_v, max_v)
-                                    rv3d.view_location = center
-                                    rv3d.view_distance = max(radius * 1.35, 0.4)
-                            if prefer_material_preview:
-                                try:
-                                    space.shading.type = "MATERIAL"
-                                    if hasattr(space.shading, "color_type"):
-                                        space.shading.color_type = "TEXTURE"
-                                except Exception:
-                                    pass
+                                frame_ready = _frame_sheet_view(rv3d, min_v, max_v)
+                            try:
+                                _configure_sheet_view_shading(space, prefer_material_preview)
+                            except Exception:
+                                pass
                         except Exception:
                             pass
                         if min_v is None or max_v is None:
                             try:
                                 bpy.ops.view3d.view_all(center=False)
+                                frame_ready = True
                             except Exception:
                                 pass
-                    focused = True
+                    focused = focused or frame_ready
                 except Exception:
                     continue
 
@@ -3160,6 +3351,10 @@ def _object_world_location(obj):
 
 def _delivery_expected_locations(attempt_evidence, entity_ids):
     expected = {}
+    for placement in tuple(attempt_evidence.get('placements') or ()):
+        location = placement.get('actual_location_m')
+        if isinstance(location, (list, tuple)) and len(location) >= 2:
+            expected[str(placement.get('entity_id'))] = (float(location[0]), float(location[1]))
     for character in tuple(attempt_evidence.get("character_entities") or ()):
         verification = dict(character.get("verification") or {})
         location = verification.get("actual_location_m")
@@ -3262,6 +3457,7 @@ def _reverify_text_delivery_after_stack(
     registry = getattr(getattr(bpy, "data", None), "objects", None)
     lookup = _ObjectNameLookup(registry)
     getter = lookup.get
+    page_ledger_cache = {}
     for record in tuple(delivery_records or ()):
         if (
             int(record.get("page", 0) or 0) != int(page_number)
@@ -3280,6 +3476,10 @@ def _reverify_text_delivery_after_stack(
         expected_type = expected_types.get(representation)
         entity_proofs = []
         record_failures = []
+        try:
+            _verify_source_page_ledger(record, page_ledger_cache)
+        except (AttributeError, KeyError, TypeError, ValueError, RuntimeError) as exc:
+            record_failures.append(f'final_source_page_ledger_unverified:{exc}')
         for entity_id in entity_ids:
             obj = getter(entity_id) if callable(getter) else None
             if obj is None:
@@ -3300,6 +3500,51 @@ def _reverify_text_delivery_after_stack(
                 record_failures.append(f"final_entity_type_mismatch:{entity_id}")
             if not all(math.isfinite(value) for value in location):
                 record_failures.append(f"nonfinite_final_entity_location:{entity_id}")
+            clip_record = next((clip for clip in record.get("page_viewport_clips", ())
+                                if clip.get("entity_id") == entity_id), None)
+            custom_get = getattr(obj, "get", None)
+            clip_guide_id = str(custom_get("pdf_page_clip_helper_id", "") or "") if callable(custom_get) else ""
+            if clip_record is not None and clip_guide_id != clip_record.get("guide_entity_id"):
+                record_failures.append(f"source_page_clip_crosslink_missing:{entity_id}")
+            if clip_guide_id:
+                try:
+                    from .text_page_clip import verify_clipped_ink
+
+                    guide = getter(clip_guide_id)
+                    if guide is None or not guide.get("pdf_page_clip_helper", False):
+                        raise ValueError("source text viewport operand is missing")
+                    from mathutils import Vector
+
+                    corners = [guide.matrix_world @ Vector(corner) for corner in guide.bound_box]
+                    bounds = (min(p.x for p in corners), min(p.y for p in corners),
+                              max(p.x for p in corners), max(p.y for p in corners))
+                    proof["source_page_viewport"] = verify_clipped_ink(
+                        obj, bpy, bounds, float(obj["pdf_page_clip_expected_area_m2"]),
+                        tuple(obj["pdf_page_clip_source_z_m"]),
+                    )
+                except (AttributeError, KeyError, ReferenceError, RuntimeError, TypeError, ValueError) as error:
+                    record_failures.append(f"final_entity_page_clip_unverified:{entity_id}:{error}")
+            if prior_evidence.get('outline_source') == 'source_renderer_svg':
+                try:
+                    from .bl_source_outline_builder import verify_source_outline_entity
+
+                    bindings = [row for row in prior_evidence.get('placements', ())
+                                if row.get('entity_id') == entity_id]
+                    if len(bindings) != 1:
+                        raise ValueError('source outline creation transform is unbound')
+                    expected_matrix = [list(row) for row in bindings[0]['creation_world_matrix']]
+                    expected_matrix[1][3] += float(stack_offset_m)
+                    proof['source_outline'] = verify_source_outline_entity(
+                        obj, expected_world_matrix=expected_matrix,
+                        page_clip_verified=bool(proof.get('source_page_viewport')),
+                    )
+                    for key in ('source_outline_sha256', 'source_placement_index'):
+                        if proof['source_outline'].get(key) != bindings[0].get(key) or key not in bindings[0]:
+                            raise ValueError(f'original outline occurrence binding changed: {key}')
+                    if proof['source_outline'].get('source_page_ledger') != prior_evidence.get('source_page_ledger'):
+                        raise ValueError('original source page occurrence ledger binding changed')
+                except (AttributeError, KeyError, IndexError, ReferenceError, RuntimeError, TypeError, ValueError) as error:
+                    record_failures.append(f'final_source_outline_unverified:{entity_id}:{error}')
             prior_location = expected_locations.get(entity_id)
             if prior_location is not None:
                 expected_location = [
@@ -3596,6 +3841,8 @@ def import_pdf(
                 raise ValueError(
                     "resume checkpoint root collection is missing from this Blender scene"
                 )
+            if root_col.get("pdf_import_resume_blocked"):
+                raise ValueError(str(root_col["pdf_import_resume_blocked"]))
             collections_created = int(
                 (resume_state.get("aggregate_stats") or {}).get("collections", 1) or 1
             )
@@ -3811,6 +4058,7 @@ def import_pdf(
                 _add_phase_ms('source_extraction_ms', t_extract)
                 yield 0, page_idx, page_num, page, page_data
 
+        last_completed_resume_state = copy.deepcopy(_current_resume_state())
         for i, _page_idx, page_num, page, page_data in _iter_pages_for_import():
             if _progress(
                 _page_progress(i, 0.05),
@@ -4102,6 +4350,13 @@ def import_pdf(
                     )
                 try:
                     page_raster_renderer = _PageDisplayListRenderer(page)
+                    from .source_text_outlines import page_record_provider
+
+                    source_outline_provider = page_record_provider(
+                        page, page_data.text_items, page_number=page_num,
+                        width_mm=page_data.width, height_mm=page_data.height,
+                        flip_y=import_cfg.flip_y, pdf_sha256=source_sha256, collection=page_col,
+                    )
                     text_count = build_all_text(
                         page_data.text_items,
                         page_col,
@@ -4112,6 +4367,7 @@ def import_pdf(
                         text_mode=import_cfg.text_mode,
                         progress_callback=_text_progress,
                         provenance_opts=import_cfg,
+                        source_outline_callback=source_outline_provider,
                         terminal_raster_callback=(
                         lambda text_item, collection, callback_page_number, item_id,
                         _page=page, _cfg=import_cfg, _dir=image_dir, _z=text_z_offset_m,
@@ -4140,6 +4396,11 @@ def import_pdf(
                     _discard_page_collection(page_col)
                     break
                 _add_phase_ms("text_ms", t_phase)
+                if not _clip_text_page_guarded(
+                    page_col, import_cfg, total_stats, page_number=page_num,
+                    width_mm=page_data.width, height_mm=page_data.height,
+                ):
+                    break
                 # Sub-stages of text_ms, accumulated across pages, reported under
                 # performance.helpers_ms so nothing sums them as phases.
                 for helper_name, helper_ms in text_stage_timings().items():
@@ -4355,6 +4616,11 @@ def import_pdf(
                 provenance_opts=import_cfg,
             )
             total_stats["text_final_state_failures"].extend(final_text_failures)
+            if final_text_failures:
+                _fail_text_page_guarded(
+                    page_col, import_cfg, total_stats, page_number=page_num,
+                    reason="Final stacked text verification failed", stage="stacked_final_state")
+                break
             text_count = max(0, int(text_count) - len(final_text_failures))
             # Advance offset for the next page (page_data.height is in mm)
             page_height_m = page_data.height * _MM_TO_M
@@ -4388,8 +4654,9 @@ def import_pdf(
                 )
             _record_glyph_code_issues(total_stats, page_num, page_glyph_code_issues)
             completed_pages.append(page_num)
+            last_completed_resume_state = copy.deepcopy(_current_resume_state())
             _write_resume_checkpoint_guarded(
-                checkpoint_path, _current_resume_state(), total_stats
+                checkpoint_path, last_completed_resume_state, total_stats
             )
             _progress(
                 _page_progress(i, 1.0),
@@ -4408,6 +4675,10 @@ def import_pdf(
             total_stats["resume_checkpoint_path"] = checkpoint_path
             _write_resume_checkpoint_guarded(checkpoint_path, resume_state, total_stats)
 
+        if total_stats.get("text_page_viewport_failures"):
+            _checkpoint_failed_text_page(
+                total_stats, root_col, checkpoint_path, last_completed_resume_state)
+
         phase_timings_ms["pages_import_ms"] = (time.perf_counter() - t_pages_phase) * 1000.0
         t_phase = time.perf_counter()
         doc.close()
@@ -4417,6 +4688,11 @@ def import_pdf(
             _progress(
                 min(0.99, 0.10 + 0.75 * (len(completed_pages) / total_page_count)),
                 "Import cancelled safely; completed pages kept and resume checkpoint written.",
+            )
+        elif total_stats.get("text_page_viewport_failures"):
+            _progress(
+                min(0.99, 0.10 + 0.75 * (len(completed_pages) / total_page_count)),
+                "Import stopped: page text verification failed; completed pages kept.",
             )
         else:
             _progress(1.0, "Import complete.")
