@@ -684,6 +684,61 @@ def test_fraction_integer_payloads_are_included_in_retained_byte_accounting():
            + sys.getsizeof(value.numerator) + sys.getsizeof(value.denominator))
 
 
+def test_retained_graph_counts_shared_objects_once_but_each_entry_independently():
+    value = Fraction(2**2048+1, 2**1024+3)
+    child = [value]
+    entry = (child, child, value)
+    expected = (sys.getsizeof(entry) + sys.getsizeof(child) + sys.getsizeof(value)
+                + sys.getsizeof(value.numerator) + sys.getsizeof(value.denominator))
+    assert b._qualification_retained_bytes(entry) == expected
+    assert b._qualification_retained_bytes(entry) + b._qualification_retained_bytes(entry) == 2*expected
+
+
+def test_equal_independent_fraction_objects_are_not_deduplicated_by_value():
+    first = Fraction(2**2048+1, 2**1024+3)
+    second = Fraction(str(first))
+    assert first == second and first is not second
+    assert first.numerator is not second.numerator and first.denominator is not second.denominator
+    shared, independent = [first, first], [first, second]
+    assert sys.getsizeof(shared) == sys.getsizeof(independent)
+    assert (b._qualification_retained_bytes(independent) - b._qualification_retained_bytes(shared)
+            == sys.getsizeof(second) + sys.getsizeof(second.numerator) + sys.getsizeof(second.denominator))
+
+
+@pytest.mark.parametrize("container", [list, dict])
+def test_retained_graph_rejects_cycles_without_confusing_repeated_aliases(container):
+    cyclic = container()
+    if container is list:
+        cyclic.append(cyclic)
+    else:
+        cyclic["cycle"] = cyclic
+    with pytest.raises(b._UncacheableInput):
+        b._qualification_retained_bytes(cyclic)
+
+
+def test_retained_graph_rejects_custom_types_before_their_size_hooks():
+    class CustomList(list):
+        def __sizeof__(self):
+            raise AssertionError("must reject the type before invoking custom code")
+    class CustomFraction(Fraction):
+        def __sizeof__(self):
+            raise AssertionError("must reject the type before invoking custom code")
+    for value in (CustomList(), CustomFraction(1, 3), object()):
+        with pytest.raises(b._UncacheableInput):
+            b._qualification_retained_bytes(value)
+
+
+def test_complete_cached_entry_charge_includes_value_tuple_and_upper_cost_integer():
+    b.qualify_contours([OUTER], "nonzero")
+    key, (result, cost) = next(iter(b._qualification_cache.items()))
+    # Charge the actual reachable graph as well as an extra outer pair; the
+    # stored cost integer may be smaller than the conservative sentinel.
+    actual = b._qualification_retained_bytes((key, (result, cost)))
+    assert actual <= cost
+    assert cost - actual <= sys.getsizeof(sys.maxsize)
+    assert cost > b._qualification_retained_bytes((key, result))
+
+
 def test_retained_byte_cap_evicts_successful_old_entries(monkeypatch):
     calls = qualification_counter(monkeypatch)
     b.qualify_contours([OUTER], "nonzero")

@@ -76,19 +76,33 @@ def _qualification_snapshot(value, budget, active, depth=0):
         active.remove(id(value))
 
 
-def _qualification_retained_bytes(value):
-    """Conservative retained graph accounting; shared objects may be counted twice."""
-    size = sys.getsizeof(value)
-    if type(value) is F:
-        return size + sys.getsizeof(value.numerator) + sys.getsizeof(value.denominator)
-    if type(value) in (list, tuple):
-        return size + sum(_qualification_retained_bytes(item) for item in value)
-    if type(value) is dict:
-        return size + sum(_qualification_retained_bytes(k) + _qualification_retained_bytes(v)
-                          for k, v in value.items())
-    if type(value) in (type(None), bool, int, float, str, bytes):
-        return size
-    raise _UncacheableInput
+def _qualification_retained_bytes(value, seen=None, active=None):
+    """Count the complete Python object graph once per entry, never across entries."""
+    kind = type(value)
+    if kind not in (F, list, tuple, dict, type(None), bool, int, float, str, bytes):
+        raise _UncacheableInput
+    seen = set() if seen is None else seen
+    active = set() if active is None else active
+    identity = id(value)
+    if identity in active:
+        raise _UncacheableInput
+    if identity in seen:
+        return 0
+    seen.add(identity)
+    active.add(identity)
+    try:
+        size = sys.getsizeof(value)
+        if kind is F:
+            children = (value.numerator, value.denominator)
+        elif kind in (list, tuple):
+            children = value
+        elif kind is dict:
+            children = (item for pair in value.items() for item in pair)
+        else:
+            children = ()
+        return size + sum(_qualification_retained_bytes(item, seen, active) for item in children)
+    finally:
+        active.remove(identity)
 
 
 def _clear_qualification_cache():
@@ -116,10 +130,13 @@ def _cached_qualify_contours(contours, fill_rule, *, native, coordinates_in_metr
     result = _qualify_contours(detached[0], detached[1], native=detached[2],
                                coordinates_in_metres=detached[3], segment_limit=detached[4])
     retained = deepcopy(result)
-    cost = (_qualification_retained_bytes(key) + _qualification_retained_bytes(retained)
-            + sys.getsizeof((retained, 0)) + sys.getsizeof(0))
+    # Include the key, value tuple and cost integer together. The temporary
+    # outer tuple and upper-sized integer deliberately overcount each entry.
+    # This bounds accounted retained Python objects, not allocator/RSS usage.
+    cost = _qualification_retained_bytes((key, (retained, sys.maxsize)))
     with _qualification_cache_lock:
-        if cost + sys.getsizeof(_qualification_cache) <= _CACHE_MAX_BYTES and _CACHE_MAX_ENTRIES > 0:
+        if (cost <= sys.maxsize and cost + sys.getsizeof(_qualification_cache) <= _CACHE_MAX_BYTES
+                and _CACHE_MAX_ENTRIES > 0):
             previous = _qualification_cache.pop(key, None)
             if previous is not None:
                 _qualification_cache_bytes -= previous[1]
