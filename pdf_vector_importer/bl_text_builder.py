@@ -6,6 +6,7 @@ from io import BytesIO
 from contextlib import contextmanager, nullcontext
 from dataclasses import replace
 from hashlib import sha256
+import json
 import logging
 import math
 import os
@@ -4389,9 +4390,32 @@ def _attempt_one_representation(
     visual_style,
     z_offset_m,
     terminal_raster_callback,
+    source_outline_callback=None,
 ):
     if representation == "labels":
         return _attempt_labels(item_id, effective_page, int(text_item.id))
+    if representation in {"glyphs", "geometry"} and source_outline_callback is not None:
+        from .source_text_outlines import OutlineUnavailable, missing_font_evidence
+
+        if missing_font_evidence(text_item, effective_page) is not None:
+            # Qualification happens before allocation. An unsupported source
+            # remains the existing proved font-absence fallback; host failures
+            # from the native builder are terminal and are never caught here.
+            try:
+                source_record = source_outline_callback(text_item)
+            except OutlineUnavailable as exc:
+                _, outcome = _load_exact_font(text_item, item_id, effective_page)
+                outcome.evidence['source_outline_qualification'] = {
+                    'status': 'unavailable', 'detail': str(exc),
+                    'native_entities_created': 0,
+                }
+                return outcome
+            from .bl_source_outline_builder import build_source_outlines
+
+            return build_source_outlines(
+                source_record, collection, representation=representation,
+                requested=requested, z_offset_m=z_offset_m,
+            )
     if (
         representation in {"text", "3d_text", "glyphs", "geometry"}
         and bool(getattr(text_item, "requires_individual_positioning", False))
@@ -4549,6 +4573,7 @@ def build_text(
     text_mode: str = "3d_text",
     provenance_opts: Any = None,
     terminal_raster_callback: Optional[Callable] = None,
+    source_outline_callback: Optional[Callable] = None,
 ) -> Optional[bpy.types.Object]:
     _VERIFIED_TEXT_MATERIALS.clear()
     if strict_text_fidelity is not True:
@@ -4575,6 +4600,43 @@ def build_text(
     effective_page = int(page_number or getattr(text_item, "page_number", 0) or 0)
     item_id = f"page:{effective_page}:text:{int(text_item.id)}"
 
+    if requested != 'raster' and source_outline_callback is not None and str(text_item.text).isspace():
+        from .source_text_outlines import (
+            OutlineUnavailable, digest, missing_font_evidence, verify_zero_ink_collection,
+            zero_ink_proof,
+        )
+
+        if missing_font_evidence(text_item, effective_page) is not None:
+            try:
+                source_record = source_outline_callback(text_item)
+                proof = zero_ink_proof(source_record)
+            except OutlineUnavailable:
+                pass  # Unproved whitespace still follows the ordinary delivery ladder.
+            else:
+                zero_record = {
+                    'item_id': item_id, 'page': effective_page, 'source_span_id': int(text_item.id),
+                    'source_body': text_item.text, 'requested_representation': requested,
+                    'status': 'verified_zero_ink', 'final_representation': None, 'entity_ids': [],
+                    'attempts': [], 'fallback_attempted': False, 'fallback_used': False,
+                    'page_collection': collection.name, 'zero_ink_proof': proof,
+                    'zero_ink_proof_sha256': digest(proof),
+                }
+                zero_record = json.loads(json.dumps(zero_record, allow_nan=False))
+                try:
+                    ledger = json.loads(collection.get('pdf_verified_zero_ink_json', '[]'))
+                    if not isinstance(ledger, list) or any(row['item_id'] == item_id for row in ledger):
+                        raise ValueError('duplicate zero-ink collection record')
+                    ledger.append(zero_record)
+                    collection['pdf_verified_zero_ink_json'] = json.dumps(
+                        ledger, sort_keys=True, separators=(',', ':'), allow_nan=False)
+                    collection['pdf_verified_zero_ink_sha256'] = digest(ledger)
+                    verify_zero_ink_collection(collection, ledger)
+                except (AttributeError, KeyError, TypeError, ValueError, RuntimeError) as exc:
+                    zero_record.update(status='failed', reason='source_zero_ink_persistence_failed',
+                                       detail=str(exc))
+                _append_delivery_record(provenance_opts, zero_record)
+                return None
+
     def attempt(representation: str) -> AttemptOutcome:
         return _attempt_one_representation(
             representation,
@@ -4586,6 +4648,7 @@ def build_text(
             visual_style=visual_style,
             z_offset_m=z_offset_m,
             terminal_raster_callback=terminal_raster_callback,
+            source_outline_callback=source_outline_callback,
         )
 
     return _deliver_text_item(
@@ -4788,6 +4851,7 @@ def build_all_text(
     progress_callback=None,
     provenance_opts: Any = None,
     terminal_raster_callback: Optional[Callable] = None,
+    source_outline_callback: Optional[Callable] = None,
 ) -> int:
     # The extracted assets are immutable and every character using a font shares
     # one Blender font datablock.  Scope integrity memoization to this page build
@@ -4800,6 +4864,7 @@ def build_all_text(
     count = 0
     total = max(1, len(text_items or []))
     from .import_session import cancel_heartbeat_interval
+    from .source_text_outlines import missing_font_evidence
 
     if strict_text_fidelity is not True:
         raise ValueError("strict_text_fidelity cannot be disabled")
@@ -4824,6 +4889,9 @@ def build_all_text(
                 converted_page
                 and str(getattr(item, "text", "") or "") != ""
                 and bool(getattr(item, "requires_individual_positioning", False))
+                and not (source_outline_callback is not None and missing_font_evidence(
+                    item, int(page_number or getattr(item, 'page_number', 0) or 0)
+                ) is not None)
             )
             if queue_converted:
                 effective_page = int(page_number or getattr(item, "page_number", 0) or 0)
@@ -4884,6 +4952,7 @@ def build_all_text(
                 text_mode=text_mode,
                 provenance_opts=provenance_opts,
                 terminal_raster_callback=terminal_raster_callback,
+                source_outline_callback=source_outline_callback,
             )
             if obj is not None:
                 count += 1
@@ -4898,6 +4967,7 @@ def build_all_text(
             text_mode=text_mode,
             provenance_opts=provenance_opts,
             terminal_raster_callback=terminal_raster_callback,
+            source_outline_callback=source_outline_callback,
         )
         if obj is not None:
             count += 1
