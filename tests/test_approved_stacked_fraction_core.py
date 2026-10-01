@@ -36,8 +36,11 @@ from pdfcadcore import primitive_extractor  # noqa: E402
 # This is the reviewed integration output: current main plus the fraction-core
 # port. It deliberately does not claim that these combined bytes were approved
 # independently before the merge review.
+# September 30: original renderer character program binding disambiguates
+# complementary subsets and annotation appearance resources. Reviewed alongside
+# exact source affine and stacked-fraction regression coverage.
 REVIEWED_COMBINED_SUCCESSOR_SHA256 = (
-    "5794cccfbf93a81d892969f667ca8cab85a6b343991c439adeb434c738b07a16"
+    "0064571305a21d5a73dee1849929d26632ade4b43971cd837bbf83b1e604b884"
 )
 
 

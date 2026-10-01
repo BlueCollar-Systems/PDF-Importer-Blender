@@ -35,11 +35,12 @@ def _isolate_unrelated_paint_order_and_paper_seams(monkeypatch):
     # This module's engine doubles exercise delivery/failure accounting, not
     # original drawing extraction or Blender scene construction. Those seams
     # have separate real-PDF and native-contract tests.
-    from pdf_vector_importer import opaque_rectangle_proof, triangle_paint_order, page_background
+    from pdf_vector_importer import opaque_rectangle_proof, triangle_paint_order, page_background, text_page_clip
     monkeypatch.setattr(opaque_rectangle_proof, 'plan_opaque_rectangles', lambda *_a, **_k: [])
     monkeypatch.setattr(triangle_paint_order, 'plan_terminal_triangles', lambda *_a, **_k: ([], []))
     monkeypatch.setattr(triangle_paint_order, 'apply_terminal_triangles', lambda *_a, **_k: [])
     monkeypatch.setattr(page_background, 'add_page_background', lambda *_a, **_k: None)
+    monkeypatch.setattr(text_page_clip, 'clip_delivered_page_text', lambda *_a, **_k: [])
 
 
 class _Children:
@@ -50,7 +51,7 @@ class _Children:
         self.items.append(item)
 
 
-class _Collection:
+class _Collection(dict):
     def __init__(self, name):
         self.name = name
         self.children = _Children()
@@ -2115,19 +2116,21 @@ def test_import_stats_exclude_post_stack_failed_text(monkeypatch, tmp_path):
         lambda *_args, **_kwargs: str(tmp_path / "import_report.json"),
     )
 
-    stats = bl_import_engine.import_pdf(
-        str(input_pdf),
-        config={
-            "mode": "vector",
-            "pages": "1",
-            "import_text": True,
-            "text_mode": "text",
-            "auto_focus_view": False,
-            "auto_hide_default_cube": False,
-        },
-    )
-
+    with pytest.raises(bl_import_engine.IncompleteImportError) as caught:
+        bl_import_engine.import_pdf(
+            str(input_pdf),
+            config={
+                "mode": "vector",
+                "pages": "1",
+                "import_text": True,
+                "text_mode": "text",
+                "auto_focus_view": False,
+                "auto_hide_default_cube": False,
+            },
+        )
+    stats = caught.value.stats
     assert stats["text_items"] == 0
+    assert stats["pages_imported"] == 0
     assert stats["text_final_state_failures"] == [{"item_id": "page:1:text:1"}]
 
 

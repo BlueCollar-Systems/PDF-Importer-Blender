@@ -114,3 +114,20 @@ def test_reverification_resolves_entities_through_the_snapshot(monkeypatch):
     assert all(record["final_state_verification"]["status"] == "verified" for record in records)
     assert registry.iterations == 1
     assert registry.get_calls == 0
+
+
+def test_reverification_rejects_lost_persisted_page_clip_crosslink(monkeypatch):
+    obj = _obj("Text_1")
+    registry = _Registry([obj])
+    monkeypatch.setattr(bl_import_engine, "bpy",
+                        types.SimpleNamespace(data=types.SimpleNamespace(objects=registry)))
+    record = {"page": 1, "status": "delivered", "final_representation": "text",
+              "entity_ids": [obj.name],
+              "attempts": [{"status": "delivered", "evidence": {"actual_location_m": [0.01, 0.02]}}],
+              "page_viewport_clips": [{"entity_id": obj.name, "guide_entity_id": "SourcePage"}]}
+    failures = bl_import_engine._reverify_text_delivery_after_stack(
+        [record], page_number=1, stack_offset_m=0)
+    assert failures
+    assert record["status"] == "failed"
+    assert any("source_page_clip_crosslink_missing" in reason
+               for reason in record["final_state_verification"]["failures"])

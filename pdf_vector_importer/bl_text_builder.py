@@ -1218,6 +1218,13 @@ def _font_asset_evidence(text_item: NormalizedText) -> Dict[str, Any]:
             "source_sha256": str(getattr(asset, "source_sha256", "") or ""),
             "usable_sha256": str(getattr(asset, "usable_sha256", "") or ""),
             "source_xref": getattr(asset, "source_xref", None),
+            "source_binding_method": str(
+                getattr(asset, "source_binding_method", "") or ""
+            ),
+            "source_program_candidates": [
+                {"source_xref": int(xref), "resource_name": str(resource)}
+                for xref, resource in getattr(asset, "source_program_candidates", ())
+            ],
             "font_name": str(getattr(asset, "base_font_name", "") or ""),
             "font_asset_page_number": getattr(asset, "page_number", None),
             "font_asset_span_font_name": str(

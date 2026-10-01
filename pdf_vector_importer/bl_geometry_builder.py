@@ -106,10 +106,14 @@ def _points_m_from_mm(points) -> list:
 # ── Material cache ───────────────────────────────────────────────────
 
 def _color_key(color: Optional[Tuple[float, float, float]]) -> str:
-    """Create a stable string key from an RGB tuple."""
-    if color is None:
-        return "0.000_0.000_0.000"
-    return f"{color[0]:.3f}_{color[1]:.3f}_{color[2]:.3f}"
+    """Share only identical source colors, including the default black paint.
+
+    PDF stroke and fill conversions can differ below three decimal places.
+    Rounding their cache identity replaced one actual paint with the other and
+    made the source-fill verification reject an otherwise valid page.
+    """
+    rgb = color if color is not None else (0.0, 0.0, 0.0)
+    return "_".join(float(value).hex() for value in rgb)
 
 
 def _normalize_style(style: str) -> str:

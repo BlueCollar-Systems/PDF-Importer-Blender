@@ -30,6 +30,23 @@ from pdf_vector_importer.pdfcadcore.primitives import NormalizedText, TextCharLa
 from pdf_vector_importer.text_delivery import AttemptOutcome, deliver_item, fallback_ladder
 
 
+def test_font_evidence_preserves_all_identical_program_resource_candidates():
+    asset = types.SimpleNamespace(
+        source_xref=11,
+        source_binding_method="original_textpage_character_program_sha256",
+        source_program_candidates=((11, "F1"), (19, "F2")),
+    )
+    evidence = bl_text_builder._font_asset_evidence(
+        types.SimpleNamespace(font_asset=asset)
+    )
+    assert evidence["source_xref"] == 11
+    assert evidence["source_binding_method"] == asset.source_binding_method
+    assert evidence["source_program_candidates"] == [
+        {"source_xref": 11, "resource_name": "F1"},
+        {"source_xref": 19, "resource_name": "F2"},
+    ]
+
+
 def test_affine_carrier_visibility_waits_for_view_layer_registration(monkeypatch):
     events = []
     registered = False
