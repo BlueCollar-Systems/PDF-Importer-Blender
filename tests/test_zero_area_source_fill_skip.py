@@ -125,6 +125,20 @@ def test_unrelated_source_fill_error_still_aborts_the_page(monkeypatch):
         module.build_page(_page_with_zero_area_and_real_fill(), object())
 
 
+def test_near_source_colors_do_not_share_one_fill_material():
+    """Colors a few thousandths apart must not collapse onto one material.
+
+    The opaque-fill checker compares the material to each source color within
+    float noise. A 3-decimal material key merged those colors and aborted the
+    page on the second fill.
+    """
+    builder = _builder()
+    first = (0.1372, 0.1000, 0.2000)
+    second = (0.1374, 0.1000, 0.2004)
+    assert builder._material_key(first, "source") != builder._material_key(second, "source")
+    assert builder._material_key(first, "source") == builder._material_key(first, "source")
+
+
 def test_skipped_zero_area_fill_is_not_a_terminal_import_failure():
     engine = importlib.import_module("pdf_vector_importer.bl_import_engine")
     stats = {
