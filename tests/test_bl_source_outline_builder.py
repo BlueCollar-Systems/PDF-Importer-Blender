@@ -764,3 +764,197 @@ def test_warm_expected_math_never_hides_actual_native_corruption(host, monkeypat
     else: obj.data.materials[0].node_tree.nodes[0].inputs["Strength"].default_value = 2.
     with pytest.raises(b.OutlineVerificationError): b.verify_source_outline_entity(obj)
     assert calls == []  # Expected math hit; the independent native check still failed.
+
+
+def _multiple_placement_record(count):
+    value = record()
+    value["placements"] = [dict(deepcopy(value["placements"][0]), index=4+i) for i in range(count)]
+    value["source_outline_sha256"] = b._digest({k: v for k, v in value.items() if k != "source_outline_sha256"})
+    return value
+
+
+class _SynchronizedHost:
+    """Matrix reads remain stale until synchronization; allocations stay observable."""
+
+    def __init__(self, monkeypatch, fail=None, corrupt=None):
+        self.events, self.calls = [], {}
+        self.fail, self.corrupt = fail, corrupt
+        owner = self
+
+        class TrackedMesh(Mesh):
+            def copy(self):
+                owner.event("mesh_copy")
+                result = deepcopy(self)
+                owner.data.meshes.append(result)
+                return result
+
+        class TrackedObject(Object):
+            def __init__(self, name, data):
+                super().__init__(name, data)
+                self.actual_matrix = [[1., 0., 0., 0.], [0., 1., 0., 0.],
+                                      [0., 0., 1., 0.], [0., 0., 0., 1.]]
+
+            @property
+            def matrix_world(self):
+                owner.event("matrix_read")
+                return self.actual_matrix
+
+            def to_mesh(self):
+                owner.event("to_mesh")
+                mesh = TrackedMesh([p.co for p in self.data.splines[0].bezier_points])
+                mesh.materials = list(self.data.materials)
+                return mesh
+
+            def to_mesh_clear(self):
+                owner.event("to_mesh_clear")
+                self.clear_count += 1
+
+            def __setitem__(self, key, value):
+                if key.startswith("pdf_"):
+                    owner.event("metadata")
+                return super().__setitem__(key, value)
+
+        class TrackedRegistry(Registry):
+            def __init__(self, kind, factory):
+                super().__init__(factory)
+                self.kind = kind
+
+            def new(self, *args):
+                owner.event(self.kind+"_new")
+                if self.kind == "object" and isinstance(args[1], TrackedMesh):
+                    owner.event("converted_new")
+                return super().new(*args)
+
+            def remove(self, value, **kwargs):
+                owner.event(self.kind+"_remove")
+                return super().remove(value, **kwargs)
+
+        self.data = NS(
+            curves=TrackedRegistry("curve", lambda name, kind: NS(name=name, splines=Splines(), materials=[])),
+            objects=TrackedRegistry("object", TrackedObject), materials=TrackedRegistry("material", material),
+            meshes=TrackedRegistry("mesh", lambda: None),
+        )
+        self.context = NS(view_layer=NS(update=self.update))
+        self.collection = NS(objects=NS(link=lambda obj: self.event("link")))
+        monkeypatch.setitem(sys.modules, "bpy", self)
+        monkeypatch.setattr(b, "_native_polygons",
+                            lambda rings: [[tuple(map(float, p[0])) for p in ring] for ring in rings])
+
+    def event(self, name):
+        count = self.calls[name] = self.calls.get(name, 0)+1
+        self.events.append((name, count))
+        if self.fail == (name, count):
+            raise RuntimeError("injected "+name)
+
+    def update(self):
+        self.event("update")
+        for obj in self.data.objects:
+            obj.actual_matrix = [[1., 0., 0., obj.location[0]], [0., 1., 0., obj.location[1]],
+                                 [0., 0., 1., obj.location[2]], [0., 0., 0., 1.]]
+        if self.corrupt:
+            self.corrupt(self)
+
+    def run(self, mode="glyphs", count=3):
+        return b.build_source_outlines(_multiple_placement_record(count), self.collection,
+                                       representation=mode, requested="3d_text", z_offset_m=.012)
+
+
+@pytest.mark.parametrize("mode,updates", [("glyphs", 1), ("geometry", 2)])
+@pytest.mark.parametrize("count", [1, 3])
+def test_item_sync_preserves_source_order_owner_and_every_fresh_proof(monkeypatch, mode, updates, count):
+    host = _SynchronizedHost(monkeypatch)
+    verified = []
+    real = b.verify_source_outline_entity
+
+    def observed(obj, **kwargs):
+        verified.append(obj)
+        owner = host.data.objects.get(json.loads(obj["pdf_source_outline_record"])["source_record_owner"])
+        assert owner is not None and owner.get("pdf_source_outline_source_record")
+        assert all(row.get("pdf_source_outline_record") for row in host.data.objects)
+        return real(obj, **kwargs)
+
+    monkeypatch.setattr(b, "verify_source_outline_entity", observed)
+    result = host.run(mode, count)
+    assert result.status == "delivered", result.evidence
+    assert host.calls["update"] == updates
+    assert [id(obj) for obj in verified] == [id(obj) for obj in result.owned_objects]
+    assert result.entity_ids == tuple(obj.name for obj in result.owned_objects)
+    assert [obj["pdf_source_placement_index"] for obj in result.owned_objects] == list(range(4, 4+count))
+    assert sum("pdf_source_outline_source_record" in obj for obj in result.owned_objects) == 1
+    assert "pdf_source_outline_source_record" in result.owned_objects[0]
+    assert len(result.evidence["placements"]) == count
+    for proof in result.evidence["placements"]:
+        assert proof["verified"] and proof["material"]["exact_node_graph"]
+        assert proof["creation_world_matrix"][2][3] == b._f32(.012)
+        assert proof["native_ink"]["exact_oriented_boundary_chain"]
+
+
+def test_all_original_curve_mesh_proofs_finish_before_conversion_removal(monkeypatch):
+    host = _SynchronizedHost(monkeypatch)
+    result = host.run("geometry")
+    assert result.status == "delivered", result.evidence
+    first_remove = next(i for i, row in enumerate(host.events) if row[0] == "object_remove")
+    for name in ("to_mesh", "mesh_copy", "to_mesh_clear"):
+        assert sum(event == name for event, _ in host.events[:first_remove]) == 3
+
+
+@pytest.mark.parametrize("mode,failure", [
+    ("glyphs", ("curve_new", 2)), ("glyphs", ("material_new", 2)), ("glyphs", ("update", 1)),
+    ("glyphs", ("matrix_read", 2)), ("glyphs", ("to_mesh", 2)), ("glyphs", ("metadata", 2)),
+    ("geometry", ("mesh_copy", 2)), ("geometry", ("converted_new", 2)),
+    ("geometry", ("object_remove", 2)), ("geometry", ("curve_remove", 2)),
+    ("geometry", ("update", 2)), ("geometry", ("matrix_read", 5)),
+])
+def test_item_sync_failure_returns_all_surviving_owned_resources(monkeypatch, mode, failure):
+    host = _SynchronizedHost(monkeypatch, fail=failure)
+    result = host.run(mode)
+    assert result.status == "failed" and result.entity_ids == (), result.evidence
+    assert "injected" in result.evidence["detail"]
+    assert {id(obj) for obj in host.data.objects} == {id(obj) for obj in result.owned_objects}
+    actual_blocks = list(host.data.curves)+list(host.data.materials)+list(host.data.meshes)
+    assert {id(block) for block in actual_blocks} == {id(block) for block in result.owned_datablocks}
+    if failure == ("mesh_copy", 2):
+        assert host.calls["to_mesh_clear"] == 2
+
+
+@pytest.mark.parametrize("corruption", ["matrix", "control", "material"])
+def test_corruption_after_item_sync_is_still_rejected(monkeypatch, corruption):
+    def corrupt(host):
+        obj = host.data.objects[-1]
+        if corruption == "matrix":
+            obj.actual_matrix[0][3] = .5
+        elif corruption == "control":
+            obj.data.splines[0].bezier_points[0].co = (.2, 0., 0.)
+        else:
+            obj.data.materials[0].node_tree.nodes[0].inputs["Strength"].default_value = 2.
+
+    host = _SynchronizedHost(monkeypatch, corrupt=corrupt)
+    result = host.run()
+    assert result.status == "failed" and len(result.owned_objects) == 3
+
+
+@pytest.mark.parametrize("failure", ["mesh", "final_verifier"])
+def test_item_sync_proof_failure_clears_temporary_mesh_and_keeps_ownership(monkeypatch, failure):
+    host = _SynchronizedHost(monkeypatch)
+
+    def reject(*args, **kwargs):
+        raise RuntimeError("injected proof failure")
+
+    monkeypatch.setattr(b, "_mesh_readback" if failure == "mesh" else "verify_source_outline_entity", reject)
+    result = host.run()
+    assert result.status == "failed" and len(result.owned_objects) == 3
+    assert host.calls["to_mesh_clear"] == (1 if failure == "mesh" else 3)
+
+
+def test_item_sync_failure_does_not_claim_unrelated_resources(monkeypatch):
+    host = _SynchronizedHost(monkeypatch)
+    data = host.data.curves.new("unrelated", "CURVE")
+    unrelated = host.data.objects.new("unrelated", data)
+    unrelated["keep"] = "unchanged"
+    host.fail = ("update", 1)
+    result = host.run()
+    assert result.status == "failed"
+    assert unrelated in host.data.objects and dict(unrelated) == {"keep": "unchanged"}
+    assert all(value is not unrelated for value in result.owned_objects)
+    assert all(value is not data for value in result.owned_datablocks)
+    assert len(result.owned_objects) == 3

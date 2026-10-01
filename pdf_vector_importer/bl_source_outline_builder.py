@@ -757,6 +757,7 @@ def build_source_outlines(record, collection, *, representation, requested, z_of
                     "source_placement_index": placement["index"], "requested_representation": representation})
             prepared.append((placement, native, polygons))
         evidence = []
+        pending = []
         for placement, native, polygons in prepared:
             expected = _normalized_segments(native)
             name = "PDF_Outline_%s_%d" % (record["item_id"], placement["index"])
@@ -797,16 +798,25 @@ def build_source_outlines(record, collection, *, representation, requested, z_of
             emission.inputs["Strength"].default_value = 1.
             links.new(emission.outputs["Emission"], output.inputs["Surface"])
             obj.data.materials.append(material); obj.color = rgba
-            bpy.context.view_layer.update()
-            creation_matrix = _creation_matrix(z_offset_m)
+            pending.append((name, placement, native, polygons, obj, data, material, rgba))
+        bpy.context.view_layer.update()
+        creation_matrix = _creation_matrix(z_offset_m)
+        proved = []
+        # Complete every original Curve proof before any conversion invalidates
+        # the dependency graph. Retain each copied mesh before clearing its temporary.
+        for name, placement, _native, polygons, obj, data, material, rgba in pending:
             _require(_matrix(obj.matrix_world) == creation_matrix, "native creation transform differs from requested frame")
             mesh = obj.to_mesh()
+            retained = None
             try:
                 ink = _mesh_readback(mesh, polygons)
                 if representation == "geometry":
                     retained = mesh.copy(); blocks.append(retained)
             finally:
                 obj.to_mesh_clear()
+            proved.append((name, placement, obj, data, material, rgba, ink, retained))
+        final_objects = []
+        for name, _placement, obj, data, _material, rgba, _ink, retained in proved:
             if representation == "geometry":
                 converted = bpy.data.objects.new(name+"_mesh", retained)
                 objects.append(converted); collection.objects.link(converted)
@@ -814,10 +824,16 @@ def build_source_outlines(record, collection, *, representation, requested, z_of
                 bpy.data.objects.remove(obj, do_unlink=True)
                 objects = [owned for owned in objects if owned is not obj]
                 obj = converted
-                # The exact-source curve is no longer required for scene delivery.
                 bpy.data.curves.remove(data); blocks.remove(data)
-                bpy.context.view_layer.update()
+            final_objects.append(obj)
+        if representation == "geometry":
+            bpy.context.view_layer.update()
+            for obj in final_objects:
                 _require(_matrix(obj.matrix_world) == creation_matrix, "native mesh transform differs from requested frame")
+        # The final source owner is explicit: creation is no longer serial with verification.
+        final_objects[0]["pdf_source_outline_source_record"] = _json(record)
+        for row, obj in zip(proved, final_objects, strict=True):
+            _name, placement, _curve, _data, material, rgba, ink, _retained = row
             obj["pdf_source_outline"] = True
             obj["pdf_text_mode"] = representation; obj["pdf_text_requested_mode"] = requested
             obj["pdf_source_item_id"] = record["item_id"]; obj["pdf_text_item_id"] = record["item_id"]
@@ -826,12 +842,11 @@ def build_source_outlines(record, collection, *, representation, requested, z_of
             obj["pdf_source_outline_sha256"] = record["source_outline_sha256"]
             obj["pdf_text_material"] = material.name; obj["pdf_text_material_owned"] = True
             obj["pdf_text_expected_rgba"] = rgba
-            if len(objects) == 1:
-                obj["pdf_source_outline_source_record"] = _json(record)
-            obj["pdf_source_outline_record"] = _json({"source_record_owner": objects[0].name, "placement": placement,
+            obj["pdf_source_outline_record"] = _json({"source_record_owner": final_objects[0].name, "placement": placement,
                 "creation_matrix": creation_matrix, "initial_mesh_sha256": ink["mesh_sha256"]})
+        for obj in final_objects:
             evidence.append(verify_source_outline_entity(obj))
-        return AttemptOutcome.delivered(objects[0], entity_ids=[o.name for o in objects],
+        return AttemptOutcome.delivered(final_objects[0], entity_ids=[o.name for o in final_objects],
             owned_objects=objects, owned_datablocks=blocks, evidence={"item_id": record["item_id"],
             "outline_source": "source_renderer_svg", "font_program_authenticity": "absent",
             "actual_object_type": "CURVE" if representation == "glyphs" else "MESH",
