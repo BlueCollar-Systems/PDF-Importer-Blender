@@ -1319,6 +1319,28 @@ def _curve_spline_local_points(curve_data):
                     continue
 
 
+# Off-sheet strokes (a line that runs far past the crop) must not shrink the
+# print. When the gathered geometry is this many times the page, frame the page.
+_SHEET_VIEW_OVERFLOW = 1.5
+
+
+def _prefer_sheet_frame(full_min, full_max, sheet_min, sheet_max):
+    """Return the page frame when geometry would make zoom-extents miss the sheet."""
+    if full_min is None or full_max is None or sheet_min is None or sheet_max is None:
+        return full_min, full_max
+    sheet_x = abs(float(sheet_max.x) - float(sheet_min.x))
+    sheet_y = abs(float(sheet_max.y) - float(sheet_min.y))
+    full_x = abs(float(full_max.x) - float(full_min.x))
+    full_y = abs(float(full_max.y) - float(full_min.y))
+    if sheet_x <= 1.0e-9 or sheet_y <= 1.0e-9:
+        return full_min, full_max
+    if (
+        full_x > _SHEET_VIEW_OVERFLOW * sheet_x
+        or full_y > _SHEET_VIEW_OVERFLOW * sheet_y
+    ):
+        return sheet_min, sheet_max
+    return full_min, full_max
+
 
 def _sheet_view_radius(min_v, max_v) -> float:
     """Frame from sheet XY. A Z fence must not send the camera to infinity."""
@@ -1695,6 +1717,14 @@ def _focus_view_on_import(
         visible_objects.append(obj)
 
     min_v, max_v = _world_bounds_for_objects(visible_objects)
+    sheet_objects = [
+        obj
+        for obj in visible_objects
+        if str(obj.get("pdf_display_aid", "") or "") == "display_only_page_background"
+    ]
+    if sheet_objects:
+        sheet_min, sheet_max = _world_bounds_for_objects(sheet_objects)
+        min_v, max_v = _prefer_sheet_frame(min_v, max_v, sheet_min, sheet_max)
 
     view_layer = bpy.context.view_layer
 

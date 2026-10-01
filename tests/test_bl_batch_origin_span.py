@@ -429,6 +429,29 @@ def test_orthogonal_z_leak_points_land_on_sheet_xy():
     assert max(ys) == pytest.approx(600.0 * MM_TO_M)
 
 
+def test_off_sheet_stroke_does_not_set_the_view():
+    _reload_builder()
+    sys.modules.pop("pdf_vector_importer.bl_import_engine", None)
+    engine = importlib.import_module("pdf_vector_importer.bl_import_engine")
+
+    class _V:
+        def __init__(self, x, y, z) -> None:
+            self.x = float(x)
+            self.y = float(y)
+            self.z = float(z)
+
+    # Sheet is 0.216 x 0.279 m. A stroke to x=0.53 must not become the frame.
+    framed_min, framed_max = engine._prefer_sheet_frame(
+        _V(-0.268, 0.0, 0.0),
+        _V(0.529, 0.279, 0.001),
+        _V(0.0, 0.0, -0.0001),
+        _V(0.216, 0.279, -0.0001),
+    )
+    assert framed_min.x == pytest.approx(0.0)
+    assert framed_max.x == pytest.approx(0.216)
+    assert framed_max.y == pytest.approx(0.279)
+
+
 def test_sheet_view_radius_ignores_z_fence():
     _reload_builder()
     sys.modules.pop("pdf_vector_importer.bl_import_engine", None)
