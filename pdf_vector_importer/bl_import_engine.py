@@ -1002,6 +1002,7 @@ def write_import_report(
         "terminal_triangle_paint_order": stats.get("terminal_triangle_paint_order", []),
         "compound_fill_paint_order": stats.get("compound_fill_paint_order", []),
         "display_aids": stats.get("display_aids", []),
+        "page_raster_decisions": stats.get("page_raster_decisions", []),
         "text_page_viewport_failures": stats.get("text_page_viewport_failures", []),
         "scale_hints": stats.get("scale_hints"),
         "fallback_attempted": bool(fallback_attempted),
@@ -2440,6 +2441,146 @@ def _render_images_only_composite(
     }
 
 
+# A page renders on white. A color sample this many 8-bit steps below white
+# still counts as unpainted paper; anything darker is ink.
+_PAGE_RASTER_PAPER_TOLERANCE = 2
+_PAGE_RASTER_PAPER_SAMPLES = bytes(range(255 - _PAGE_RASTER_PAPER_TOLERANCE, 256))
+_PAGE_RASTER_INK_CHUNK = 4 * 1024 * 1024
+
+
+def _pixmap_has_ink(pix) -> Optional[bool]:
+    """Whether a page render shows anything but paper; None when unreadable."""
+    try:
+        if int(getattr(pix, "alpha", 0) or 0):
+            # An alpha byte is not a color sample; this test is for opaque renders.
+            return None
+        samples = getattr(pix, "samples_mv", None)  # no copy of a large page
+        if samples is None:
+            samples = pix.samples
+        view = memoryview(samples)
+    except (AttributeError, RuntimeError, TypeError, ValueError):
+        return None
+    if not len(view):
+        return None
+    # translate() drops every paper-valued sample at C speed; ink is what is
+    # left. Chunks bound the memory and stop a scan at its first ink.
+    for start in range(0, len(view), _PAGE_RASTER_INK_CHUNK):
+        chunk = bytes(view[start:start + _PAGE_RASTER_INK_CHUNK])
+        if chunk.translate(None, _PAGE_RASTER_PAPER_SAMPLES):
+            return True
+    return False
+
+
+def _source_text_bboxes(text_items) -> list:
+    """Source boxes of every text item of a page, as the page raster excludes them."""
+    result = []
+    for item in tuple(text_items or ()):
+        try:
+            int(item.id)
+        except (AttributeError, TypeError, ValueError):
+            continue
+        bbox = getattr(item, "source_bbox_pdf", None)
+        if bbox is not None:
+            result.append(tuple(float(value) for value in bbox))
+    return result
+
+
+def _plan_page_raster(page, page_num: int, import_cfg, image_dir: str, text_items) -> Dict[str, Any]:
+    """Render the page raster a page would get if all of its text is delivered.
+
+    The answer is needed before text and vectors are built: when the raster
+    carries ink it stays, and what is delivered on top of it has to be
+    readable on its opaque white paper, so that page is built in the source
+    colors. ``text_items`` is empty when the import delivers no text.
+    """
+    try:
+        exclusions = _source_text_bboxes(text_items)
+    except (TypeError, ValueError):
+        # A text box that is not numeric: no plan, the page is rendered once
+        # its delivered text is known.
+        return {"rendered": None, "excluded_text_bboxes": []}
+    rendered = _render_page_raster(
+        page, page_num, import_cfg, image_dir, excluded_text_bboxes=exclusions,
+    )
+    return {"rendered": rendered or None, "excluded_text_bboxes": exclusions}
+
+
+def _page_raster_for_delivered_text(
+    page,
+    page_num: int,
+    import_cfg,
+    image_dir: str,
+    *,
+    excluded_text_bboxes,
+    plan: Optional[Dict[str, Any]] = None,
+) -> Optional[dict]:
+    """The page raster without the text that was delivered as objects.
+
+    The planned render is that raster whenever exactly the planned text was
+    delivered; otherwise the page is rendered again for the text that was.
+    """
+    if (
+        plan is not None
+        and plan.get("rendered")
+        and sorted(plan.get("excluded_text_bboxes") or ()) == sorted(excluded_text_bboxes or ())
+    ):
+        return plan["rendered"]
+    return _render_page_raster(
+        page, page_num, import_cfg, image_dir, excluded_text_bboxes=excluded_text_bboxes,
+    )
+
+
+def _page_raster_is_blank(rendered) -> bool:
+    """True only for a render that was measured and showed no ink."""
+    return isinstance(rendered, dict) and rendered.get("has_ink") is False
+
+
+def _page_raster_decision(
+    rendered,
+    *,
+    page_num: int,
+    trigger: str,
+    requested_style: str,
+    page_style: str,
+    paper_for_source_colors: bool,
+    delivered_text_bboxes: int,
+) -> Dict[str, Any]:
+    """Keep or omit one rendered page raster, and say why (import report record)."""
+    has_ink = rendered.get("has_ink") if isinstance(rendered, dict) else None
+    if has_ink is False and not paper_for_source_colors:
+        plane, reason = "omitted", "no_ink_left_after_delivered_text"
+    elif has_ink is False:
+        # Source colors and no white page aid: the blank raster is the paper.
+        plane, reason = "kept", "paper_under_source_colors"
+    elif has_ink is None:
+        plane, reason = "kept", "ink_not_measured"
+    else:
+        plane, reason = "kept", "ink_not_delivered_as_objects"
+    return {
+        "page": int(page_num),
+        "trigger": str(trigger),
+        "has_ink": has_ink,
+        "plane": plane,
+        "reason": reason,
+        "requested_visual_style": str(requested_style),
+        "object_colors": str(page_style),
+        "delivered_text_bboxes_removed": int(delivered_text_bboxes),
+        # Light preview colors on the opaque white paper of a kept raster are
+        # the defect this record exists for.
+        "objects_readable_on_raster": bool(plane == "omitted" or page_style == "source"),
+    }
+
+
+def _record_page_raster_decision(stats: Dict[str, Any], decision: Dict[str, Any]) -> None:
+    """One record per page; a page imported again (resume) replaces its record."""
+    records = stats.setdefault("page_raster_decisions", [])
+    records[:] = [
+        record for record in records
+        if not (isinstance(record, dict) and record.get("page") == decision.get("page"))
+    ]
+    records.append(decision)
+
+
 def _render_page_raster(
     page,
     page_num: int,
@@ -2491,6 +2632,7 @@ def _render_page_raster(
             render_page.apply_redactions(images=0, graphics=0, text=0)
 
         pix = render_page.get_pixmap(matrix=matrix, alpha=False)
+        has_ink = _pixmap_has_ink(pix)
         suffix = "_background" if exclusions else ""
         image_path = os.path.join(
             image_dir,
@@ -2514,6 +2656,7 @@ def _render_page_raster(
         "xref": -1,
         "page_number": page_num,
         "excluded_text_bbox_count": len(exclusions),
+        "has_ink": has_ink,
         "composition": (
             "page_background_without_delivered_text"
             if exclusions
@@ -4379,6 +4522,55 @@ def import_pdf(
                     pass
                 _add_phase_ms("recognition_ms", t_phase)
 
+            # 9e2. Page raster plan. A page raster is opaque white paper, so the
+            # text and vectors of a page whose raster carries ink are built in
+            # the source colors; that has to be known before either is built.
+            page_visual_style = visual_style
+            page_raster_trigger = ""
+            page_raster_plan = None
+            early_image_placements = None
+            early_image_error = None
+            if not import_cfg.ignore_images:
+                t_phase = time.perf_counter()
+                if import_mode == "raster":
+                    page_raster_trigger = "raster_page"
+                elif import_cfg.raster_fallback and (
+                    not page_data.primitives or _looks_like_page_frame_only(page_data)
+                ):
+                    # The sparse-page fallback applies to a page without
+                    # embedded images: read them here, once, for step 9i.
+                    try:
+                        early_image_placements = _extract_image_placements(
+                            doc, page, page_num, import_cfg, image_dir)
+                    except EmbeddedImageDeliveryError as error:
+                        early_image_error = error
+                    if early_image_error is None and not early_image_placements:
+                        page_raster_trigger = "sparse_vector_shell"
+                if page_raster_trigger:
+                    page_text_to_build = (
+                        list(page_data.text_items or ())
+                        if import_cfg.import_text and import_cfg.text_mode != "none"
+                        else []
+                    )
+                    page_raster_plan = _plan_page_raster(
+                        page, page_num, import_cfg, image_dir, page_text_to_build)
+                    if (
+                        page_raster_plan["rendered"]
+                        and not _page_raster_is_blank(page_raster_plan["rendered"])
+                    ):
+                        page_visual_style = "source"
+                        # A scan delivers nothing on top of its raster: say nothing.
+                        if visual_style != "source" and (
+                            page_text_to_build
+                            or (import_mode != "raster" and page_data.primitives)
+                        ):
+                            _progress(
+                                _page_progress(i, 0.56),
+                                f"Auto-mode: page {page_num} keeps a page raster — "
+                                "text and vectors use source colors on its white paper",
+                            )
+                _add_phase_ms("images_ms", t_phase)
+
             # 9f. Create page collection
             page_col = bpy.data.collections.new(f"PDF_Page_{page_num}")
             root_col.children.link(page_col)
@@ -4392,6 +4584,7 @@ def import_pdf(
             compound_order_plans = []
             if import_mode != "raster":
                 page_builder_config = dict(builder_config)
+                page_builder_config["visual_style"] = page_visual_style
                 from .opaque_rectangle_proof import plan_opaque_rectangles
                 from .opaque_rectangle_order import bind_rectangle_plans
 
@@ -4538,7 +4731,7 @@ def import_pdf(
                         page_data.text_items,
                         page_col,
                         page_num,
-                        visual_style=visual_style,
+                        visual_style=page_visual_style,
                         z_offset_m=text_z_offset_m,
                         strict_text_fidelity=import_cfg.strict_text_fidelity,
                         text_mode=import_cfg.text_mode,
@@ -4599,16 +4792,31 @@ def import_pdf(
                 _progress(_page_progress(i, 0.92), f"Building images for page {page_num}...")
                 t_phase = time.perf_counter()
                 placements = []
+                page_raster_decision = None
+                page_raster_decision_inputs = dict(
+                    page_num=page_num,
+                    requested_style=visual_style,
+                    page_style=page_visual_style,
+                    # Source colors without the white page aid: a blank page
+                    # raster is the only paper under them, so it stays.
+                    paper_for_source_colors=(
+                        visual_style == "source"
+                        and not bool(config.get("white_page_background", True))
+                    ),
+                    delivered_text_bboxes=len(excluded_text_bboxes),
+                )
                 if import_mode == "raster":
-                    rendered = _render_page_raster(
+                    rendered = _page_raster_for_delivered_text(
                         page,
                         page_num,
                         import_cfg,
                         image_dir,
                         excluded_text_bboxes=excluded_text_bboxes,
+                        plan=page_raster_plan,
                     )
                     if rendered:
-                        placements.append(rendered)
+                        page_raster_decision = _page_raster_decision(
+                            rendered, trigger="raster_page", **page_raster_decision_inputs)
                     else:
                         _record_raster_delivery_failure(
                             total_stats["raster_delivery_failures"],
@@ -4622,7 +4830,13 @@ def import_pdf(
                         )
                 else:
                     try:
-                        placements = _extract_image_placements(doc, page, page_num, import_cfg, image_dir)
+                        if early_image_error is not None:
+                            raise early_image_error
+                        placements = (
+                            early_image_placements
+                            if early_image_placements is not None
+                            else _extract_image_placements(doc, page, page_num, import_cfg, image_dir)
+                        )
                     except EmbeddedImageDeliveryError as error:
                         _record_raster_delivery_failure(
                             total_stats["raster_delivery_failures"], page_num=page_num,
@@ -4636,20 +4850,24 @@ def import_pdf(
                         and not placements
                         and (not page_data.primitives or _looks_like_page_frame_only(page_data))
                     ):
-                        _progress(
-                            _page_progress(i, 0.93),
-                            f"Auto-mode: sparse vector shell on page {page_num} — raster fallback",
-                        )
-                        rendered = _render_page_raster(
+                        rendered = _page_raster_for_delivered_text(
                             page,
                             page_num,
                             import_cfg,
                             image_dir,
                             excluded_text_bboxes=excluded_text_bboxes,
+                            plan=page_raster_plan,
                         )
                         if rendered:
-                            placements.append(rendered)
-                        else:
+                            page_raster_decision = _page_raster_decision(
+                                rendered, trigger="sparse_vector_shell",
+                                **page_raster_decision_inputs)
+                        if page_raster_decision is None or page_raster_decision["plane"] == "kept":
+                            _progress(
+                                _page_progress(i, 0.93),
+                                f"Auto-mode: sparse vector shell on page {page_num} — raster fallback",
+                            )
+                        if not rendered:
                             _record_raster_delivery_failure(
                                 total_stats["raster_delivery_failures"],
                                 page_num=page_num,
@@ -4660,6 +4878,27 @@ def import_pdf(
                                 _page_progress(i, 0.94),
                                 f"Raster delivery failed on page {page_num}; see import report.",
                             )
+
+                if page_raster_decision is not None:
+                    _record_page_raster_decision(total_stats, page_raster_decision)
+                    if page_raster_decision["plane"] == "kept":
+                        placements.append(rendered)
+                        if not page_raster_decision["objects_readable_on_raster"]:
+                            # Ink that the plan could not foresee (a text item
+                            # failed after the page was styled). Not hidden:
+                            # the report carries the same record.
+                            _progress(
+                                _page_progress(i, 0.93),
+                                f"Page {page_num} keeps a page raster under preview-colored "
+                                "text; see page_raster_decisions in the import report.",
+                            )
+                    else:
+                        # Everything visible was delivered as text or vectors.
+                        _progress(
+                            _page_progress(i, 0.93),
+                            f"Auto-mode: page {page_num} has no ink left under its "
+                            "delivered text — no page raster",
+                        )
 
                 for placement in placements:
                     image_obj = _create_image_plane(
