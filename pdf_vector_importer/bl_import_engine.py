@@ -3310,6 +3310,40 @@ def _page_stack_step(page_height_m: float, arrangement: str, gap_ratio: float) -
     return h * 1.2
 
 
+def _page_stack_offset(
+    cursor_m: float,
+    placed_page_height_m,
+    page_height_m: float,
+    arrangement: str,
+) -> float:
+    """World Y offset of the page about to be placed in the downward stack.
+
+    A placed page covers ``[offset, offset + height]``.  ``cursor_m`` is the
+    offset of the lowest placed page minus ``_page_stack_step`` of that page:
+    the place where an equally tall page starts.  ``placed_page_height_m`` is
+    the height of that lowest placed page (``None`` when no page is above, or
+    when an older resume checkpoint did not record it).
+
+    The gap belongs between facing edges: the top edge of this page must sit
+    the arrangement gap below the bottom edge of the page above.  Moving the
+    cursor by ``placed height - this height`` does exactly that, so a taller
+    page starts lower instead of reaching up into the page above, and a
+    shorter page no longer leaves a wider gap.
+
+    Every page is placed below the one before it, so the last placed page is
+    also the lowest extent of everything placed so far.
+
+    For equal heights the correction is exactly ``0.0`` and ``x + 0.0`` is
+    ``x`` bit for bit, so equal-size stacks keep their previous positions.
+    """
+    cursor = float(cursor_m)
+    if arrangement == "overlay" or placed_page_height_m is None:
+        return cursor
+    placed = max(0.001, float(placed_page_height_m or 0.0))
+    current = max(0.001, float(page_height_m or 0.0))
+    return cursor + (placed - current)
+
+
 def _stack_page_objects(objects, stack_offset_m: float) -> int:
     """Move each page hierarchy once, leaving child-local transforms intact."""
     page_objects = []
@@ -3931,9 +3965,15 @@ def import_pdf(
             )
 
         # Multi-page stacking: shift each page downward by accumulated heights.
-        _page_stack_offset_m = float(
+        # ``_page_stack_cursor_m`` is where a page as tall as the last placed
+        # one would start; ``_page_stack_offset`` corrects it for the height of
+        # the page actually being placed so page rectangles never intersect.
+        _page_stack_cursor_m = float(
             (resume_state or {}).get("next_stack_offset_m", 0.0) or 0.0
         )
+        _stacked_page_height_m = (resume_state or {}).get("stacked_page_height_m")
+        if _stacked_page_height_m is not None:
+            _stacked_page_height_m = float(_stacked_page_height_m)
         _page_arrangement = _normalize_page_arrangement(config.get("page_arrangement"))
         _page_gap_ratio = _normalize_page_gap_ratio(config.get("page_gap_ratio"))
 
@@ -3968,7 +4008,8 @@ def import_pdf(
                 requested_pages=requested_page_numbers,
                 completed_pages=completed_pages,
                 root_collection=str(getattr(root_col, "name", "") or ""),
-                next_stack_offset_m=_page_stack_offset_m,
+                next_stack_offset_m=_page_stack_cursor_m,
+                stacked_page_height_m=_stacked_page_height_m,
                 aggregate_stats=aggregate_stats,
                 text_delivery_items=delivery_items,
             )
@@ -4607,6 +4648,13 @@ def import_pdf(
             _add_phase_ms('page_background_ms', t_background)
 
             # 9j. Multi-page stacking: shift this page's collection downward
+            page_height_m = page_data.height * _MM_TO_M
+            _page_stack_offset_m = _page_stack_offset(
+                _page_stack_cursor_m,
+                _stacked_page_height_m,
+                page_height_m,
+                _page_arrangement,
+            )
             if len(requested_page_indices) > 1 and _page_stack_offset_m != 0.0:
                 _stack_page_objects(page_col.all_objects, _page_stack_offset_m)
             final_text_failures = _reverify_text_delivery_after_stack(
@@ -4622,13 +4670,13 @@ def import_pdf(
                     reason="Final stacked text verification failed", stage="stacked_final_state")
                 break
             text_count = max(0, int(text_count) - len(final_text_failures))
-            # Advance offset for the next page (page_data.height is in mm)
-            page_height_m = page_data.height * _MM_TO_M
-            _page_stack_offset_m -= _page_stack_step(
+            # Advance the cursor past this page (page_data.height is in mm)
+            _page_stack_cursor_m = _page_stack_offset_m - _page_stack_step(
                 page_height_m,
                 _page_arrangement,
                 _page_gap_ratio,
             )
+            _stacked_page_height_m = page_height_m
 
             # 9k. Accumulate stats
             total_stats["pages_imported"] += 1
