@@ -12,8 +12,11 @@ import math
 def polygon_area(points):
     if len(points) < 3:
         return 0.0
-    return abs(sum(a[0] * b[1] - b[0] * a[1]
-                   for a, b in zip(points, points[1:] + points[:1], strict=True))) / 2.0
+    # Translation cancels from area. Subtract an anchor before products rather
+    # than subtracting large, nearly equal world-coordinate products afterward.
+    x0, y0 = points[0][:2]
+    return abs(math.fsum((a[0] - x0) * (b[1] - y0) - (b[0] - x0) * (a[1] - y0)
+                         for a, b in zip(points, points[1:] + points[:1], strict=True))) / 2.0
 
 
 def rectangle_intersection(points, bounds):
@@ -48,7 +51,14 @@ def _evaluated_ink(obj, bpy):
     if mesh is None:
         raise ValueError('Native text viewport clipping has no evaluated mesh')
     try:
-        points = [tuple(evaluated.matrix_world @ vertex.co) for vertex in mesh.vertices]
+        # Blender stores these values as float32. Read them freshly, then apply
+        # the affine in Python doubles: mathutils would round each translated
+        # world vertex back to float32, losing tiny glyph edges on later sheets.
+        matrix = tuple(tuple(float(value) for value in row) for row in evaluated.matrix_world)
+        local = [tuple(float(value) for value in vertex.co) for vertex in mesh.vertices]
+        points = [tuple(math.fsum((matrix[row][3], *(matrix[row][column] * point[column]
+                                                    for column in range(3))))
+                        for row in range(3)) for point in local]
         if not all(math.isfinite(value) for point in points for value in point):
             raise ValueError('Native text viewport clipping has non-finite geometry')
         mesh.calc_loop_triangles()
