@@ -289,10 +289,11 @@ class _PageObject:
 
 
 def _import_stack(monkeypatch, tmp_path: Path, sizes_pt, arrangement,
-                  *, gap_ratio=None, resume=None):
+                  *, gap_ratio=None, resume=None, config_extra=None):
     """Run engine.import_pdf over synthetic pages; return (page objects, checkpoints).
 
     ``resume`` = (completed page count, extra build_resume_state keywords).
+    ``config_extra`` overrides import options (visual style, view focus).
     """
     masks = importlib.import_module("pdf_vector_importer.opaque_rectangle_proof")
     triangles = importlib.import_module("pdf_vector_importer.triangle_paint_order")
@@ -435,6 +436,7 @@ def _import_stack(monkeypatch, tmp_path: Path, sizes_pt, arrangement,
     }
     if gap_ratio is not None:
         config["page_gap_ratio"] = gap_ratio
+    config.update(config_extra or {})
     run_config = dict(config)
     if resume:
         completed_count, extra = resume

@@ -1319,27 +1319,170 @@ def _curve_spline_local_points(curve_data):
                     continue
 
 
-# Off-sheet strokes (a line that runs far past the crop) must not shrink the
-# print. When the gathered geometry is this many times the page, frame the page.
-_SHEET_VIEW_OVERFLOW = 1.5
+# World-space sheet rectangle ``[x0, y0, x1, y1]`` in metres, stamped on a
+# page collection once the page has its final place in the stack. The opening
+# view frames these rectangles (the paper), not the ink delivered on them.
+_PAGE_RECT_PROP = "pdf_page_rect_m"
+
+
+def _page_rect_m(width_mm, height_mm, stack_offset_m=0.0):
+    """Sheet rectangle ``(x0, y0, x1, y1)`` in world metres, or ``None``.
+
+    A page is delivered with its lower-left corner at the origin and is then
+    moved down the stack by ``stack_offset_m``; pages stay left aligned at x=0.
+    """
+    try:
+        width = float(width_mm) * _MM_TO_M
+        height = float(height_mm) * _MM_TO_M
+        offset = float(stack_offset_m)
+    except (TypeError, ValueError):
+        return None
+    if not all(math.isfinite(value) for value in (width, height, offset)):
+        return None
+    if width <= 1.0e-9 or height <= 1.0e-9:
+        return None
+    return (0.0, offset, width, offset + height)
+
+
+def _record_page_rect(page_collection, width_mm, height_mm, stack_offset_m=0.0):
+    """Stamp the placed page's sheet rectangle on its collection."""
+    rect = _page_rect_m(width_mm, height_mm, stack_offset_m)
+    if rect is None:
+        return None
+    try:
+        page_collection[_PAGE_RECT_PROP] = [float(value) for value in rect]
+    except (AttributeError, TypeError):
+        # No custom properties on this collection: the rectangle stays unknown
+        # and the view falls back to the bounds of the delivered objects.
+        return None
+    return rect
+
+
+def _stored_page_rect(collection):
+    """Read back a stamped sheet rectangle; ``None`` when absent or unusable."""
+    try:
+        raw = collection.get(_PAGE_RECT_PROP)
+    except (AttributeError, TypeError):
+        return None
+    if raw is None:
+        return None
+    try:
+        values = [float(value) for value in raw]
+    except (TypeError, ValueError):
+        return None
+    if len(values) != 4 or not all(math.isfinite(value) for value in values):
+        return None
+    x0, y0, x1, y1 = values
+    if x1 - x0 <= 1.0e-9 or y1 - y0 <= 1.0e-9:
+        return None
+    return (x0, y0, x1, y1)
+
+
+def _collection_has_objects(collection) -> bool:
+    try:
+        return any(obj is not None for obj in collection.all_objects)
+    except (AttributeError, TypeError):
+        return False
+
+
+def _imported_page_rects(root_collection):
+    """Sheet rectangles of the pages under an import root.
+
+    Returns ``[]`` (unknown) unless every page collection that holds objects
+    carries its rectangle: framing only some of the sheets would cut the
+    others out of the opening view.
+    """
+    try:
+        page_collections = list(root_collection.children)
+    except (AttributeError, TypeError):
+        return []
+    rects = []
+    for collection in page_collections:
+        rect = _stored_page_rect(collection)
+        if rect is not None:
+            rects.append(rect)
+        elif _collection_has_objects(collection):
+            return []
+    return rects
+
+
+def _sheet_bounds_from_page_rects(page_rects, full_min=None, full_max=None):
+    """Union of the sheet rectangles as view bounds, or ``(None, None)``.
+
+    X and Y come from the paper alone. Z keeps the depth range of the
+    delivered objects when it is known, so the view stays centred on them in
+    depth; the top view does not project Z.
+    """
+    rects = list(page_rects or ())
+    if not rects:
+        return None, None
+    try:
+        from mathutils import Vector
+    except Exception:
+        return None, None
+
+    def _depth(bound) -> float:
+        try:
+            value = float(bound.z)
+        except (AttributeError, TypeError, ValueError):
+            return 0.0
+        return value if math.isfinite(value) else 0.0
+
+    z_low, z_high = _depth(full_min), _depth(full_max)
+    return (
+        Vector((min(r[0] for r in rects), min(r[1] for r in rects), min(z_low, z_high))),
+        Vector((max(r[2] for r in rects), max(r[3] for r in rects), max(z_low, z_high))),
+    )
 
 
 def _prefer_sheet_frame(full_min, full_max, sheet_min, sheet_max):
-    """Return the page frame when geometry would make zoom-extents miss the sheet."""
-    if full_min is None or full_max is None or sheet_min is None or sheet_max is None:
+    """Return the sheet frame whenever a usable one is known, else the object bounds.
+
+    The opening view shows the print. Ink that stops short of the sheet edge
+    must not pull the view toward the drawing, and ink that runs past the
+    edge must not shrink the sheet, so a known sheet always wins.
+    """
+    if sheet_min is None or sheet_max is None:
         return full_min, full_max
-    sheet_x = abs(float(sheet_max.x) - float(sheet_min.x))
-    sheet_y = abs(float(sheet_max.y) - float(sheet_min.y))
-    full_x = abs(float(full_max.x) - float(full_min.x))
-    full_y = abs(float(full_max.y) - float(full_min.y))
+    try:
+        sheet_x = abs(float(sheet_max.x) - float(sheet_min.x))
+        sheet_y = abs(float(sheet_max.y) - float(sheet_min.y))
+    except (AttributeError, TypeError, ValueError):
+        return full_min, full_max
+    if not (math.isfinite(sheet_x) and math.isfinite(sheet_y)):
+        return full_min, full_max
     if sheet_x <= 1.0e-9 or sheet_y <= 1.0e-9:
         return full_min, full_max
-    if (
-        full_x > _SHEET_VIEW_OVERFLOW * sheet_x
-        or full_y > _SHEET_VIEW_OVERFLOW * sheet_y
-    ):
-        return sheet_min, sheet_max
-    return full_min, full_max
+    return sheet_min, sheet_max
+
+
+def _import_view_bounds(root_collection, visible_objects):
+    """Bounds the opening view frames: ``(min_v, max_v, rule)``.
+
+    ``page_rectangles``: union of the imported sheet rectangles (every visual
+    style). ``page_background``: no rectangle was recorded, but the white
+    display backing marks the sheet. ``object_bounds``: the sheet is unknown,
+    so the delivered objects are framed as before.
+    """
+    full_min, full_max = _world_bounds_for_objects(visible_objects)
+    rule = "page_rectangles"
+    sheet_min, sheet_max = _sheet_bounds_from_page_rects(
+        _imported_page_rects(root_collection), full_min, full_max
+    )
+    if sheet_min is None or sheet_max is None:
+        rule = "page_background"
+        sheet_objects = [
+            obj
+            for obj in visible_objects
+            if str(obj.get("pdf_display_aid", "") or "") == "display_only_page_background"
+        ]
+        sheet_min, sheet_max = (
+            _world_bounds_for_objects(sheet_objects) if sheet_objects else (None, None)
+        )
+    min_v, max_v = _prefer_sheet_frame(full_min, full_max, sheet_min, sheet_max)
+    if sheet_min is None or min_v is not sheet_min:
+        rule = "object_bounds"
+    return min_v, max_v, rule
 
 
 def _sheet_view_radius(min_v, max_v) -> float:
@@ -1716,15 +1859,8 @@ def _focus_view_on_import(
             pass
         visible_objects.append(obj)
 
-    min_v, max_v = _world_bounds_for_objects(visible_objects)
-    sheet_objects = [
-        obj
-        for obj in visible_objects
-        if str(obj.get("pdf_display_aid", "") or "") == "display_only_page_background"
-    ]
-    if sheet_objects:
-        sheet_min, sheet_max = _world_bounds_for_objects(sheet_objects)
-        min_v, max_v = _prefer_sheet_frame(min_v, max_v, sheet_min, sheet_max)
+    # Frame the paper (union of the imported sheets), not the ink on it.
+    min_v, max_v, _frame_rule = _import_view_bounds(root_collection, visible_objects)
 
     view_layer = bpy.context.view_layer
 
@@ -4655,8 +4791,12 @@ def import_pdf(
                 page_height_m,
                 _page_arrangement,
             )
+            _page_moved_m = 0.0
             if len(requested_page_indices) > 1 and _page_stack_offset_m != 0.0:
                 _stack_page_objects(page_col.all_objects, _page_stack_offset_m)
+                _page_moved_m = _page_stack_offset_m
+            # The sheet the opening view frames: this page where it now lies.
+            _record_page_rect(page_col, page_data.width, page_data.height, _page_moved_m)
             final_text_failures = _reverify_text_delivery_after_stack(
                 getattr(import_cfg, "_text_delivery_records", ()),
                 page_number=page_num,
