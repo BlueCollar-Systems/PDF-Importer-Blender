@@ -1003,6 +1003,7 @@ def write_import_report(
         "compound_fill_paint_order": stats.get("compound_fill_paint_order", []),
         "display_aids": stats.get("display_aids", []),
         "page_raster_decisions": stats.get("page_raster_decisions", []),
+        "resume_stack_migration": stats.get("resume_stack_migration"),
         "text_page_viewport_failures": stats.get("text_page_viewport_failures", []),
         "scale_hints": stats.get("scale_hints"),
         "fallback_attempted": bool(fallback_attempted),
@@ -2441,9 +2442,9 @@ def _render_images_only_composite(
     }
 
 
-# A page renders on white. A color sample this many 8-bit steps below white
-# still counts as unpainted paper; anything darker is ink.
-_PAGE_RASTER_PAPER_TOLERANCE = 2
+# Only exact rendered white is unpainted paper. Near-white source marks are
+# still ink and must not be discarded as a blank page.
+_PAGE_RASTER_PAPER_TOLERANCE = 0
 _PAGE_RASTER_PAPER_SAMPLES = bytes(range(255 - _PAGE_RASTER_PAPER_TOLERANCE, 256))
 _PAGE_RASTER_INK_CHUNK = 4 * 1024 * 1024
 
@@ -3623,6 +3624,52 @@ def _page_stack_offset(
     return cursor + (placed - current)
 
 
+
+def _legacy_resume_stack_height(doc, state, *, source_sha256, config_sha256, scale):
+    """Recover missing stack height from an authenticated original PDF page only."""
+    if state.get("source_sha256") != source_sha256 or state.get("config_sha256") != config_sha256:
+        raise ValueError("legacy stack migration requires the authenticated PDF and import settings")
+    requested = list(state.get("requested_pages") or ())
+    completed = list(state.get("completed_pages") or ())
+    if not completed:
+        return None, None
+    if (
+        any(type(page) is not int or page < 1 or page > doc.page_count for page in requested + completed)
+        or requested != sorted(set(requested))
+        or completed != requested[:len(completed)]
+        or list(state.get("remaining_pages") or ()) != requested[len(completed):]
+    ):
+        raise ValueError("legacy stack migration requires a completed page prefix")
+    scale = float(scale)
+    if not math.isfinite(scale) or scale <= 0:
+        raise ValueError("legacy stack migration requires a finite positive source scale")
+    page_number = completed[-1]
+    page = doc.load_page(page_number - 1)
+    # Match extract_page: rect is the visible CropBox, UserUnit and Rotate extent.
+    rect = page.rect
+    dimensions = [float(rect.width), float(rect.height)]
+    if any(not math.isfinite(value) or value <= 0 for value in dimensions):
+        raise ValueError("legacy stack migration has invalid source page dimensions")
+    height = (dimensions[1] * _MM_PER_PT * scale) * _MM_TO_M
+    if not math.isfinite(height) or height <= 0:
+        raise ValueError("legacy stack migration has invalid model height")
+    boxes = {name: [float(value) for value in getattr(page, name)]
+             for name in ("rect", "cropbox", "mediabox")}
+    if any(len(box) != 4 or any(not math.isfinite(value) for value in box) for box in boxes.values()):
+        raise ValueError("legacy stack migration has invalid source box metadata")
+    return height, {
+        "method": "authenticated_completed_page_rect",
+        "source_sha256": source_sha256,
+        "config_sha256": config_sha256,
+        "completed_page": page_number,
+        "source_boxes_points": boxes,
+        "source_rotation_degrees": int(page.rotation),
+        "user_scale": scale,
+        "stacked_page_height_m": height,
+        "existing_objects_moved": False,
+    }
+
+
 def _stack_page_objects(objects, stack_offset_m: float) -> int:
     """Move each page hierarchy once, leaving child-local transforms intact."""
     page_objects = []
@@ -4255,6 +4302,13 @@ def import_pdf(
             _stacked_page_height_m = float(_stacked_page_height_m)
         _page_arrangement = _normalize_page_arrangement(config.get("page_arrangement"))
         _page_gap_ratio = _normalize_page_gap_ratio(config.get("page_gap_ratio"))
+        if resume_state is not None and _stacked_page_height_m is None and _page_arrangement != "overlay":
+            _stacked_page_height_m, migration = _legacy_resume_stack_height(
+                doc, resume_state, source_sha256=source_sha256,
+                config_sha256=config_sha256, scale=import_cfg.user_scale,
+            )
+            if migration is not None:
+                total_stats["resume_stack_migration"] = migration
 
         use_streaming = len(page_indices) > 1 or resume_state is not None
         page_numbers = [idx + 1 for idx in page_indices]

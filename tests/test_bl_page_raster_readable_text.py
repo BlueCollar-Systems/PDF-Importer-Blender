@@ -93,14 +93,14 @@ def test_blank_render_has_no_ink() -> None:
 
 @pytest.mark.parametrize("sample,expected", [
     (255, False),
-    (254, False),
-    (253, False),   # 255 - tolerance: still paper
-    (252, True),    # one step darker than the tolerance: ink
+    (254, True),
+    (253, True),   # faint source ink remains visible
+    (252, True),
     (128, True),
     (0, True),
 ])
-def test_one_pixel_decides_and_the_paper_tolerance_is_two_steps(sample, expected) -> None:
-    assert bl_import_engine._PAGE_RASTER_PAPER_TOLERANCE == 2
+def test_only_exact_white_can_be_declared_blank(sample, expected) -> None:
+    assert bl_import_engine._PAGE_RASTER_PAPER_TOLERANCE == 0
     pixmap = _pixmap(255)
     pixmap.set_pixel(7, 11, (255, sample, 255))
     assert bl_import_engine._pixmap_has_ink(pixmap) is expected
@@ -952,3 +952,19 @@ def test_failed_render_is_still_a_raster_delivery_failure(monkeypatch, tmp_path)
         "page": 1, "stage": "render", "reason": "raster_render_failed",
     }]
     assert "page_raster_decisions" not in run.stats
+
+
+@pytest.mark.parametrize("sample", [253, 254])
+def test_faint_pdf_marks_are_not_discarded_as_white_paper(tmp_path, sample):
+    with fitz.open() as document:
+        page = document.new_page(width=72, height=72)
+        page.draw_rect(fitz.Rect(20, 20, 40, 40), color=None, fill=(sample / 255,) * 3)
+        assert min(page.get_pixmap(alpha=False).samples) == sample
+        plan = bl_import_engine._plan_page_raster(page, 1, _config(72), str(tmp_path), [])
+        assert plan["rendered"]["has_ink"] is True
+        decision = bl_import_engine._page_raster_decision(
+            plan["rendered"], page_num=1, trigger="raster_page",
+            requested_style="high_contrast", page_style="source",
+            paper_for_source_colors=False, delivered_text_bboxes=0,
+        )
+        assert decision["plane"] == "kept"

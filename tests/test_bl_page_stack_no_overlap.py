@@ -344,7 +344,8 @@ def _import_stack(monkeypatch, tmp_path: Path, sizes_pt, arrangement,
 
         def __init__(self, width_pt, height_pt):
             self.rect = Rect(0.0, 0.0, width_pt, height_pt)
-            self.mediabox = types.SimpleNamespace(width=width_pt, height=height_pt)
+            self.mediabox = Rect(self.rect)
+            self.cropbox = Rect(self.rect)
 
         def get_drawings(self, **_kwargs):
             return []
@@ -536,7 +537,7 @@ def test_resume_places_a_taller_page_below_the_completed_one(monkeypatch, tmp_pa
 
 
 def test_resume_from_a_checkpoint_without_the_height_uses_its_stored_offset(monkeypatch, tmp_path) -> None:
-    """Older checkpoints hold only the offset; it is honoured as written."""
+    """Recovering an equal height keeps the stored offset bit for bit."""
     sizes = [PORTRAIT, PORTRAIT]
     heights = _heights_m(sizes)
     cursor = 0.0 - heights[0] * 1.2
@@ -545,3 +546,92 @@ def test_resume_from_a_checkpoint_without_the_height_uses_its_stored_offset(monk
         resume=(1, {"next_stack_offset_m": cursor}),
     )
     assert [_bits(obj.location[1]) for obj in placed] == [_bits(cursor)]
+
+@pytest.mark.parametrize("arrangement", ["spread", "touch", "compact"])
+def test_legacy_resume_recovers_last_height_and_prevents_mixed_size_overlap(monkeypatch, tmp_path, arrangement):
+    sizes = [LANDSCAPE, PORTRAIT]
+    heights = _heights_m(sizes)
+    engine = _engine(monkeypatch)
+    cursor = -engine._page_stack_step(heights[0], arrangement, .20)
+    # The old missing-height route incorrectly placed the portrait here.
+    assert _overlap_m((0, heights[0]), (cursor, cursor + heights[1])) > 0
+    _, placed, checkpoints = _import_stack(
+        monkeypatch, tmp_path, sizes, arrangement,
+        resume=(1, {"next_stack_offset_m": cursor}),
+    )
+    assert [obj.page_number for obj in placed] == [2]
+    page_two = _world_y_rects(placed)[0]
+    assert _overlap_m((0, heights[0]), page_two) <= EDGE_TOLERANCE_M
+    assert -page_two[1] == pytest.approx(_expected_gap_m(heights[0], arrangement, .20), abs=EDGE_TOLERANCE_M)
+    evidence = checkpoints[-1]["aggregate_stats"]["resume_stack_migration"]
+    assert evidence["completed_page"] == 1
+    assert evidence["stacked_page_height_m"] == heights[0]
+    assert evidence["existing_objects_moved"] is False
+
+
+@pytest.mark.parametrize("rotation", [0, 90, 180, 270])
+@pytest.mark.parametrize("scale", [.5, 2.0])
+def test_legacy_migration_uses_actual_cropped_rotated_pdf_extent(monkeypatch, rotation, scale):
+    import pymupdf as fitz
+    engine = _engine(monkeypatch)
+    document = fitz.open()
+    page = document.new_page(width=800, height=1000)
+    page.set_cropbox(fitz.Rect(20, 30, 700, 900))
+    page.set_rotation(rotation)
+    source = document.tobytes()
+    document.close()
+    source_hash = hashlib.sha256(source).hexdigest()
+    state = {"source_sha256": source_hash, "config_sha256": "c" * 64,
+             "requested_pages": [1], "completed_pages": [1], "remaining_pages": []}
+    with fitz.open(stream=source, filetype="pdf") as doc:
+        before = doc.tobytes(no_new_id=True)
+        height, evidence = engine._legacy_resume_stack_height(
+            doc, state, source_sha256=source_hash, config_sha256="c" * 64, scale=scale)
+        expected = (doc[0].rect.height * PT_TO_MM * scale) * MM_TO_M
+        assert height == expected
+        assert evidence["source_boxes_points"] == {
+            name: list(getattr(doc[0], name)) for name in ("rect", "cropbox", "mediabox")}
+        assert evidence["source_rotation_degrees"] == rotation
+        assert evidence["user_scale"] == scale
+        assert evidence["source_sha256"] == source_hash
+        assert doc.tobytes(no_new_id=True) == before
+
+
+@pytest.mark.parametrize("change", ["height", "crop", "rotation", "scale"])
+def test_changed_source_or_scale_cannot_supply_a_legacy_height(monkeypatch, change):
+    import pymupdf as fitz
+    engine = _engine(monkeypatch)
+    with fitz.open() as doc:
+        page = doc.new_page(width=600, height=800)
+        source_hash = hashlib.sha256(doc.tobytes()).hexdigest()
+        state = {"source_sha256": source_hash, "config_sha256": "c" * 64,
+                 "requested_pages": [1], "completed_pages": [1], "remaining_pages": []}
+        config_hash = "c" * 64
+        if change == "height": page.set_mediabox(fitz.Rect(0, 0, 600, 900))
+        if change == "crop": page.set_cropbox(fitz.Rect(10, 10, 500, 700))
+        if change == "rotation": page.set_rotation(90)
+        if change == "scale": config_hash = "d" * 64
+        else: source_hash = hashlib.sha256(doc.tobytes()).hexdigest()
+        with pytest.raises(ValueError, match="authenticated PDF"):
+            engine._legacy_resume_stack_height(doc, state, source_sha256=source_hash,
+                                               config_sha256=config_hash, scale=2 if change == "scale" else 1)
+
+
+@pytest.mark.parametrize("completed,remaining", [([2], [1]), ([1, 1], [2]), ([True], [2]), ([1], [1, 2])])
+def test_legacy_migration_rejects_ambiguous_completed_page_order(monkeypatch, completed, remaining):
+    engine = _engine(monkeypatch)
+    doc = types.SimpleNamespace(page_count=2, load_page=lambda _i: pytest.fail("must reject before source page read"))
+    state = {"source_sha256": "a" * 64, "config_sha256": "c" * 64,
+             "requested_pages": [1, 2], "completed_pages": completed, "remaining_pages": remaining}
+    with pytest.raises(ValueError, match="completed page prefix"):
+        engine._legacy_resume_stack_height(doc, state, source_sha256="a" * 64,
+                                           config_sha256="c" * 64, scale=1)
+
+
+def test_new_checkpoint_does_not_need_legacy_migration(monkeypatch, tmp_path):
+    engine = _engine(monkeypatch)
+    monkeypatch.setattr(engine, "_legacy_resume_stack_height", lambda *_a, **_k: pytest.fail("new checkpoint already has height"))
+    height = _heights_m([LANDSCAPE])[0]
+    _, _, checkpoints = _import_stack(monkeypatch, tmp_path, [LANDSCAPE, PORTRAIT], "spread",
+        resume=(1, {"next_stack_offset_m": -height * 1.2, "stacked_page_height_m": height}))
+    assert "resume_stack_migration" not in checkpoints[-1]["aggregate_stats"]
