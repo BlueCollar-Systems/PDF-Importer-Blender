@@ -71,6 +71,12 @@ After enabling the addon:
 
 Geometry is grouped into collections by page and (optionally) by source layer or color.
 
+Python callers can pass `user_scale` in the `config` dictionary to
+`pdf_vector_importer.bl_import_engine.import_pdf`. It must be a finite positive
+number and defaults to `1.0`. The multiplier applies to PDF extraction, page
+dimensions and placement, and resume checkpoints. Resume with the same scale as
+the interrupted import; a changed scale is a different import configuration.
+
 Long imports publish phase/page/object progress in Blender's status area and in
 `import_report.json`. The report includes a representation-aware complexity
 estimate (`work_units` and `tier`) so Geometry, Glyphs, and 3D Text requests are

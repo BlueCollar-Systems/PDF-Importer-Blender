@@ -504,7 +504,8 @@ def test_engine_resume_reuses_root_and_only_builds_unfinished_pages(
         # The source binding seam uses the original page's four coordinates.
         from pymupdf import Rect
         rect = Rect(0.0, 0.0, 72.0, 72.0)
-        mediabox = types.SimpleNamespace(width=72.0, height=72.0)
+        cropbox = Rect(rect)
+        mediabox = Rect(rect)
         rotation = 0
 
         def get_drawings(self, **_kwargs):
