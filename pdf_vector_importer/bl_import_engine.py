@@ -3502,6 +3502,17 @@ def _apply_overrides(config: ImportConfig, ui_config: dict) -> ImportConfig:
     one of ``labels | text | 3d_text | glyphs | geometry | raster``; the separate
     ``import_text`` toggle controls whether text is imported at all.
     """
+    if "user_scale" in ui_config:
+        scale = ui_config["user_scale"]
+        if isinstance(scale, bool) or not isinstance(scale, (int, float)):
+            raise ValueError("user_scale must be a finite positive number")
+        try:
+            scale = float(scale)
+        except OverflowError as exc:
+            raise ValueError("user_scale must be a finite positive number") from exc
+        if not math.isfinite(scale) or scale <= 0:
+            raise ValueError("user_scale must be a finite positive number")
+        config.user_scale = scale
     if "import_text" in ui_config:
         config.import_text = bool(ui_config["import_text"])
     if "text_mode" in ui_config:
@@ -4017,7 +4028,10 @@ def import_pdf(
         filepath: Absolute path to the PDF file.
         config: Dict with keys like 'mode', 'pages', 'text_mode',
                 'import_text', 'detect_arcs', 'make_faces',
-                'group_by_color', 'map_dashes'.
+                'group_by_color', 'map_dashes', 'user_scale'.
+                'user_scale' is a finite positive number multiplying the
+                PDF-to-model dimensions; it defaults to 1.0 and applies to
+                extraction, page placement, and resume checkpoints.
         progress_callback: Optional callable(progress_float, message_str).
         context: Optional bpy.context for Blender window-manager progress bar.
                  Pass None for CLI/headless mode.
