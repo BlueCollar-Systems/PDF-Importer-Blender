@@ -1002,6 +1002,8 @@ def write_import_report(
         "terminal_triangle_paint_order": stats.get("terminal_triangle_paint_order", []),
         "compound_fill_paint_order": stats.get("compound_fill_paint_order", []),
         "display_aids": stats.get("display_aids", []),
+        "page_raster_decisions": stats.get("page_raster_decisions", []),
+        "resume_stack_migration": stats.get("resume_stack_migration"),
         "text_page_viewport_failures": stats.get("text_page_viewport_failures", []),
         "scale_hints": stats.get("scale_hints"),
         "fallback_attempted": bool(fallback_attempted),
@@ -1319,27 +1321,170 @@ def _curve_spline_local_points(curve_data):
                     continue
 
 
-# Off-sheet strokes (a line that runs far past the crop) must not shrink the
-# print. When the gathered geometry is this many times the page, frame the page.
-_SHEET_VIEW_OVERFLOW = 1.5
+# World-space sheet rectangle ``[x0, y0, x1, y1]`` in metres, stamped on a
+# page collection once the page has its final place in the stack. The opening
+# view frames these rectangles (the paper), not the ink delivered on them.
+_PAGE_RECT_PROP = "pdf_page_rect_m"
+
+
+def _page_rect_m(width_mm, height_mm, stack_offset_m=0.0):
+    """Sheet rectangle ``(x0, y0, x1, y1)`` in world metres, or ``None``.
+
+    A page is delivered with its lower-left corner at the origin and is then
+    moved down the stack by ``stack_offset_m``; pages stay left aligned at x=0.
+    """
+    try:
+        width = float(width_mm) * _MM_TO_M
+        height = float(height_mm) * _MM_TO_M
+        offset = float(stack_offset_m)
+    except (TypeError, ValueError):
+        return None
+    if not all(math.isfinite(value) for value in (width, height, offset)):
+        return None
+    if width <= 1.0e-9 or height <= 1.0e-9:
+        return None
+    return (0.0, offset, width, offset + height)
+
+
+def _record_page_rect(page_collection, width_mm, height_mm, stack_offset_m=0.0):
+    """Stamp the placed page's sheet rectangle on its collection."""
+    rect = _page_rect_m(width_mm, height_mm, stack_offset_m)
+    if rect is None:
+        return None
+    try:
+        page_collection[_PAGE_RECT_PROP] = [float(value) for value in rect]
+    except (AttributeError, TypeError):
+        # No custom properties on this collection: the rectangle stays unknown
+        # and the view falls back to the bounds of the delivered objects.
+        return None
+    return rect
+
+
+def _stored_page_rect(collection):
+    """Read back a stamped sheet rectangle; ``None`` when absent or unusable."""
+    try:
+        raw = collection.get(_PAGE_RECT_PROP)
+    except (AttributeError, TypeError):
+        return None
+    if raw is None:
+        return None
+    try:
+        values = [float(value) for value in raw]
+    except (TypeError, ValueError):
+        return None
+    if len(values) != 4 or not all(math.isfinite(value) for value in values):
+        return None
+    x0, y0, x1, y1 = values
+    if x1 - x0 <= 1.0e-9 or y1 - y0 <= 1.0e-9:
+        return None
+    return (x0, y0, x1, y1)
+
+
+def _collection_has_objects(collection) -> bool:
+    try:
+        return any(obj is not None for obj in collection.all_objects)
+    except (AttributeError, TypeError):
+        return False
+
+
+def _imported_page_rects(root_collection):
+    """Sheet rectangles of the pages under an import root.
+
+    Returns ``[]`` (unknown) unless every page collection that holds objects
+    carries its rectangle: framing only some of the sheets would cut the
+    others out of the opening view.
+    """
+    try:
+        page_collections = list(root_collection.children)
+    except (AttributeError, TypeError):
+        return []
+    rects = []
+    for collection in page_collections:
+        rect = _stored_page_rect(collection)
+        if rect is not None:
+            rects.append(rect)
+        elif _collection_has_objects(collection):
+            return []
+    return rects
+
+
+def _sheet_bounds_from_page_rects(page_rects, full_min=None, full_max=None):
+    """Union of the sheet rectangles as view bounds, or ``(None, None)``.
+
+    X and Y come from the paper alone. Z keeps the depth range of the
+    delivered objects when it is known, so the view stays centred on them in
+    depth; the top view does not project Z.
+    """
+    rects = list(page_rects or ())
+    if not rects:
+        return None, None
+    try:
+        from mathutils import Vector
+    except Exception:
+        return None, None
+
+    def _depth(bound) -> float:
+        try:
+            value = float(bound.z)
+        except (AttributeError, TypeError, ValueError):
+            return 0.0
+        return value if math.isfinite(value) else 0.0
+
+    z_low, z_high = _depth(full_min), _depth(full_max)
+    return (
+        Vector((min(r[0] for r in rects), min(r[1] for r in rects), min(z_low, z_high))),
+        Vector((max(r[2] for r in rects), max(r[3] for r in rects), max(z_low, z_high))),
+    )
 
 
 def _prefer_sheet_frame(full_min, full_max, sheet_min, sheet_max):
-    """Return the page frame when geometry would make zoom-extents miss the sheet."""
-    if full_min is None or full_max is None or sheet_min is None or sheet_max is None:
+    """Return the sheet frame whenever a usable one is known, else the object bounds.
+
+    The opening view shows the print. Ink that stops short of the sheet edge
+    must not pull the view toward the drawing, and ink that runs past the
+    edge must not shrink the sheet, so a known sheet always wins.
+    """
+    if sheet_min is None or sheet_max is None:
         return full_min, full_max
-    sheet_x = abs(float(sheet_max.x) - float(sheet_min.x))
-    sheet_y = abs(float(sheet_max.y) - float(sheet_min.y))
-    full_x = abs(float(full_max.x) - float(full_min.x))
-    full_y = abs(float(full_max.y) - float(full_min.y))
+    try:
+        sheet_x = abs(float(sheet_max.x) - float(sheet_min.x))
+        sheet_y = abs(float(sheet_max.y) - float(sheet_min.y))
+    except (AttributeError, TypeError, ValueError):
+        return full_min, full_max
+    if not (math.isfinite(sheet_x) and math.isfinite(sheet_y)):
+        return full_min, full_max
     if sheet_x <= 1.0e-9 or sheet_y <= 1.0e-9:
         return full_min, full_max
-    if (
-        full_x > _SHEET_VIEW_OVERFLOW * sheet_x
-        or full_y > _SHEET_VIEW_OVERFLOW * sheet_y
-    ):
-        return sheet_min, sheet_max
-    return full_min, full_max
+    return sheet_min, sheet_max
+
+
+def _import_view_bounds(root_collection, visible_objects):
+    """Bounds the opening view frames: ``(min_v, max_v, rule)``.
+
+    ``page_rectangles``: union of the imported sheet rectangles (every visual
+    style). ``page_background``: no rectangle was recorded, but the white
+    display backing marks the sheet. ``object_bounds``: the sheet is unknown,
+    so the delivered objects are framed as before.
+    """
+    full_min, full_max = _world_bounds_for_objects(visible_objects)
+    rule = "page_rectangles"
+    sheet_min, sheet_max = _sheet_bounds_from_page_rects(
+        _imported_page_rects(root_collection), full_min, full_max
+    )
+    if sheet_min is None or sheet_max is None:
+        rule = "page_background"
+        sheet_objects = [
+            obj
+            for obj in visible_objects
+            if str(obj.get("pdf_display_aid", "") or "") == "display_only_page_background"
+        ]
+        sheet_min, sheet_max = (
+            _world_bounds_for_objects(sheet_objects) if sheet_objects else (None, None)
+        )
+    min_v, max_v = _prefer_sheet_frame(full_min, full_max, sheet_min, sheet_max)
+    if sheet_min is None or min_v is not sheet_min:
+        rule = "object_bounds"
+    return min_v, max_v, rule
 
 
 def _sheet_view_radius(min_v, max_v) -> float:
@@ -1716,15 +1861,8 @@ def _focus_view_on_import(
             pass
         visible_objects.append(obj)
 
-    min_v, max_v = _world_bounds_for_objects(visible_objects)
-    sheet_objects = [
-        obj
-        for obj in visible_objects
-        if str(obj.get("pdf_display_aid", "") or "") == "display_only_page_background"
-    ]
-    if sheet_objects:
-        sheet_min, sheet_max = _world_bounds_for_objects(sheet_objects)
-        min_v, max_v = _prefer_sheet_frame(min_v, max_v, sheet_min, sheet_max)
+    # Frame the paper (union of the imported sheets), not the ink on it.
+    min_v, max_v, _frame_rule = _import_view_bounds(root_collection, visible_objects)
 
     view_layer = bpy.context.view_layer
 
@@ -2304,6 +2442,146 @@ def _render_images_only_composite(
     }
 
 
+# Only exact rendered white is unpainted paper. Near-white source marks are
+# still ink and must not be discarded as a blank page.
+_PAGE_RASTER_PAPER_TOLERANCE = 0
+_PAGE_RASTER_PAPER_SAMPLES = bytes(range(255 - _PAGE_RASTER_PAPER_TOLERANCE, 256))
+_PAGE_RASTER_INK_CHUNK = 4 * 1024 * 1024
+
+
+def _pixmap_has_ink(pix) -> Optional[bool]:
+    """Whether a page render shows anything but paper; None when unreadable."""
+    try:
+        if int(getattr(pix, "alpha", 0) or 0):
+            # An alpha byte is not a color sample; this test is for opaque renders.
+            return None
+        samples = getattr(pix, "samples_mv", None)  # no copy of a large page
+        if samples is None:
+            samples = pix.samples
+        view = memoryview(samples)
+    except (AttributeError, RuntimeError, TypeError, ValueError):
+        return None
+    if not len(view):
+        return None
+    # translate() drops every paper-valued sample at C speed; ink is what is
+    # left. Chunks bound the memory and stop a scan at its first ink.
+    for start in range(0, len(view), _PAGE_RASTER_INK_CHUNK):
+        chunk = bytes(view[start:start + _PAGE_RASTER_INK_CHUNK])
+        if chunk.translate(None, _PAGE_RASTER_PAPER_SAMPLES):
+            return True
+    return False
+
+
+def _source_text_bboxes(text_items) -> list:
+    """Source boxes of every text item of a page, as the page raster excludes them."""
+    result = []
+    for item in tuple(text_items or ()):
+        try:
+            int(item.id)
+        except (AttributeError, TypeError, ValueError):
+            continue
+        bbox = getattr(item, "source_bbox_pdf", None)
+        if bbox is not None:
+            result.append(tuple(float(value) for value in bbox))
+    return result
+
+
+def _plan_page_raster(page, page_num: int, import_cfg, image_dir: str, text_items) -> Dict[str, Any]:
+    """Render the page raster a page would get if all of its text is delivered.
+
+    The answer is needed before text and vectors are built: when the raster
+    carries ink it stays, and what is delivered on top of it has to be
+    readable on its opaque white paper, so that page is built in the source
+    colors. ``text_items`` is empty when the import delivers no text.
+    """
+    try:
+        exclusions = _source_text_bboxes(text_items)
+    except (TypeError, ValueError):
+        # A text box that is not numeric: no plan, the page is rendered once
+        # its delivered text is known.
+        return {"rendered": None, "excluded_text_bboxes": []}
+    rendered = _render_page_raster(
+        page, page_num, import_cfg, image_dir, excluded_text_bboxes=exclusions,
+    )
+    return {"rendered": rendered or None, "excluded_text_bboxes": exclusions}
+
+
+def _page_raster_for_delivered_text(
+    page,
+    page_num: int,
+    import_cfg,
+    image_dir: str,
+    *,
+    excluded_text_bboxes,
+    plan: Optional[Dict[str, Any]] = None,
+) -> Optional[dict]:
+    """The page raster without the text that was delivered as objects.
+
+    The planned render is that raster whenever exactly the planned text was
+    delivered; otherwise the page is rendered again for the text that was.
+    """
+    if (
+        plan is not None
+        and plan.get("rendered")
+        and sorted(plan.get("excluded_text_bboxes") or ()) == sorted(excluded_text_bboxes or ())
+    ):
+        return plan["rendered"]
+    return _render_page_raster(
+        page, page_num, import_cfg, image_dir, excluded_text_bboxes=excluded_text_bboxes,
+    )
+
+
+def _page_raster_is_blank(rendered) -> bool:
+    """True only for a render that was measured and showed no ink."""
+    return isinstance(rendered, dict) and rendered.get("has_ink") is False
+
+
+def _page_raster_decision(
+    rendered,
+    *,
+    page_num: int,
+    trigger: str,
+    requested_style: str,
+    page_style: str,
+    paper_for_source_colors: bool,
+    delivered_text_bboxes: int,
+) -> Dict[str, Any]:
+    """Keep or omit one rendered page raster, and say why (import report record)."""
+    has_ink = rendered.get("has_ink") if isinstance(rendered, dict) else None
+    if has_ink is False and not paper_for_source_colors:
+        plane, reason = "omitted", "no_ink_left_after_delivered_text"
+    elif has_ink is False:
+        # Source colors and no white page aid: the blank raster is the paper.
+        plane, reason = "kept", "paper_under_source_colors"
+    elif has_ink is None:
+        plane, reason = "kept", "ink_not_measured"
+    else:
+        plane, reason = "kept", "ink_not_delivered_as_objects"
+    return {
+        "page": int(page_num),
+        "trigger": str(trigger),
+        "has_ink": has_ink,
+        "plane": plane,
+        "reason": reason,
+        "requested_visual_style": str(requested_style),
+        "object_colors": str(page_style),
+        "delivered_text_bboxes_removed": int(delivered_text_bboxes),
+        # Light preview colors on the opaque white paper of a kept raster are
+        # the defect this record exists for.
+        "objects_readable_on_raster": bool(plane == "omitted" or page_style == "source"),
+    }
+
+
+def _record_page_raster_decision(stats: Dict[str, Any], decision: Dict[str, Any]) -> None:
+    """One record per page; a page imported again (resume) replaces its record."""
+    records = stats.setdefault("page_raster_decisions", [])
+    records[:] = [
+        record for record in records
+        if not (isinstance(record, dict) and record.get("page") == decision.get("page"))
+    ]
+    records.append(decision)
+
+
 def _render_page_raster(
     page,
     page_num: int,
@@ -2355,6 +2633,7 @@ def _render_page_raster(
             render_page.apply_redactions(images=0, graphics=0, text=0)
 
         pix = render_page.get_pixmap(matrix=matrix, alpha=False)
+        has_ink = _pixmap_has_ink(pix)
         suffix = "_background" if exclusions else ""
         image_path = os.path.join(
             image_dir,
@@ -2378,6 +2657,7 @@ def _render_page_raster(
         "xref": -1,
         "page_number": page_num,
         "excluded_text_bbox_count": len(exclusions),
+        "has_ink": has_ink,
         "composition": (
             "page_background_without_delivered_text"
             if exclusions
@@ -3222,6 +3502,17 @@ def _apply_overrides(config: ImportConfig, ui_config: dict) -> ImportConfig:
     one of ``labels | text | 3d_text | glyphs | geometry | raster``; the separate
     ``import_text`` toggle controls whether text is imported at all.
     """
+    if "user_scale" in ui_config:
+        scale = ui_config["user_scale"]
+        if isinstance(scale, bool) or not isinstance(scale, (int, float)):
+            raise ValueError("user_scale must be a finite positive number")
+        try:
+            scale = float(scale)
+        except OverflowError as exc:
+            raise ValueError("user_scale must be a finite positive number") from exc
+        if not math.isfinite(scale) or scale <= 0:
+            raise ValueError("user_scale must be a finite positive number")
+        config.user_scale = scale
     if "import_text" in ui_config:
         config.import_text = bool(ui_config["import_text"])
     if "text_mode" in ui_config:
@@ -3308,6 +3599,86 @@ def _page_stack_step(page_height_m: float, arrangement: str, gap_ratio: float) -
     if arrangement == "compact":
         return h * (1.0 + gap_ratio)
     return h * 1.2
+
+
+def _page_stack_offset(
+    cursor_m: float,
+    placed_page_height_m,
+    page_height_m: float,
+    arrangement: str,
+) -> float:
+    """World Y offset of the page about to be placed in the downward stack.
+
+    A placed page covers ``[offset, offset + height]``.  ``cursor_m`` is the
+    offset of the lowest placed page minus ``_page_stack_step`` of that page:
+    the place where an equally tall page starts.  ``placed_page_height_m`` is
+    the height of that lowest placed page (``None`` when no page is above, or
+    when an older resume checkpoint did not record it).
+
+    The gap belongs between facing edges: the top edge of this page must sit
+    the arrangement gap below the bottom edge of the page above.  Moving the
+    cursor by ``placed height - this height`` does exactly that, so a taller
+    page starts lower instead of reaching up into the page above, and a
+    shorter page no longer leaves a wider gap.
+
+    Every page is placed below the one before it, so the last placed page is
+    also the lowest extent of everything placed so far.
+
+    For equal heights the correction is exactly ``0.0`` and ``x + 0.0`` is
+    ``x`` bit for bit, so equal-size stacks keep their previous positions.
+    """
+    cursor = float(cursor_m)
+    if arrangement == "overlay" or placed_page_height_m is None:
+        return cursor
+    placed = max(0.001, float(placed_page_height_m or 0.0))
+    current = max(0.001, float(page_height_m or 0.0))
+    return cursor + (placed - current)
+
+
+
+def _legacy_resume_stack_height(doc, state, *, source_sha256, config_sha256, scale):
+    """Recover missing stack height from an authenticated original PDF page only."""
+    if state.get("source_sha256") != source_sha256 or state.get("config_sha256") != config_sha256:
+        raise ValueError("legacy stack migration requires the authenticated PDF and import settings")
+    requested = list(state.get("requested_pages") or ())
+    completed = list(state.get("completed_pages") or ())
+    if not completed:
+        return None, None
+    if (
+        any(type(page) is not int or page < 1 or page > doc.page_count for page in requested + completed)
+        or requested != sorted(set(requested))
+        or completed != requested[:len(completed)]
+        or list(state.get("remaining_pages") or ()) != requested[len(completed):]
+    ):
+        raise ValueError("legacy stack migration requires a completed page prefix")
+    scale = float(scale)
+    if not math.isfinite(scale) or scale <= 0:
+        raise ValueError("legacy stack migration requires a finite positive source scale")
+    page_number = completed[-1]
+    page = doc.load_page(page_number - 1)
+    # Match extract_page: rect is the visible CropBox, UserUnit and Rotate extent.
+    rect = page.rect
+    dimensions = [float(rect.width), float(rect.height)]
+    if any(not math.isfinite(value) or value <= 0 for value in dimensions):
+        raise ValueError("legacy stack migration has invalid source page dimensions")
+    height = (dimensions[1] * _MM_PER_PT * scale) * _MM_TO_M
+    if not math.isfinite(height) or height <= 0:
+        raise ValueError("legacy stack migration has invalid model height")
+    boxes = {name: [float(value) for value in getattr(page, name)]
+             for name in ("rect", "cropbox", "mediabox")}
+    if any(len(box) != 4 or any(not math.isfinite(value) for value in box) for box in boxes.values()):
+        raise ValueError("legacy stack migration has invalid source box metadata")
+    return height, {
+        "method": "authenticated_completed_page_rect",
+        "source_sha256": source_sha256,
+        "config_sha256": config_sha256,
+        "completed_page": page_number,
+        "source_boxes_points": boxes,
+        "source_rotation_degrees": int(page.rotation),
+        "user_scale": scale,
+        "stacked_page_height_m": height,
+        "existing_objects_moved": False,
+    }
 
 
 def _stack_page_objects(objects, stack_offset_m: float) -> int:
@@ -3657,7 +4028,10 @@ def import_pdf(
         filepath: Absolute path to the PDF file.
         config: Dict with keys like 'mode', 'pages', 'text_mode',
                 'import_text', 'detect_arcs', 'make_faces',
-                'group_by_color', 'map_dashes'.
+                'group_by_color', 'map_dashes', 'user_scale'.
+                'user_scale' is a finite positive number multiplying the
+                PDF-to-model dimensions; it defaults to 1.0 and applies to
+                extraction, page placement, and resume checkpoints.
         progress_callback: Optional callable(progress_float, message_str).
         context: Optional bpy.context for Blender window-manager progress bar.
                  Pass None for CLI/headless mode.
@@ -3931,11 +4305,24 @@ def import_pdf(
             )
 
         # Multi-page stacking: shift each page downward by accumulated heights.
-        _page_stack_offset_m = float(
+        # ``_page_stack_cursor_m`` is where a page as tall as the last placed
+        # one would start; ``_page_stack_offset`` corrects it for the height of
+        # the page actually being placed so page rectangles never intersect.
+        _page_stack_cursor_m = float(
             (resume_state or {}).get("next_stack_offset_m", 0.0) or 0.0
         )
+        _stacked_page_height_m = (resume_state or {}).get("stacked_page_height_m")
+        if _stacked_page_height_m is not None:
+            _stacked_page_height_m = float(_stacked_page_height_m)
         _page_arrangement = _normalize_page_arrangement(config.get("page_arrangement"))
         _page_gap_ratio = _normalize_page_gap_ratio(config.get("page_gap_ratio"))
+        if resume_state is not None and _stacked_page_height_m is None and _page_arrangement != "overlay":
+            _stacked_page_height_m, migration = _legacy_resume_stack_height(
+                doc, resume_state, source_sha256=source_sha256,
+                config_sha256=config_sha256, scale=import_cfg.user_scale,
+            )
+            if migration is not None:
+                total_stats["resume_stack_migration"] = migration
 
         use_streaming = len(page_indices) > 1 or resume_state is not None
         page_numbers = [idx + 1 for idx in page_indices]
@@ -3968,7 +4355,8 @@ def import_pdf(
                 requested_pages=requested_page_numbers,
                 completed_pages=completed_pages,
                 root_collection=str(getattr(root_col, "name", "") or ""),
-                next_stack_offset_m=_page_stack_offset_m,
+                next_stack_offset_m=_page_stack_cursor_m,
+                stacked_page_height_m=_stacked_page_height_m,
                 aggregate_stats=aggregate_stats,
                 text_delivery_items=delivery_items,
             )
@@ -4202,6 +4590,55 @@ def import_pdf(
                     pass
                 _add_phase_ms("recognition_ms", t_phase)
 
+            # 9e2. Page raster plan. A page raster is opaque white paper, so the
+            # text and vectors of a page whose raster carries ink are built in
+            # the source colors; that has to be known before either is built.
+            page_visual_style = visual_style
+            page_raster_trigger = ""
+            page_raster_plan = None
+            early_image_placements = None
+            early_image_error = None
+            if not import_cfg.ignore_images:
+                t_phase = time.perf_counter()
+                if import_mode == "raster":
+                    page_raster_trigger = "raster_page"
+                elif import_cfg.raster_fallback and (
+                    not page_data.primitives or _looks_like_page_frame_only(page_data)
+                ):
+                    # The sparse-page fallback applies to a page without
+                    # embedded images: read them here, once, for step 9i.
+                    try:
+                        early_image_placements = _extract_image_placements(
+                            doc, page, page_num, import_cfg, image_dir)
+                    except EmbeddedImageDeliveryError as error:
+                        early_image_error = error
+                    if early_image_error is None and not early_image_placements:
+                        page_raster_trigger = "sparse_vector_shell"
+                if page_raster_trigger:
+                    page_text_to_build = (
+                        list(page_data.text_items or ())
+                        if import_cfg.import_text and import_cfg.text_mode != "none"
+                        else []
+                    )
+                    page_raster_plan = _plan_page_raster(
+                        page, page_num, import_cfg, image_dir, page_text_to_build)
+                    if (
+                        page_raster_plan["rendered"]
+                        and not _page_raster_is_blank(page_raster_plan["rendered"])
+                    ):
+                        page_visual_style = "source"
+                        # A scan delivers nothing on top of its raster: say nothing.
+                        if visual_style != "source" and (
+                            page_text_to_build
+                            or (import_mode != "raster" and page_data.primitives)
+                        ):
+                            _progress(
+                                _page_progress(i, 0.56),
+                                f"Auto-mode: page {page_num} keeps a page raster — "
+                                "text and vectors use source colors on its white paper",
+                            )
+                _add_phase_ms("images_ms", t_phase)
+
             # 9f. Create page collection
             page_col = bpy.data.collections.new(f"PDF_Page_{page_num}")
             root_col.children.link(page_col)
@@ -4215,6 +4652,7 @@ def import_pdf(
             compound_order_plans = []
             if import_mode != "raster":
                 page_builder_config = dict(builder_config)
+                page_builder_config["visual_style"] = page_visual_style
                 from .opaque_rectangle_proof import plan_opaque_rectangles
                 from .opaque_rectangle_order import bind_rectangle_plans
 
@@ -4361,7 +4799,7 @@ def import_pdf(
                         page_data.text_items,
                         page_col,
                         page_num,
-                        visual_style=visual_style,
+                        visual_style=page_visual_style,
                         z_offset_m=text_z_offset_m,
                         strict_text_fidelity=import_cfg.strict_text_fidelity,
                         text_mode=import_cfg.text_mode,
@@ -4422,16 +4860,31 @@ def import_pdf(
                 _progress(_page_progress(i, 0.92), f"Building images for page {page_num}...")
                 t_phase = time.perf_counter()
                 placements = []
+                page_raster_decision = None
+                page_raster_decision_inputs = dict(
+                    page_num=page_num,
+                    requested_style=visual_style,
+                    page_style=page_visual_style,
+                    # Source colors without the white page aid: a blank page
+                    # raster is the only paper under them, so it stays.
+                    paper_for_source_colors=(
+                        visual_style == "source"
+                        and not bool(config.get("white_page_background", True))
+                    ),
+                    delivered_text_bboxes=len(excluded_text_bboxes),
+                )
                 if import_mode == "raster":
-                    rendered = _render_page_raster(
+                    rendered = _page_raster_for_delivered_text(
                         page,
                         page_num,
                         import_cfg,
                         image_dir,
                         excluded_text_bboxes=excluded_text_bboxes,
+                        plan=page_raster_plan,
                     )
                     if rendered:
-                        placements.append(rendered)
+                        page_raster_decision = _page_raster_decision(
+                            rendered, trigger="raster_page", **page_raster_decision_inputs)
                     else:
                         _record_raster_delivery_failure(
                             total_stats["raster_delivery_failures"],
@@ -4445,7 +4898,13 @@ def import_pdf(
                         )
                 else:
                     try:
-                        placements = _extract_image_placements(doc, page, page_num, import_cfg, image_dir)
+                        if early_image_error is not None:
+                            raise early_image_error
+                        placements = (
+                            early_image_placements
+                            if early_image_placements is not None
+                            else _extract_image_placements(doc, page, page_num, import_cfg, image_dir)
+                        )
                     except EmbeddedImageDeliveryError as error:
                         _record_raster_delivery_failure(
                             total_stats["raster_delivery_failures"], page_num=page_num,
@@ -4459,20 +4918,24 @@ def import_pdf(
                         and not placements
                         and (not page_data.primitives or _looks_like_page_frame_only(page_data))
                     ):
-                        _progress(
-                            _page_progress(i, 0.93),
-                            f"Auto-mode: sparse vector shell on page {page_num} — raster fallback",
-                        )
-                        rendered = _render_page_raster(
+                        rendered = _page_raster_for_delivered_text(
                             page,
                             page_num,
                             import_cfg,
                             image_dir,
                             excluded_text_bboxes=excluded_text_bboxes,
+                            plan=page_raster_plan,
                         )
                         if rendered:
-                            placements.append(rendered)
-                        else:
+                            page_raster_decision = _page_raster_decision(
+                                rendered, trigger="sparse_vector_shell",
+                                **page_raster_decision_inputs)
+                        if page_raster_decision is None or page_raster_decision["plane"] == "kept":
+                            _progress(
+                                _page_progress(i, 0.93),
+                                f"Auto-mode: sparse vector shell on page {page_num} — raster fallback",
+                            )
+                        if not rendered:
                             _record_raster_delivery_failure(
                                 total_stats["raster_delivery_failures"],
                                 page_num=page_num,
@@ -4483,6 +4946,27 @@ def import_pdf(
                                 _page_progress(i, 0.94),
                                 f"Raster delivery failed on page {page_num}; see import report.",
                             )
+
+                if page_raster_decision is not None:
+                    _record_page_raster_decision(total_stats, page_raster_decision)
+                    if page_raster_decision["plane"] == "kept":
+                        placements.append(rendered)
+                        if not page_raster_decision["objects_readable_on_raster"]:
+                            # Ink that the plan could not foresee (a text item
+                            # failed after the page was styled). Not hidden:
+                            # the report carries the same record.
+                            _progress(
+                                _page_progress(i, 0.93),
+                                f"Page {page_num} keeps a page raster under preview-colored "
+                                "text; see page_raster_decisions in the import report.",
+                            )
+                    else:
+                        # Everything visible was delivered as text or vectors.
+                        _progress(
+                            _page_progress(i, 0.93),
+                            f"Auto-mode: page {page_num} has no ink left under its "
+                            "delivered text — no page raster",
+                        )
 
                 for placement in placements:
                     image_obj = _create_image_plane(
@@ -4607,8 +5091,19 @@ def import_pdf(
             _add_phase_ms('page_background_ms', t_background)
 
             # 9j. Multi-page stacking: shift this page's collection downward
+            page_height_m = page_data.height * _MM_TO_M
+            _page_stack_offset_m = _page_stack_offset(
+                _page_stack_cursor_m,
+                _stacked_page_height_m,
+                page_height_m,
+                _page_arrangement,
+            )
+            _page_moved_m = 0.0
             if len(requested_page_indices) > 1 and _page_stack_offset_m != 0.0:
                 _stack_page_objects(page_col.all_objects, _page_stack_offset_m)
+                _page_moved_m = _page_stack_offset_m
+            # The sheet the opening view frames: this page where it now lies.
+            _record_page_rect(page_col, page_data.width, page_data.height, _page_moved_m)
             final_text_failures = _reverify_text_delivery_after_stack(
                 getattr(import_cfg, "_text_delivery_records", ()),
                 page_number=page_num,
@@ -4622,13 +5117,13 @@ def import_pdf(
                     reason="Final stacked text verification failed", stage="stacked_final_state")
                 break
             text_count = max(0, int(text_count) - len(final_text_failures))
-            # Advance offset for the next page (page_data.height is in mm)
-            page_height_m = page_data.height * _MM_TO_M
-            _page_stack_offset_m -= _page_stack_step(
+            # Advance the cursor past this page (page_data.height is in mm)
+            _page_stack_cursor_m = _page_stack_offset_m - _page_stack_step(
                 page_height_m,
                 _page_arrangement,
                 _page_gap_ratio,
             )
+            _stacked_page_height_m = page_height_m
 
             # 9k. Accumulate stats
             total_stats["pages_imported"] += 1

@@ -1,6 +1,8 @@
 """Visible source ink and native depth must survive page viewport clipping."""
 import importlib.util
 from pathlib import Path
+import struct
+from types import SimpleNamespace
 
 import pymupdf
 import pytest
@@ -60,3 +62,75 @@ def test_source_clipped_to_zero_ink_stays_an_explicit_verified_outcome(monkeypat
     proof = clip.verify_clipped_ink(object(), object(), (0, 0, 1, 1), 0, (0, .1))
     assert proof["visible_ink_empty"] is True
     assert proof["visible_ink_area_verified"] is True
+
+
+def _f32(value):
+    return struct.unpack('<f', struct.pack('<f', value))[0]
+
+
+class _Float32Matrix(list):
+    def __matmul__(self, point):
+        return tuple(_f32(sum(self[row][column] * point[column] for column in range(3))
+                          + self[row][3]) for row in range(3))
+
+
+def _tiny_evaluated_surface(y, *, scale_x=1, height=.0005):
+    # Fictional front/back caps with the same coordinate scale as thin clipped
+    # glyphs. This is a real evaluator boundary, not a stand-in returned proof.
+    vertices = [SimpleNamespace(co=tuple(map(_f32, p))) for p in
+                [(0, 0, 0), (.001, 0, 0), (.001, height, 0), (0, height, 0)]]
+    triangles = [SimpleNamespace(vertices=indices) for indices in
+                 [(0, 1, 2), (0, 2, 3), (2, 1, 0), (3, 2, 0)]]
+    matrix = _Float32Matrix([[_f32(scale_x), 0., 0., 0.], [0., 1., 0., _f32(y)],
+                            [0., 0., 1., .2], [0., 0., 0., 1.]])
+    mesh = SimpleNamespace(vertices=vertices, loop_triangles=triangles, calc_loop_triangles=lambda: None)
+    cleared = []
+    evaluated = SimpleNamespace(matrix_world=matrix, to_mesh=lambda: mesh, to_mesh_clear=lambda: cleared.append(True))
+    obj = SimpleNamespace(evaluated_get=lambda _graph: evaluated)
+    bpy = SimpleNamespace(context=SimpleNamespace(evaluated_depsgraph_get=lambda: object()))
+    return obj, bpy, evaluated, mesh, cleared
+
+
+@pytest.mark.parametrize('y', [.1430920660495758, .1430920660495758 - 5.36702, -50., 50.])
+def test_tiny_native_cap_area_survives_stack_translation(y):
+    obj, bpy, _evaluated, _mesh, cleared = _tiny_evaluated_surface(y)
+    expected = 2 * _f32(.001) * _f32(.0005)
+    proof = clip.verify_clipped_ink(obj, bpy, (-.01, y - .01, .01, y + .01), expected, (.2, .2))
+    assert proof['visible_projected_area_m2'] == pytest.approx(expected, rel=1e-10, abs=0)
+    assert cleared == [True]
+
+
+def test_old_float32_world_projection_rejects_translation_only():
+    # The old matrix@vertex result loses information before polygon_area sees it.
+    obj, bpy, evaluated, mesh, _cleared = _tiny_evaluated_surface(.1430920660495758 - 5.36702)
+    rounded = [evaluated.matrix_world @ v.co for v in mesh.vertices]
+    old_area = sum(clip.polygon_area([rounded[i] for i in t.vertices]) for t in mesh.loop_triangles)
+    expected = 2 * _f32(.001) * _f32(.0005)
+    assert abs(old_area - expected) > max(1e-12, expected * 2e-4)
+    assert clip.verify_clipped_ink(obj, bpy, (-.01, -5.24, .01, -5.20), expected, (.2, .2))['visible_ink_area_verified']
+
+
+@pytest.mark.parametrize('scale_x,height', [(1.01, .0005), (1., .0004)])
+def test_large_stack_still_rejects_real_scale_or_clip_change(scale_x, height):
+    obj, bpy, _evaluated, _mesh, cleared = _tiny_evaluated_surface(-5.2239, scale_x=scale_x, height=height)
+    with pytest.raises(ValueError, match='visible source ink area'):
+        clip.verify_clipped_ink(obj, bpy, (-.01, -5.24, .01, -5.20), 2 * _f32(.001) * _f32(.0005), (.2, .2))
+    assert cleared == [True]
+
+
+def test_native_mesh_changes_are_read_again_without_cached_proof():
+    obj, bpy, _evaluated, mesh, cleared = _tiny_evaluated_surface(-5.2239)
+    expected = 2 * _f32(.001) * _f32(.0005)
+    clip.verify_clipped_ink(obj, bpy, (-.01, -5.24, .01, -5.20), expected, (.2, .2))
+    mesh.vertices[2].co = (_f32(.0008), _f32(.0005), 0.)
+    with pytest.raises(ValueError, match='visible source ink area'):
+        clip.verify_clipped_ink(obj, bpy, (-.01, -5.24, .01, -5.20), expected, (.2, .2))
+    assert cleared == [True, True]
+
+
+def test_evaluator_clears_mesh_after_nonfinite_affine_failure():
+    obj, bpy, evaluated, _mesh, cleared = _tiny_evaluated_surface(0.)
+    evaluated.matrix_world[0][0] = float('inf')
+    with pytest.raises(ValueError, match='non-finite geometry'):
+        clip._evaluated_ink(obj, bpy)
+    assert cleared == [True]
