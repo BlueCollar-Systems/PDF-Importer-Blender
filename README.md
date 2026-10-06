@@ -11,7 +11,7 @@ Powered by the pdfcadcore shared extraction library and PyMuPDF.
 
 - **4 Import Modes** (BCS-ARCH-001) -- Auto (default, picks strategy per page), Vector, Raster, Hybrid
 - **6 Text Representation Options** -- Labels, Text, 3D Text (default), Glyphs, Geometry, and Raster (orthogonal to page strategy)
-- **Maximum fidelity by default** -- no quality tiers, no fast-mode compromises
+- **Maximum fidelity by default** -- Source Accurate colors on first use; optional preview styles and saved preferences remain available
 - **Arc & Circle Detection** -- Reconstruct true arcs and circles from polyline approximations
 - **OCG Layer Support** -- Map PDF Optional Content Groups to Blender sub-collections
 - **Color Grouping** -- Organize geometry into sub-collections by stroke color
@@ -70,6 +70,9 @@ After enabling the addon:
 4. Click **Import PDF Vector**
 
 Geometry is grouped into collections by page and (optionally) by source layer or color.
+Source Accurate is the initial visual style and preserves PDF colors against a
+separately hideable white sheet. Blueprint and High Contrast are optional previews;
+any previously saved default visual style is respected.
 
 Long imports publish phase/page/object progress in Blender's status area and in
 `import_report.json`. The report includes a representation-aware complexity
@@ -175,6 +178,10 @@ Run batch import summaries across a folder of PDFs:
 ```bash
 python -m blender_pdf_vector_importer.batch_cli "C:\path\to\pdfs" --recursive --mode auto --pages all --json batch_report.json
 ```
+
+Recursive batch summaries preserve the source subfolders inside `--summary-dir`,
+so equally named drawings from different jobs cannot overwrite one another.
+A summary write failure is reported once as a failed file; the next file continues.
 
 ## Project Structure
 
