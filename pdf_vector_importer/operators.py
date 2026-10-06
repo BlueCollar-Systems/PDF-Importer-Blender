@@ -191,7 +191,7 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
         name="Visual Style",
         description="Display style for imported vectors/text",
         items=_VISUAL_STYLE_ITEMS,
-        default="blueprint",
+        default="source",
     )
 
     white_page_background: BoolProperty(  # type: ignore[assignment]

@@ -118,7 +118,7 @@ class PDFVectorImporterPreferences(bpy.types.AddonPreferences):
             ("blueprint", "Blueprint Preview", "Crisp cyan linework for better readability"),
             ("high_contrast", "High Contrast", "Bright linework and dark knockouts for dark viewports"),
         ],
-        default="high_contrast",
+        default="source",
     )
 
     @property

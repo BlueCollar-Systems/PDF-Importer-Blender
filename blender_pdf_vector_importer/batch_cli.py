@@ -81,12 +81,15 @@ def main() -> int:
         try:
             run = run_import(str(pdf), mode=args.mode, overrides=overrides)
             summary = run.extraction.summary()
-            aggregate["passed"] += 1
             entry = {"pdf": str(pdf), "status": "PASS", "summary": summary}
             if summary_dir is not None:
-                out_file = summary_dir / f"{pdf.stem}.summary.json"
+                # Mirror the source subfolders so drawings with the same name
+                # keep separate reports during a recursive batch.
+                out_file = summary_dir / pdf.relative_to(root).with_suffix(".summary.json")
+                out_file.parent.mkdir(parents=True, exist_ok=True)
                 out_file.write_text(json.dumps(summary, indent=2), encoding="utf-8")
                 entry["summary_json"] = str(out_file)
+            aggregate["passed"] += 1
             aggregate["results"].append(entry)
         except Exception as exc:  # noqa: BLE001
             aggregate["failed"] += 1
