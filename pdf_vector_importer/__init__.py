@@ -36,6 +36,9 @@ def register():
     bpy.utils.register_class(preferences.PDFVectorImporterPreferences)
     bpy.utils.register_class(operators.IMPORT_OT_pdf_vector_cancel)
     bpy.utils.register_class(operators.IMPORT_OT_pdf_vector)
+    # Drag-and-drop import exists only in Blender 4.1+; older versions skip it.
+    if operators.PDFVEC_FH_import is not None:
+        bpy.utils.register_class(operators.PDFVEC_FH_import)
     bpy.types.TOPBAR_MT_file_import.append(operators.menu_func_import)
 
     print_diagnostics()
@@ -55,6 +58,8 @@ def unregister():
     import bpy
 
     bpy.types.TOPBAR_MT_file_import.remove(operators.menu_func_import)
+    if operators.PDFVEC_FH_import is not None:
+        bpy.utils.unregister_class(operators.PDFVEC_FH_import)
     bpy.utils.unregister_class(operators.IMPORT_OT_pdf_vector)
     bpy.utils.unregister_class(operators.IMPORT_OT_pdf_vector_cancel)
     bpy.utils.unregister_class(preferences.PDFVectorImporterPreferences)
