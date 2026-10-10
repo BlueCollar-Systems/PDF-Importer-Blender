@@ -1,0 +1,103 @@
+[
+  {
+    "host": "5.2.2 LTS",
+    "python": "3.13.13 (main, May  8 2026, 12:37:03) [MSC v.1944 64 bit (AMD64)]"
+  },
+  {
+    "case": "text",
+    "pages": 1,
+    "text_failed": 0,
+    "text_fallback": 0,
+    "geometry_issues": 0,
+    "raster_failures": 0,
+    "types": [
+      "CURVE",
+      "FONT",
+      "MESH"
+    ],
+    "report": "C:\\TMP\\pdf-import-audit-20261010\\5.2.2 LTS-text.json"
+  },
+  {
+    "case": "3d_text",
+    "pages": 1,
+    "text_failed": 0,
+    "text_fallback": 0,
+    "geometry_issues": 0,
+    "raster_failures": 0,
+    "types": [
+      "CURVE",
+      "FONT",
+      "MESH"
+    ],
+    "report": "C:\\TMP\\pdf-import-audit-20261010\\5.2.2 LTS-3d_text.json"
+  },
+  {
+    "case": "glyphs",
+    "pages": 1,
+    "text_failed": 0,
+    "text_fallback": 0,
+    "geometry_issues": 0,
+    "raster_failures": 0,
+    "types": [
+      "CURVE",
+      "MESH"
+    ],
+    "report": "C:\\TMP\\pdf-import-audit-20261010\\5.2.2 LTS-glyphs.json"
+  },
+  {
+    "case": "geometry",
+    "pages": 1,
+    "text_failed": 0,
+    "text_fallback": 0,
+    "geometry_issues": 0,
+    "raster_failures": 0,
+    "types": [
+      "CURVE",
+      "MESH"
+    ],
+    "report": "C:\\TMP\\pdf-import-audit-20261010\\5.2.2 LTS-geometry.json"
+  },
+  {
+    "case": "raster",
+    "pages": 1,
+    "text_failed": 0,
+    "text_fallback": 0,
+    "geometry_issues": 0,
+    "raster_failures": 0,
+    "types": [
+      "CURVE",
+      "MESH"
+    ],
+    "report": "C:\\TMP\\pdf-import-audit-20261010\\5.2.2 LTS-raster.json"
+  },
+  {
+    "case": "labels",
+    "pages": 1,
+    "text_failed": 0,
+    "text_fallback": 1,
+    "geometry_issues": 0,
+    "raster_failures": 0,
+    "types": [
+      "CURVE",
+      "FONT",
+      "MESH"
+    ],
+    "report": "C:\\TMP\\pdf-import-audit-20261010\\5.2.2 LTS-labels.json"
+  },
+  {
+    "case": "invalid-pages",
+    "message": "Page out of range: 999. This PDF has 1 page(s).",
+    "scene_unchanged": true
+  },
+  {
+    "case": "private-shop-drawing",
+    "pages": 1,
+    "primitives": 89,
+    "text": 13,
+    "text_failed": 0,
+    "text_fallback": 0,
+    "geometry_issues": 0,
+    "raster_failures": 0,
+    "report": "C:\\TMP\\pdf-import-audit-20261010\\5.2.2 LTS-shop.json"
+  }
+]

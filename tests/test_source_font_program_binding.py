@@ -316,3 +316,81 @@ def test_nonembedded_custom_font_keeps_original_absence_proof():
         assert failure.reason == "embedded_font_asset_build_failed"
         assert failure.detail == "embedded font stream is empty"
         assert failure.proof_category == "source_specific_impossibility"
+
+
+@pytest.mark.parametrize("in_form", [False, True])
+def test_same_unicode_different_glyph_ids_bind_each_actual_program(deterministic_exact_font, in_form):
+    from fontTools.ttLib.reorderGlyphs import reorderGlyphs
+
+    source = fitz.open()
+    page = source.new_page(width=240, height=160)
+    for index, resource in enumerate(("F1", "F2")):
+        font = TTFont(deterministic_exact_font)
+        if index:
+            order = font.getGlyphOrder()
+            a = order.index(font.getBestCmap()[ord("A")])
+            b = order.index(font.getBestCmap()[ord("B")])
+            order[a], order[b] = order[b], order[a]
+            reorderGlyphs(font, order)
+        program = BytesIO()
+        font.save(program)
+        font.close()
+        page.insert_font(fontname=resource, fontbuffer=program.getvalue())
+        page.insert_text((20, 40 + 40 * index), "A", fontname=resource, fontsize=16)
+    pdf = fitz.open()
+    if in_form:
+        page = pdf.new_page(width=300, height=200)
+        page.show_pdf_page(fitz.Rect(10, 10, 250, 170), source, 0)
+    else:
+        pdf.insert_pdf(source)
+        page = pdf[0]
+    traces = page.get_texttrace()
+    expected_glyphs = [span["chars"][0][1] for span in traces]
+    assert len(set(expected_glyphs)) == 2
+    assert len({span["font"] for span in traces}) == 1
+    items = extract_page(page, 1).text_items
+    assert len(items) == 2
+    assert all(item.font_failure is None for item in items)
+    assert len({item.font_asset.source_sha256 for item in items}) == 2
+    assert [item.source_char_layout[0].glyph_id for item in items] == expected_glyphs
+    for item in items:
+        asset = item.font_asset
+        char = item.source_char_layout[0]
+        assert char.source_font_program_sha256 == asset.source_sha256
+        assert char.source_font_binding_verified
+        with TTFont(BytesIO(asset.usable_bytes)) as font:
+            assert font.getGlyphID(font.getBestCmap()[ord("A")]) == char.glyph_id
+    source.close()
+    pdf.close()
+
+
+def test_partial_trace_census_never_borrows_another_same_name_program_glyph():
+    from pdfcadcore.embedded_fonts import _page_program_glyph_maps
+    from pdfcadcore.primitive_extractor import _character_layout, _trace_glyph_queues
+
+    def char(text, x, digest):
+        return {"c": text, "origin": (x, 0), "bbox": (x, 0, x + 2, 10),
+                "quad": ((x, 0), (x + 2, 0), (x + 2, 10), (x, 10)),
+                "source_font_program_sha256": digest,
+                "source_font_binding_verified": True,
+                "source_font_character_codepoint": ord(text)}
+
+    unresolved = char("A", 10, "a" * 64)
+    proven = char("B", 20, "a" * 64)
+    other = char("A", 0, "b" * 64)
+    span = {"font": "Same", "chars": [unresolved, proven, other]}
+    raw = {"blocks": [{"type": 0, "lines": [{"spans": [span]}]}]}
+    trace = {"font": "Same", "chars": [(65, 8, (0, 0)), (65, 3, (10, 0)),
+                                             (65, 3, (10, 0)), (66, 4, (20, 0))]}
+    page = SimpleNamespace(get_texttrace=lambda: [trace])
+    maps, ambiguous = _page_program_glyph_maps(page, raw)
+    assert maps == {"a" * 64: {66: 4}, "b" * 64: {65: 8}}
+    assert not ambiguous
+    assert unresolved["source_font_binding_verified"] is False
+    layouts = _character_layout({}, span, "Same", lambda x, y: (x, y), _trace_glyph_queues(page))
+    assert layouts[0].glyph_id is None
+    assert not layouts[0].source_font_binding_verified
+    assert layouts[1].glyph_id == 4 and layouts[2].glyph_id == 8
+    catalog = EmbeddedFontCatalog(1, {}, {})
+    asset, failure = catalog.resolve_span("Same", [unresolved])
+    assert asset is None and failure.reason == "incomplete_source_font_character_binding"
