@@ -2738,3 +2738,26 @@ def test_embedded_soft_mask_delivery_accounting_and_failure_report(monkeypatch, 
         assert planes == [placement] and not discarded
         assert stats["image_soft_mask_alignments"] == [{"page": 1, "xref": 17, **alignment}]
     assert reports == [stats]
+
+
+def test_alpha_image_mix_shader_still_counts_as_placed():
+    from pdf_vector_importer.raster_geometry import shader_reaches_material_output
+
+    class Node:
+        def __init__(self, kind):
+            self.type = kind
+
+    class Link:
+        def __init__(self, source, target):
+            self.from_node = source
+            self.to_node = target
+
+    shader = Node("BSDF_PRINCIPLED")
+    output = Node("OUTPUT_MATERIAL")
+    assert shader_reaches_material_output([shader, output], [Link(shader, output)])
+    mix = Node("MIX_SHADER")
+    assert shader_reaches_material_output(
+        [shader, mix, output],
+        [Link(shader, mix), Link(mix, output)],
+    )
+    assert not shader_reaches_material_output([shader, output], [])

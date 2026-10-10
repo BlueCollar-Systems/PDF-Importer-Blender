@@ -3126,20 +3126,15 @@ def _attempt_raster_impl(
     shader_nodes = [
         node for node in nodes if str(getattr(node, "type", "")) == "BSDF_PRINCIPLED"
     ]
-    output_nodes = [
-        node for node in nodes if str(getattr(node, "type", "")) == "OUTPUT_MATERIAL"
-    ]
     texture_bound = any(getattr(node, "image", None) is image for node in texture_nodes)
     texture_to_shader = any(
         getattr(link, "from_node", None) in texture_nodes
         and getattr(link, "to_node", None) in shader_nodes
         for link in links
     )
-    shader_to_output = any(
-        getattr(link, "from_node", None) in shader_nodes
-        and getattr(link, "to_node", None) in output_nodes
-        for link in links
-    )
+    from .raster_geometry import shader_reaches_material_output
+
+    shader_to_output = shader_reaches_material_output(nodes, links)
     verification_evidence["raster_texture_image_bound"] = texture_bound
     verification_evidence["raster_texture_to_shader_linked"] = texture_to_shader
     verification_evidence["raster_shader_to_output_linked"] = shader_to_output

@@ -136,6 +136,37 @@ def _span_paints(span) -> bool:
         return True
 
 
+def _whitespace_span_has_no_area(span, chars) -> bool:
+    """A whitespace-only span with no paintable extent is not a letter.
+
+    Type 3 word-spacing can emit a space whose box has no width. That span
+    cannot be placed as text or as a raster crop, and the failure used to
+    cancel the page even though the glyphs were already vectors.
+    """
+    pieces = [str(char.get("c", "") or "") for char in chars] if chars else []
+    text = "".join(pieces) if pieces else str(span.get("text", "") or "")
+    if not text.isspace():
+        return False
+    boxes = []
+    bbox = span.get("bbox") if hasattr(span, "get") else None
+    if bbox is not None:
+        boxes.append(bbox)
+    for char in chars or ():
+        char_bbox = char.get("bbox") if hasattr(char, "get") else None
+        if char_bbox is not None:
+            boxes.append(char_bbox)
+    if not boxes:
+        return False
+    for box in boxes:
+        try:
+            x0, y0, x1, y1 = (float(value) for value in box)
+        except (TypeError, ValueError):
+            return False
+        if abs(x1 - x0) > 1e-3 and abs(y1 - y0) > 1e-3:
+            return False
+    return True
+
+
 def _span_alpha(span) -> Optional[float]:
     """PyMuPDF text spans carry ``alpha`` as an int 0-255 (drawings use 0.0-1.0).
 
@@ -1043,6 +1074,8 @@ def _extract_text(
                 if text == "":
                     continue
                 if not _span_paints(span):
+                    continue
+                if _whitespace_span_has_no_area(span, raw_chars):
                     continue
 
                 x, y = _span_baseline_pdf(span, line)

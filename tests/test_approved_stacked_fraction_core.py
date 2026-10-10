@@ -42,10 +42,11 @@ from pdfcadcore import primitive_extractor  # noqa: E402
 # October 10: a span is placed per character only when every visible character
 # has a text-trace glyph id. Pattern-filled text without those ids stays one
 # editable object instead of cancelling the page. Render mode 3 (no fill or
-# stroke bits) is not imported; that hidden OCR layer is not ink. Fraction
+# stroke bits) is not imported; that hidden OCR layer is not ink. A
+# whitespace-only span whose box has no area is not ink either. Fraction
 # predicates, scale, and source-character proofs are unchanged.
 REVIEWED_COMBINED_SUCCESSOR_SHA256 = (
-    "de59a78625e61b8568612a578ca3ff4131720e47cfb874afffceed9fdc200636"
+    "64760122e5bc54a0355a8e1a94d4e1c44b7cd7a2545003d8ec81a677e7b5e161"
 )
 
 

@@ -120,6 +120,23 @@ def test_invisible_text_render_mode_3_is_not_imported(tmp_path):
     assert "VISIBLE" in texts
 
 
+def test_zero_area_whitespace_span_is_not_ink():
+    # A Type 3 word-spacing space can be a zero-width box. It is not a letter,
+    # and trying to raster it cancels the page.
+    assert PE._whitespace_span_has_no_area(
+        {"bbox": (20, 10, 20, 20), "text": " "},
+        ({"c": " ", "bbox": (20, 10, 20, 20)},),
+    )
+    assert not PE._whitespace_span_has_no_area(
+        {"bbox": (20, 10, 26, 20), "text": " "},
+        ({"c": " ", "bbox": (20, 10, 26, 20)},),
+    )
+    assert not PE._whitespace_span_has_no_area(
+        {"bbox": (10, 10, 40, 20), "text": "A"},
+        ({"c": "A", "bbox": (10, 10, 20, 20)},),
+    )
+
+
 def test_span_alpha_ignores_unpainted_render_modes():
     assert PE._span_alpha({"alpha": 0, "char_flags": 0}) is None
     assert PE._span_alpha({"alpha": 102, "char_flags": 16}) is not None
