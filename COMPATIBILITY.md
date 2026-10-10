@@ -110,9 +110,13 @@ confirmation.
 | **Geometry** | Non-editable real Blender `MESH` geometry |
 | **Raster** | Aligned image patch clipped from the individual source text span |
 
-The structural modes do not search Windows/macOS/Linux fonts by name. When an
-exact embedded font cannot be used, only item-specific proven fallback is
-allowed. Every attempt and final entity is recorded under
+The structural modes never pick an installed font by name alone. A font the PDF
+names but does not store is drawn with the installed font of that name only
+when the PDF's own widths prove the match (plain WinAnsi letters, exactly one
+installed font with that name and style, every width within 1/1000 em, every
+character present); on Windows this covers the Arial family used by most CAD
+and Tekla drawings. When no exact font can be used, only item-specific proven
+fallback is allowed. Every attempt and final entity is recorded under
 `extra.text_delivery`; an unverified terminal raster is a loud failure.
 
 ## CI coverage

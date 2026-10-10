@@ -19,6 +19,11 @@ from typing import Any, Callable, Dict, Iterator, Optional, Tuple
 import bpy
 
 from .visual_style import preview_color
+from .installed_font_route import (
+    installed_font_absence_item,
+    installed_font_evidence,
+    is_installed_font_asset,
+)
 from .packed_assets import PackedAssetError, pack_and_verify_bytes, verify_packed_sha256
 from .pdfcadcore.primitives import NormalizedText
 from .pdfcadcore.text_scale import calibrate_text_size_to_bbox
@@ -102,6 +107,7 @@ _FONT_SIZE_SCALE = 1.0
 _FONT_CACHE: Dict[str, bpy.types.VectorFont] = {}
 _FONT_GLYPH_INK_CACHE: Dict[Tuple[str, int], bool] = {}
 _FONT_GLYPH_INK_PREFETCH_LIMIT = 4096
+_LARGE_FONT_GLYPH_SETS: Dict[str, Tuple[Any, Any, Any]] = {}
 _VERIFIED_FONT_ASSET_BYTES: Dict[int, Tuple[Any, str, bytes]] = {}
 _VERIFIED_PACKED_FONTS: Dict[str, Any] = {}
 _VERIFIED_TEXT_MATERIALS: Dict[Tuple[Any, ...], Tuple[Tuple[str, ...], Dict[str, Any]]] = {}
@@ -258,28 +264,49 @@ def _exact_font_glyph_has_visible_ink(asset, glyph_id: int) -> bool:
     from fontTools.pens.boundsPen import BoundsPen
     from fontTools.ttLib import TTFont
 
-    font = TTFont(BytesIO(font_bytes), lazy=False, recalcTimestamp=False)
+    opened = _LARGE_FONT_GLYPH_SETS.get(digest)
+    keep_open = opened is not None
+    if keep_open:
+        font, glyph_order, glyph_set = opened
+    else:
+        font = TTFont(BytesIO(font_bytes), lazy=False, recalcTimestamp=False)
     try:
-        glyph_order = font.getGlyphOrder()
+        if not keep_open:
+            glyph_order = font.getGlyphOrder()
         if glyph_index >= len(glyph_order):
             raise RuntimeError(
                 f"exact font glyph index {glyph_index} exceeds "
                 f"glyph count {len(glyph_order)}"
             )
-        glyph_set = font.getGlyphSet()
-        indices = (
-            range(len(glyph_order))
-            if len(glyph_order) <= _FONT_GLYPH_INK_PREFETCH_LIMIT
-            else (glyph_index,)
-        )
+        if not keep_open:
+            glyph_set = font.getGlyphSet()
+        large = len(glyph_order) > _FONT_GLYPH_INK_PREFETCH_LIMIT
+        indices = (glyph_index,) if large else range(len(glyph_order))
         for index in indices:
             glyph_name = glyph_order[index]
             pen = BoundsPen(glyph_set)
             glyph_set[glyph_name].draw(pen)
             _FONT_GLYPH_INK_CACHE[(digest, index)] = pen.bounds is not None
+        if large and not keep_open:
+            # A large face (an installed Arial has 4,651 glyphs) is checked one
+            # glyph at a time. Keep its decoded glyphs for this page build
+            # instead of decoding the whole glyph table again for every glyph.
+            _release_large_font_glyph_sets()
+            _LARGE_FONT_GLYPH_SETS[digest] = (font, glyph_order, glyph_set)
+            keep_open = True
     finally:
-        font.close()
+        if not keep_open:
+            font.close()
     return bool(_FONT_GLYPH_INK_CACHE[cache_key])
+
+
+def _release_large_font_glyph_sets() -> None:
+    for font, _order, _glyphs in tuple(_LARGE_FONT_GLYPH_SETS.values()):
+        try:
+            font.close()
+        except Exception:
+            pass
+    _LARGE_FONT_GLYPH_SETS.clear()
 
 
 def _styled_text_color(
@@ -1215,6 +1242,7 @@ def _font_asset_evidence(text_item: NormalizedText) -> Dict[str, Any]:
     asset = getattr(text_item, "font_asset", None)
     if asset is not None:
         return {
+            **installed_font_evidence(text_item),
             "asset_id": str(getattr(asset, "asset_id", "") or ""),
             "source_sha256": str(getattr(asset, "source_sha256", "") or ""),
             "usable_sha256": str(getattr(asset, "usable_sha256", "") or ""),
@@ -1632,6 +1660,8 @@ def _set_object_metadata(
     if asset is not None:
         obj["pdf_exact_font_sha256"] = str(getattr(asset, "usable_sha256", "") or "")
         obj["pdf_exact_font_packed"] = True
+        if is_installed_font_asset(asset):
+            obj["pdf_font_source"] = "installed (PDF widths matched)"
 
 
 def _create_font_candidate(
@@ -4379,7 +4409,93 @@ def _attempt_positioned_characters(
     raise ValueError(f"unsupported positioned representation: {delivered}")
 
 
+# Rungs that draw with a font program. On these an installed face (proved by
+# the PDF's own widths, see installed_font_route) is tried first; every other
+# rung, and any retry, uses the original item exactly as before.
+_INSTALLED_FONT_REPRESENTATIONS = frozenset({"text", "3d_text", "glyphs", "geometry"})
+
+
+def _installed_font_outcome(outcome, representation, collection, *, retry):
+    """Keep a verified installed-face result; otherwise clean it up and retry.
+
+    The retry runs the same rung on the original item (font absence proof
+    intact), so a span whose installed-face attempt does not verify gets
+    exactly the result it got before the installed-font route existed.
+    """
+    if outcome.status == "delivered":
+        return outcome
+    evidence = dict(outcome.evidence or {})
+    with _text_stage("cleanup"):
+        cleanup = _cleanup_attempt(outcome, collection)
+    summary = {
+        "attempted_representation": representation,
+        "status": outcome.status,
+        "reason": outcome.reason,
+        "failures": list(evidence.get("failures") or ()),
+        "cleanup": cleanup,
+        "font_source": "installed",
+    }
+    if cleanup.get("status") != "complete":
+        return AttemptOutcome.failed(
+            outcome.reason or "installed_font_attempt_failed",
+            evidence={**evidence, "installed_font_attempt": summary},
+            owned_artifacts=outcome.owned_artifacts,
+            owned_objects=outcome.owned_objects,
+            owned_datablocks=outcome.owned_datablocks,
+        )
+    fallback = retry()
+    fallback.evidence = {
+        **dict(fallback.evidence or {}),
+        "installed_font_attempt": summary,
+    }
+    return fallback
+
+
 def _attempt_one_representation(
+    representation,
+    text_item,
+    collection,
+    *,
+    effective_page,
+    requested,
+    item_id,
+    visual_style,
+    z_offset_m,
+    terminal_raster_callback,
+    source_outline_callback=None,
+):
+    absence_item = installed_font_absence_item(text_item)
+    options = dict(
+        effective_page=effective_page,
+        requested=requested,
+        item_id=item_id,
+        visual_style=visual_style,
+        z_offset_m=z_offset_m,
+        terminal_raster_callback=terminal_raster_callback,
+        source_outline_callback=source_outline_callback,
+    )
+    if absence_item is None:
+        return _attempt_one_representation_once(
+            representation, text_item, collection, **options
+        )
+    if representation not in _INSTALLED_FONT_REPRESENTATIONS:
+        return _attempt_one_representation_once(
+            representation, absence_item, collection, **options
+        )
+    outcome = _attempt_one_representation_once(
+        representation, text_item, collection, **options
+    )
+    return _installed_font_outcome(
+        outcome,
+        representation,
+        collection,
+        retry=lambda: _attempt_one_representation_once(
+            representation, absence_item, collection, **options
+        ),
+    )
+
+
+def _attempt_one_representation_once(
     representation,
     text_item,
     collection,
@@ -4698,6 +4814,53 @@ def _progress_or_cancel(progress_callback, fraction, *, during):
             pass
 
 
+def _converted_item_attempt(
+    work,
+    requested_outcome,
+    collection,
+    *,
+    requested,
+    visual_style,
+    z_offset_m,
+    terminal_raster_callback,
+    source_outline_callback=None,
+):
+    """Ladder callback for one batched glyphs/geometry item.
+
+    The requested rung's outcome was already built by the page batch. An
+    installed-face item whose batch outcome did not verify is cleaned up and
+    retried on its original item, like every other font-drawing rung.
+    """
+    options = dict(
+        effective_page=work.page_number,
+        requested=requested,
+        item_id=work.item_id,
+        visual_style=visual_style,
+        z_offset_m=z_offset_m,
+        terminal_raster_callback=terminal_raster_callback,
+        source_outline_callback=source_outline_callback,
+    )
+
+    def attempt(representation):
+        if representation != requested:
+            return _attempt_one_representation(
+                representation, work.text_item, collection, **options
+            )
+        absence_item = installed_font_absence_item(work.text_item)
+        if absence_item is None:
+            return requested_outcome
+        return _installed_font_outcome(
+            requested_outcome,
+            representation,
+            collection,
+            retry=lambda: _attempt_one_representation_once(
+                representation, absence_item, collection, **options
+            ),
+        )
+
+    return attempt
+
+
 def _flush_converted_page_jobs(
     pending,
     collection,
@@ -4709,6 +4872,7 @@ def _flush_converted_page_jobs(
     terminal_raster_callback,
     progress_callback,
     total,
+    source_outline_callback=None,
 ):
     count = 0
     if not pending:
@@ -4720,20 +4884,16 @@ def _flush_converted_page_jobs(
         for work in pending:
             page_fail = work.aggregate_failure(failure)
 
-            def attempt(representation, _work=work, _fail=page_fail):
-                if representation == requested:
-                    return _fail
-                return _attempt_one_representation(
-                    representation,
-                    _work.text_item,
-                    collection,
-                    effective_page=_work.page_number,
-                    requested=requested,
-                    item_id=_work.item_id,
-                    visual_style=visual_style,
-                    z_offset_m=z_offset_m,
-                    terminal_raster_callback=terminal_raster_callback,
-                )
+            attempt = _converted_item_attempt(
+                work,
+                page_fail,
+                collection,
+                requested=requested,
+                visual_style=visual_style,
+                z_offset_m=z_offset_m,
+                terminal_raster_callback=terminal_raster_callback,
+                source_outline_callback=source_outline_callback,
+            )
 
             obj = _deliver_text_item(
                 work.text_item,
@@ -4761,20 +4921,16 @@ def _flush_converted_page_jobs(
         for work in pending:
             page_fail = work.aggregate_failure(graph_fail)
 
-            def attempt(representation, _work=work, _fail=page_fail):
-                if representation == requested:
-                    return _fail
-                return _attempt_one_representation(
-                    representation,
-                    _work.text_item,
-                    collection,
-                    effective_page=_work.page_number,
-                    requested=requested,
-                    item_id=_work.item_id,
-                    visual_style=visual_style,
-                    z_offset_m=z_offset_m,
-                    terminal_raster_callback=terminal_raster_callback,
-                )
+            attempt = _converted_item_attempt(
+                work,
+                page_fail,
+                collection,
+                requested=requested,
+                visual_style=visual_style,
+                z_offset_m=z_offset_m,
+                terminal_raster_callback=terminal_raster_callback,
+                source_outline_callback=source_outline_callback,
+            )
 
             obj = _deliver_text_item(
                 work.text_item,
@@ -4828,20 +4984,16 @@ def _flush_converted_page_jobs(
                 page_shared=True,
             )
 
-        def attempt(representation, _work=work, _outcome=outcome):
-            if representation == requested:
-                return _outcome
-            return _attempt_one_representation(
-                representation,
-                _work.text_item,
-                collection,
-                effective_page=_work.page_number,
-                requested=requested,
-                item_id=_work.item_id,
-                visual_style=visual_style,
-                z_offset_m=z_offset_m,
-                terminal_raster_callback=terminal_raster_callback,
-            )
+        attempt = _converted_item_attempt(
+            work,
+            outcome,
+            collection,
+            requested=requested,
+            visual_style=visual_style,
+            z_offset_m=z_offset_m,
+            terminal_raster_callback=terminal_raster_callback,
+            source_outline_callback=source_outline_callback,
+        )
 
         obj = _deliver_text_item(
             work.text_item,
@@ -4877,6 +5029,7 @@ def build_all_text(
     _VERIFIED_PACKED_FONTS.clear()
     _DISK_FONT_SHA_MEMO.clear()
     _VERIFIED_TEXT_MATERIALS.clear()
+    _release_large_font_glyph_sets()
     reset_text_stage_timings()
     count = 0
     total = max(1, len(text_items or []))
@@ -4927,21 +5080,25 @@ def build_all_text(
                 with _text_stage("converted_create_sources"):
                     early = work.create_sources()
                 if early is not None:
-                    def attempt(representation, _work=work, _early=early):
-                        if representation == requested:
-                            return _early
-                        return _attempt_one_representation(
-                            representation,
-                            _work.text_item,
-                            collection,
-                            effective_page=_work.page_number,
-                            requested=requested,
-                            item_id=_work.item_id,
-                            visual_style=visual_style,
-                            z_offset_m=z_offset_m,
-                            terminal_raster_callback=terminal_raster_callback,
-                        )
-
+                    if installed_font_absence_item(item) is not None:
+                        # Retry this installed-face item on its own after the
+                        # batch, outside this unevaluated scope, so a step back
+                        # to the original item's outline route can evaluate.
+                        with _text_stage("cleanup"):
+                            early_cleanup = _cleanup_attempt(early, collection)
+                        if early_cleanup.get("status") == "complete":
+                            deferred_plain.append(item)
+                            continue
+                    attempt = _converted_item_attempt(
+                        work,
+                        early,
+                        collection,
+                        requested=requested,
+                        visual_style=visual_style,
+                        z_offset_m=z_offset_m,
+                        terminal_raster_callback=terminal_raster_callback,
+                        source_outline_callback=source_outline_callback,
+                    )
                     obj = _deliver_text_item(
                         work.text_item,
                         collection,
@@ -4999,7 +5156,9 @@ def build_all_text(
             terminal_raster_callback=terminal_raster_callback,
             progress_callback=progress_callback,
             total=total,
+            source_outline_callback=source_outline_callback,
         )
+    _release_large_font_glyph_sets()
     if progress_callback:
         _progress_or_cancel(
             progress_callback,

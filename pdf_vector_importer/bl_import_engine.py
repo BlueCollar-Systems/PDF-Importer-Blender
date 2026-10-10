@@ -1022,6 +1022,11 @@ def write_import_report(
         extra["housekeeping_warnings"] = housekeeping_warnings
     if int(text_delivery_summary["source_items"]) > 0:
         extra["text_delivery"] = text_delivery
+    from .installed_font_route import installed_font_report
+
+    installed_fonts = installed_font_report(stats, text_delivery.get("items"))
+    if installed_fonts is not None:
+        extra["installed_fonts"] = installed_fonts
     if text_source_spans > 0 or int(text_delivery_summary["source_items"]) > 0:
         extra["text_representation_delivery"] = {
             "required": text_delivery_required,
@@ -2384,6 +2389,37 @@ def _render_page_raster(
             else "complete_page_raster"
         ),
     }
+
+
+_INSTALLED_FONT_TEXT_MODES = frozenset({"labels", "text", "3d_text", "glyphs", "geometry"})
+
+
+def _with_installed_fonts(doc, page, text_items, page_number, text_mode, stats):
+    """Text items with width-proven installed faces attached (see installed_font_route).
+
+    The route only adds a better first attempt; if its check cannot finish the
+    page keeps today's items unchanged and the reason is recorded.
+    """
+    items = list(text_items or [])
+    try:
+        mode = normalize_representation(text_mode)
+    except ValueError:
+        return items
+    if mode not in _INSTALLED_FONT_TEXT_MODES or not items:
+        return items
+    from .installed_font_route import attach_installed_fonts
+
+    try:
+        return attach_installed_fonts(doc, page, items, int(page_number), stats)
+    except Exception as exc:
+        checks = stats.setdefault("installed_font_checks", [])
+        if isinstance(checks, list):
+            checks.append({
+                "page": int(page_number),
+                "status": "not_used",
+                "reason": f"the installed-font check could not finish ({type(exc).__name__})",
+            })
+        return items
 
 
 def _delivered_text_bboxes(text_items, delivery_records, page_number: int):
@@ -4357,8 +4393,14 @@ def import_pdf(
                         width_mm=page_data.width, height_mm=page_data.height,
                         flip_y=import_cfg.flip_y, pdf_sha256=source_sha256, collection=page_col,
                     )
+                    # The outline provider keeps the original items; only the
+                    # builder sees installed-face copies (each keeps its original).
+                    build_text_items = _with_installed_fonts(
+                        doc, page, page_data.text_items, page_num,
+                        import_cfg.text_mode, total_stats,
+                    )
                     text_count = build_all_text(
-                        page_data.text_items,
+                        build_text_items,
                         page_col,
                         page_num,
                         visual_style=visual_style,
@@ -4782,6 +4824,14 @@ def import_pdf(
         total_stats["text_delivery_fallback_items"] = int(delivery_summary["fallback_items"])
         total_stats["text_delivery_failed_items"] = int(delivery_summary["failed_items"])
         total_stats["text_delivery_failed_item_ids"] = list(delivery_summary["failed_item_ids"])
+        from .installed_font_route import installed_font_report
+
+        installed_fonts = installed_font_report(
+            total_stats, getattr(import_cfg, "_text_delivery_records", ())
+        )
+        total_stats["installed_font_delivered_items"] = int(
+            (installed_fonts or {}).get("items_delivered_with_installed_font", 0)
+        )
         total_stats["clip_fill_warning"] = _clip_fill_warning_line(
             total_stats.get("clip_fill_delivery")
         )

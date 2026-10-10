@@ -115,9 +115,16 @@ FINAL Blender ladder (left rung first):
 | **Raster** | Raster only |
 
 Notes:
-- Text, 3D Text, Glyphs, and Geometry load only the exact embedded PDF font
-  program associated with the source span. The importer does not search the
-  operating system for a similarly named font.
+- Text, 3D Text, Glyphs, and Geometry use the exact font program stored in
+  the PDF for the source span. When the PDF names a font but does not store it
+  (common on CAD and Tekla drawings that use Arial), the installed font of that
+  name is used only if the PDF proves it is the same font: the font uses plain
+  WinAnsi letters, exactly one installed font has that name and style, every
+  width the PDF lists matches that installed font to within 1/1000 of the text
+  height, and that font has every character the page draws with it. If any
+  check fails, the text keeps the outline route below. The import report lists
+  each check under `extra.installed_fonts`, and each such text item records
+  `font_source: installed` and `widths_matched`.
 - Glyphs and Geometry are distinct host types and conversion paths: Glyphs
   verifies a real Blender `CURVE`; Geometry verifies a real Blender `MESH`.
 - A generic exception is a failure, not proof that the requested type is
