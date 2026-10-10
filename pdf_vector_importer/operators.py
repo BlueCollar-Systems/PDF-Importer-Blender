@@ -353,6 +353,17 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
                 context=context,
                 cancel_callback=_cancel_requested,
             )
+        except bl_import_engine.IncompleteImportError as exc:
+            # Every sheet was built; some items need a look. The delivered
+            # sheets stay in the scene as one undo step.
+            from .import_outcome import plain_outcome_lines
+
+            _set_status(None)
+            _end_import_session()
+            for line in plain_outcome_lines(exc.stats):
+                self.report({"WARNING"}, line)
+            self._remember_last_directory(context)
+            return {"FINISHED"}
         except Exception as exc:
             from .pdfcadcore.fitz_loader import PdfOpenError
 
@@ -462,7 +473,21 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
                 f"{glyph_code_warning} Review extra.text_glyph_codes in "
                 f"{report_path or 'the import report'}.",
             )
+        # Items kept in a lesser form (a letter left untrimmed at the sheet
+        # edge, a text item not re-checked after its sheet moved): the sheet is
+        # complete, but the user should know which ones to look at.
+        from .import_outcome import details_line, step_down_lines
 
+        step_downs = step_down_lines(stats)
+        if step_downs:
+            details = details_line(stats)
+            for line in step_downs + ([details] if details else []):
+                self.report({"WARNING"}, line)
+
+        self._remember_last_directory(context)
+        return {"FINISHED"}
+
+    def _remember_last_directory(self, context):
         prefs = _addon_prefs(context)
         if prefs is not None and bool(getattr(prefs, "remember_last_directory", True)):
             try:
@@ -471,8 +496,6 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
                     prefs.last_import_dir = last_dir
             except Exception:
                 pass
-
-        return {"FINISHED"}
 
     def draw(self, context):
         layout = self.layout

@@ -1,5 +1,7 @@
 """Visible source ink and native depth must survive page viewport clipping."""
 import importlib.util
+import sys
+import types
 from pathlib import Path
 
 import pymupdf
@@ -60,3 +62,107 @@ def test_source_clipped_to_zero_ink_stays_an_explicit_verified_outcome(monkeypat
     proof = clip.verify_clipped_ink(object(), object(), (0, 0, 1, 1), 0, (0, .1))
     assert proof["visible_ink_empty"] is True
     assert proof["visible_ink_area_verified"] is True
+
+
+class _Identity:
+    def __matmul__(self, vector):
+        return tuple(vector)
+
+
+class _Modifiers(list):
+    def new(self, name, kind):
+        modifier = types.SimpleNamespace(name=name, type=kind, node_group=None)
+        self.append(modifier)
+        return modifier
+
+
+class _Letter(dict):
+    """A delivered letter that pokes past the right sheet edge."""
+
+    def __init__(self, name):
+        super().__init__()
+        self.name = name
+        self.type = "FONT"
+        self.matrix_world = _Identity()
+        self.bound_box = [(0.9, 0.1, 0.0), (1.2, 0.3, 0.001)]
+        self.modifiers = _Modifiers()
+
+    def evaluated_get(self, _depsgraph):
+        return self
+
+
+def _stub_blender(monkeypatch, letters):
+    removed = []
+    objects = types.SimpleNamespace(get={obj.name: obj for obj in letters}.get,
+                                    remove=lambda obj, **_k: removed.append(obj.name))
+    bpy = types.SimpleNamespace(
+        context=types.SimpleNamespace(view_layer=types.SimpleNamespace(update=lambda: None),
+                                      evaluated_depsgraph_get=lambda: None),
+        data=types.SimpleNamespace(objects=objects,
+                                   meshes=types.SimpleNamespace(remove=lambda _m: None),
+                                   node_groups=types.SimpleNamespace(remove=lambda t: removed.append(t.name))))
+    monkeypatch.setitem(sys.modules, "bpy", bpy)
+    monkeypatch.setitem(sys.modules, "mathutils", types.SimpleNamespace(Vector=tuple))
+    ink = [(0.9, 0.1, 0.0), (1.2, 0.1, 0.0), (0.9, 0.3, 0.001)]
+    monkeypatch.setattr(clip, "_evaluated_ink", lambda *_args: (ink, [ink]))
+    monkeypatch.setattr(clip, "_page_prism", lambda *_args: types.SimpleNamespace(
+        name="PDF text viewport helper", data=object()))
+    monkeypatch.setattr(clip, "_clip_tree", lambda *_args: types.SimpleNamespace(
+        name="PDF text page viewport"))
+    return removed
+
+
+def _edge_record(*names):
+    return {"page": 2, "item_id": "page:2:text:1", "status": "delivered",
+            "final_representation": "3d_text", "entity_ids": list(names)}
+
+
+def test_one_letter_failing_its_trim_check_stays_untrimmed_and_the_rest_are_trimmed(monkeypatch):
+    good, bad = _Letter("D042_EX102_c0"), _Letter("D042_EX102_c1")
+    _stub_blender(monkeypatch, [good, bad])
+
+    def verify(obj, *_args):
+        if obj is bad:
+            raise ValueError("Native text viewport changed the visible source ink area")
+        return {"inside_page_verified": True}
+
+    monkeypatch.setattr(clip, "verify_clipped_ink", verify)
+    record = _edge_record(good.name, bad.name)
+    result = clip.clip_delivered_page_text(None, [record], page_number=2,
+                                           width_mm=1000, height_mm=1000)
+    assert [proof["entity_id"] for proof in result] == [good.name]
+    assert len(good.modifiers) == 1 and good["pdf_page_clip_helper_id"] == "PDF text viewport helper"
+    assert [proof["entity_id"] for proof in record["page_viewport_clips"]] == [good.name]
+    assert len(bad.modifiers) == 0 and "pdf_page_clip_helper_id" not in bad
+    skipped = {"entity_id": bad.name, "page": 2,
+               "reason": "ValueError: Native text viewport changed the visible source ink area"}
+    assert record["page_viewport_clip_skipped"] == [skipped]
+    assert result.skipped == [skipped]
+    assert record["status"] == "delivered"
+
+
+def test_trim_tool_that_cannot_be_built_leaves_every_edge_letter_as_delivered(monkeypatch):
+    letters = [_Letter("D042_EX103_c0"), _Letter("D042_EX103_c1")]
+    _stub_blender(monkeypatch, letters)
+
+    def no_tree(*_args):
+        raise RuntimeError("node tree unavailable")
+
+    monkeypatch.setattr(clip, "_clip_tree", no_tree)
+    record = _edge_record(*(letter.name for letter in letters))
+    result = clip.clip_delivered_page_text(None, [record], page_number=2,
+                                           width_mm=1000, height_mm=1000)
+    assert list(result) == [] and len(result.skipped) == 2
+    assert all(not letter.modifiers for letter in letters)
+    assert "page_viewport_clips" not in record
+
+
+def test_an_unused_trim_guide_is_removed(monkeypatch):
+    letter = _Letter("D042_EX104_c0")
+    removed = _stub_blender(monkeypatch, [letter])
+    monkeypatch.setattr(clip, "verify_clipped_ink",
+                        lambda *_args: (_ for _ in ()).throw(ValueError("area")))
+    result = clip.clip_delivered_page_text(None, [_edge_record(letter.name)], page_number=2,
+                                           width_mm=1000, height_mm=1000)
+    assert len(result.skipped) == 1 and not letter.modifiers
+    assert removed == ["PDF text page viewport", "PDF text viewport helper"]

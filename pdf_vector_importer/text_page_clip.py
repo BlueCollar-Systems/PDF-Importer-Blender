@@ -129,12 +129,51 @@ def verify_clipped_ink(obj, bpy, bounds, expected_area, original_z):
             'visible_ink_area_verified': True, 'source_depth_verified': True}
 
 
+_CLIP_PROPERTIES = ('pdf_page_clip_helper_id', 'pdf_page_clip_expected_area_m2',
+                    'pdf_page_clip_source_z_m')
+
+
+class PageClipResult(list):
+    """Proofs for the letters trimmed to the sheet edge.
+
+    ``skipped`` lists the letters left as delivered (untrimmed) because their
+    trim could not be proven: one letter never costs the rest of the sheet.
+    """
+
+    def __init__(self, proofs=(), skipped=()):
+        super().__init__(proofs)
+        self.skipped = list(skipped)
+
+
+def _undo_entity_clip(obj, modifier):
+    """Put one letter back exactly as delivered: no trim modifier, no trim tags."""
+    try:
+        if modifier is not None:
+            obj.modifiers.remove(modifier)
+    finally:
+        for key in _CLIP_PROPERTIES:
+            try:
+                if key in obj:
+                    del obj[key]
+            except (AttributeError, KeyError, ReferenceError, RuntimeError, TypeError):
+                pass
+
+
+def _remove_guide(bpy, guide, tree):
+    if tree is not None:
+        bpy.data.node_groups.remove(tree)
+    if guide is not None:
+        mesh = guide.data
+        bpy.data.objects.remove(guide, do_unlink=True)
+        bpy.data.meshes.remove(mesh)
+
+
 def clip_delivered_page_text(collection, records, *, page_number, width_mm, height_mm):
     records = tuple(record for record in records or ()
                     if record.get('page') == page_number and record.get('status') == 'delivered'
                     and record.get('final_representation') != 'raster')
     if not records:
-        return []
+        return PageClipResult()
     import bpy
     from mathutils import Vector
 
@@ -142,62 +181,95 @@ def clip_delivered_page_text(collection, records, *, page_number, width_mm, heig
     if not all(math.isfinite(value) for value in bounds) or min(bounds[2:]) <= 0:
         raise ValueError('Native text viewport needs finite source page bounds')
     guide, tree = None, None
+    setup_error = None
     modified = []
     proofs = []
+    skipped = []
+
+    def skip(record, entity_id, error):
+        entry = {'entity_id': entity_id, 'page': page_number,
+                 'reason': f'{type(error).__name__}: {error}'}
+        record.setdefault('page_viewport_clip_skipped', []).append(entry)
+        skipped.append(entry)
+
     try:
         bpy.context.view_layer.update()
         depsgraph = bpy.context.evaluated_depsgraph_get()
         for record in records:
             for entity_id in record.get('entity_ids') or ():
-                obj = bpy.data.objects.get(entity_id)
-                if obj is None:
-                    raise ValueError('Delivered text disappeared before viewport clipping')
-                evaluated = obj.evaluated_get(depsgraph)
-                corners = [tuple(evaluated.matrix_world @ Vector(corner))
-                           for corner in evaluated.bound_box]
-                if corners and all(bounds[0] <= p[0] <= bounds[2] and
-                                   bounds[1] <= p[1] <= bounds[3] for p in corners):
+                modifier = None
+                obj = None
+                try:
+                    obj = bpy.data.objects.get(entity_id)
+                    if obj is None:
+                        raise ValueError('Delivered text disappeared before viewport clipping')
+                    evaluated = obj.evaluated_get(depsgraph)
+                    corners = [tuple(evaluated.matrix_world @ Vector(corner))
+                               for corner in evaluated.bound_box]
+                    if corners and all(bounds[0] <= p[0] <= bounds[2] and
+                                       bounds[1] <= p[1] <= bounds[3] for p in corners):
+                        continue
+                    points, triangles = _evaluated_ink(obj, bpy)
+                    if not points or all(bounds[0] <= p[0] <= bounds[2] and
+                                         bounds[1] <= p[1] <= bounds[3] for p in points):
+                        continue
+                    original_type = obj.type
+                    if not triangles or not any(polygon_area([p[:2] for p in triangle]) > 1e-18
+                                                for triangle in triangles):
+                        raise ValueError('Boundary text has no proven surface ink for native intersection')
+                    original_z = (min(p[2] for p in points), max(p[2] for p in points))
+                    expected_area = sum(polygon_area(rectangle_intersection(triangle, bounds))
+                                        for triangle in triangles)
+                    if setup_error is not None:
+                        raise setup_error
+                    if guide is None:
+                        try:
+                            margin = max(1.0, abs(original_z[0]), abs(original_z[1]), *bounds)
+                            guide = _page_prism(bpy, collection, bounds, (-margin * 10, margin * 10))
+                            tree = _clip_tree(bpy, guide)
+                        except Exception as error:
+                            # No trim tool for this sheet: every crossing letter stays as delivered.
+                            setup_error = error
+                            try:
+                                _remove_guide(bpy, guide, None)
+                            finally:
+                                guide, tree = None, None
+                            raise
+                    modifier = obj.modifiers.new('PDF source page viewport', 'NODES')
+                    modifier.node_group = tree
+                    bpy.context.view_layer.update()
+                    proof = verify_clipped_ink(obj, bpy, bounds, expected_area, original_z)
+                    if obj.type != original_type:
+                        raise ValueError('Native text viewport changed the selected representation')
+                    proof.update(entity_id=entity_id, page_number=page_number,
+                                 page_bounds_m=list(bounds), original_object_type=original_type,
+                                 expected_projected_area_m2=expected_area,
+                                 source_z_bounds_m=list(original_z), guide_entity_id=guide.name,
+                                 node_group=tree.name, operation='exact_native_page_intersection')
+                    obj['pdf_page_clip_helper_id'] = guide.name
+                    obj['pdf_page_clip_expected_area_m2'] = expected_area
+                    obj['pdf_page_clip_source_z_m'] = list(original_z)
+                except Exception as error:
+                    # Only this letter steps down: it keeps its delivered shape, untrimmed.
+                    if obj is not None:
+                        _undo_entity_clip(obj, modifier)
+                    skip(record, entity_id, error)
                     continue
-                points, triangles = _evaluated_ink(obj, bpy)
-                if not points or all(bounds[0] <= p[0] <= bounds[2] and
-                                     bounds[1] <= p[1] <= bounds[3] for p in points):
-                    continue
-                original_type = obj.type
-                if not triangles or not any(polygon_area([p[:2] for p in triangle]) > 1e-18
-                                            for triangle in triangles):
-                    raise ValueError('Boundary text has no proven surface ink for native intersection')
-                original_z = (min(p[2] for p in points), max(p[2] for p in points))
-                expected_area = sum(polygon_area(rectangle_intersection(triangle, bounds))
-                                    for triangle in triangles)
-                if guide is None:
-                    margin = max(1.0, abs(original_z[0]), abs(original_z[1]), *bounds)
-                    guide = _page_prism(bpy, collection, bounds, (-margin * 10, margin * 10))
-                    tree = _clip_tree(bpy, guide)
-                modifier = obj.modifiers.new('PDF source page viewport', 'NODES')
-                modifier.node_group = tree
                 modified.append((obj, modifier))
-                bpy.context.view_layer.update()
-                proof = verify_clipped_ink(obj, bpy, bounds, expected_area, original_z)
-                if obj.type != original_type:
-                    raise ValueError('Native text viewport changed the selected representation')
-                proof.update(entity_id=entity_id, page_number=page_number,
-                             page_bounds_m=list(bounds), original_object_type=original_type,
-                             expected_projected_area_m2=expected_area,
-                             source_z_bounds_m=list(original_z), guide_entity_id=guide.name,
-                             node_group=tree.name, operation='exact_native_page_intersection')
-                obj['pdf_page_clip_helper_id'] = guide.name
-                obj['pdf_page_clip_expected_area_m2'] = expected_area
-                obj['pdf_page_clip_source_z_m'] = list(original_z)
                 record.setdefault('page_viewport_clips', []).append(proof)
                 proofs.append(proof)
-        return proofs
+        if guide is not None and not modified:
+            _remove_guide(bpy, guide, tree)
+            guide, tree = None, None
+        return PageClipResult(proofs, skipped)
     except Exception:
+        # Unexpected sheet-level failure: every letter goes back as delivered.
         for obj, modifier in reversed(modified):
-            obj.modifiers.remove(modifier)
-        if tree is not None:
-            bpy.data.node_groups.remove(tree)
-        if guide is not None:
-            mesh = guide.data
-            bpy.data.objects.remove(guide, do_unlink=True)
-            bpy.data.meshes.remove(mesh)
+            _undo_entity_clip(obj, modifier)
+        undone = {id(proof) for proof in proofs}
+        for record in records:
+            clips = record.get('page_viewport_clips')
+            if clips:
+                record['page_viewport_clips'] = [proof for proof in clips if id(proof) not in undone]
+        _remove_guide(bpy, guide, tree)
         raise
