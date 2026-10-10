@@ -62,9 +62,10 @@ the 2026-10-10 runs. What was seen:
 - Glyphs on 3.1.2: Blender itself stops with an access violation.
 - All five versions, before fix-list item BL-1010-keep-every-sheet: a sheet
   with edge-crossing text that ends up several metres down the stack was
-  rolled back. With that fix both sheets come in (checked in Blender 5.2.2 on
-  2026-10-10; the letter whose edge trim cannot be re-checked after the move
-  is kept and listed as a warning). The check now requires both sheets.
+  rolled back. With that fix both sheets come in on all five versions
+  (automatic check, 2026-10-10; the letter whose edge trim cannot be
+  re-checked after the move is kept and listed as a warning). The check now
+  requires both sheets.
 - Drag-and-drop import registers on 4.2.23, 4.5.14 and 5.2.2 and is
   correctly absent on 3.1.2 and 3.6.23 (Blender added it in 4.1).
 
