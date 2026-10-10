@@ -34,10 +34,20 @@ acyclic, and contain no peer aliases.
 | Geometry | Exact-font evidence is unavailable and the bounded source-outline route cannot qualify that item, or the host lacks the required conversion capability. The record retains source/item evidence. | Empty vertices, wrong transform/dimensions, or a conversion exception. |
 | Raster | No transition exists. Missing/empty pixels, an unwritten clip, wrong placement, missing plane identity, or rollback failure is an explicit terminal failure. | Assuming that raster is always achievable. |
 
-An unavailable exact source program is source-item evidence: inventing a
+An unavailable exact source program is source-item evidence: guessing a
 similar operating-system font would change glyph shape and is prohibited. The
 free local FontTools path may deterministically wrap/repair the exact embedded
-program; it never substitutes a font by name.
+program; it never substitutes a font by name alone.
+
+One installed font is allowed, and only when the PDF itself proves it: the
+PDF names a simple TrueType/Type1 font with an empty program stream, uses
+WinAnsi (or no) encoding without `/Differences`, exactly one installed face has
+that name and style, every non-zero `/Widths` entry that face can draw is
+within 1/1000 em of the face's own advance, and the face has every character
+the page draws with that font. The item then carries `font_source: installed`,
+`widths_matched: N/N` and the original absence proof. If its attempt does not
+verify, it is cleaned up and the same rung is retried on the original item, so
+the result is never worse than without the installed font.
 
 When the original extraction positively proves an empty or absent font program,
 Glyphs and Geometry can instead use the same PDF's MuPDF SVG outlines. This
