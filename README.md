@@ -84,6 +84,19 @@ records exactly which pages remain. Enable **Resume Interrupted Import** on the
 same PDF and settings to continue in the existing root collection without
 duplicating completed pages.
 
+One item that cannot be brought in as asked never costs its sheet or the
+sheets after it. A letter whose trim at the sheet edge cannot be proven is
+kept as drawn (untrimmed), a picture that cannot be placed is left out, and
+every sheet is still built. The import finishes with plain lines such as
+"Imported 12 of 12 sheets; 1 item needs a look", one line per sheet that
+needs a look, and the folder that holds the full report.
+
+Everyday imports run the checks that decide how each item is brought in plus
+quick identity, position and colour checks. The slow exact re-proofs of every
+letter shape are off by default; turn on **Audit import (slow self-checks)** in
+the add-on preferences, or set `BC_PDF_AUDIT=1`, for testing and support. Each
+import report records `audit_mode`.
+
 Choose the representation you actually need: **Text** is flat editable Blender
 `FONT`, **3D Text** is extruded editable `FONT`, **Glyphs** is fixed `CURVE`
 outline data, **Geometry** is fixed `MESH` data, and **Raster** is one aligned
