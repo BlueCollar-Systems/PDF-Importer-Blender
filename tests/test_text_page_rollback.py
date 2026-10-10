@@ -179,3 +179,19 @@ def test_any_other_after_move_failure_still_removes_only_that_item(monkeypatch):
 def test_only_the_trim_recheck_is_warning_only(failures, expected):
     entity_ids = ["A", "B", "PDF_Outline_page:2:text:3_0"]
     assert engine._post_stack_failures_are_warning_only(failures, entity_ids) is expected
+
+
+def test_resume_with_nothing_left_says_so_plainly(monkeypatch, tmp_path):
+    from pdf_vector_importer.pdfcadcore import fitz_loader
+
+    pdf = tmp_path / "D042.pdf"
+    pdf.write_bytes(b"%PDF-1.7\n")
+    monkeypatch.setattr(engine, "check_pymupdf", lambda: True)
+    monkeypatch.setattr(engine, "ensure_lib_path", lambda: None)
+    monkeypatch.setattr(fitz_loader, "import_fitz", lambda **_kwargs: object())
+    monkeypatch.setattr(fitz_loader, "safe_open", lambda _path: types.SimpleNamespace(
+        page_count=3, close=lambda: None, is_closed=True))
+    with pytest.raises(ValueError, match="^Nothing to resume: .*Turn off Resume Interrupted Import"):
+        engine.import_pdf(str(pdf), config={
+            "resume": True, "resume_checkpoint_path": str(tmp_path / "finished.json"),
+            "auto_hide_default_cube": False, "auto_focus_view": False})

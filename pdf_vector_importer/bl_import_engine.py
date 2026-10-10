@@ -3875,6 +3875,12 @@ def import_pdf(
         requested_page_numbers = [index + 1 for index in requested_page_indices]
         resume_state = None
         if bool(config.get("resume")):
+            if not os.path.isfile(checkpoint_path):
+                # Every sheet of the last run was built (or none was started).
+                raise ValueError(
+                    "Nothing to resume: there is no unfinished import of this PDF with "
+                    "these settings. Turn off Resume Interrupted Import to import it again."
+                )
             resume_state = load_resume_checkpoint(
                 checkpoint_path,
                 source_sha256=source_sha256,
