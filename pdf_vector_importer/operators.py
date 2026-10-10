@@ -62,7 +62,7 @@ _TEXT_MODE_ITEMS = [
     (
         "labels",
         "Labels",
-        "Request persistent model labels; any host limitation and closest fallback are reported per item",
+        "Editable text. Blender has no separate label object, so this matches Text",
     ),
     ("text",     "Text",     "Flat editable Blender FONT text using the exact PDF font program"),
     ("3d_text",  "3D Text",  "Extruded editable Blender FONT text using the exact PDF font program"),
@@ -413,6 +413,13 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
                 f"{failed_text} text item(s) were not delivered. "
                 f"Do not trust this import until extra.text_delivery is reviewed in {report_path or 'the import report'}.",
             )
+        elif fallback_text > 0 and self.text_mode == "labels":
+            self.report(
+                {"WARNING"},
+                "Blender has no separate label object, so this text was imported as "
+                f"editable text ({fallback_text} item(s)). "
+                f"Details are in {report_path or 'the import report'}.",
+            )
         elif fallback_text > 0:
             self.report(
                 {"WARNING"},
@@ -514,7 +521,9 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
         box.prop(self, "keep_selection_after_focus")
         box.prop(self, "auto_hide_default_cube")
         box.prop(self, "page_arrangement")
-        box.prop(self, "page_gap_ratio")
+        gap = box.row()
+        gap.enabled = self.page_arrangement == "compact"
+        gap.prop(self, "page_gap_ratio")
         col = box.column(align=True)
         col.prop(self, "line_z_offset_mm")
         col.prop(self, "text_z_offset_mm")

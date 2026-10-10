@@ -19,7 +19,7 @@ from typing import Dict, Optional, Tuple
 import bpy
 import bmesh
 
-from .visual_style import preview_color
+from .visual_style import preview_color, scene_linear_color
 from .pdfcadcore.import_bounds import sheet_xy
 from .pdfcadcore.primitives import PageData, Primitive
 
@@ -147,16 +147,19 @@ def _get_or_create_material(
         return cache[key]
 
     r, g, b = _styled_color(color, style)
+    # The material name keeps the display numbers. The shader stores the
+    # scene-linear value so Workbench and EEVEE show the PDF color.
+    linear_r, linear_g, linear_b = scene_linear_color((r, g, b))
     style_key = _normalize_style(style)
     name = f"PDF_{style_key}_{r:.2f}_{g:.2f}_{b:.2f}"
     mat = bpy.data.materials.new(name=name)
-    mat.diffuse_color = (r, g, b, 1.0)
+    mat.diffuse_color = (linear_r, linear_g, linear_b, 1.0)
     mat.use_nodes = True
     nodes = mat.node_tree.nodes
     links = mat.node_tree.links
     nodes.clear()
     emission = nodes.new(type="ShaderNodeEmission")
-    emission.inputs["Color"].default_value = (r, g, b, 1.0)
+    emission.inputs["Color"].default_value = (linear_r, linear_g, linear_b, 1.0)
     emission.inputs["Strength"].default_value = 1.0
     out = nodes.new(type="ShaderNodeOutputMaterial")
     links.new(emission.outputs["Emission"], out.inputs["Surface"])
