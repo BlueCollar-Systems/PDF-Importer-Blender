@@ -1065,6 +1065,42 @@ def test_positioned_native_text_omits_proven_zero_ink_character_objects(monkeypa
     assert fake.view_update_count == 0
 
 
+def test_span_whose_outline_cannot_be_built_is_placed_letter_by_letter(monkeypatch):
+    _fake, collection = _install(monkeypatch)
+    monkeypatch.setattr(bl_text_builder, "_apply_target_quad_affine", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        bl_text_builder, "_verify_transform_and_dimensions", _verified_transform
+    )
+    monkeypatch.setattr(
+        bl_text_builder,
+        "span_uses_natural_advances",
+        lambda _item: (True, "every letter sits where the font's own widths put it"),
+    )
+
+    def unbuildable(_item):
+        raise ValueError("letter quad missing")
+
+    monkeypatch.setattr(bl_text_builder, "_span_object_text_item", unbuildable)
+    opts = types.SimpleNamespace(import_mode="vector", text_mode="text")
+    item = _item()
+    item.text = "AB"
+    item.normalized = "AB"
+    item.source_char_layout = _character_layout()
+    item.requires_individual_positioning = True
+
+    obj = bl_text_builder.build_text(
+        item, collection, page_number=2, text_mode="text", provenance_opts=opts,
+    )
+
+    assert obj is not None
+    assert [candidate.data.body for candidate in collection.objects.items] == ["A", "B"]
+    evidence = opts._text_delivery_records[-1]["attempts"][-1]["evidence"]
+    assert evidence["text_object_granularity"] == "per_character"
+    assert evidence["text_object_granularity_reason"] == (
+        "the line's outline could not be built from its letters"
+    )
+
+
 def test_span_object_keeps_its_spaces_in_the_editable_body(monkeypatch):
     fake, collection = _install(monkeypatch)
     monkeypatch.setattr(bl_text_builder, "_apply_target_quad_affine", lambda *_a, **_k: None)

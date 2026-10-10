@@ -4750,10 +4750,16 @@ def _attempt_positioned_text(
     """Text / 3D Text: one FONT object for the span where spacing allows, else one per letter."""
     use_span, reason = span_uses_natural_advances(text_item)
     span_attempt = None
+    span_item = None
     if use_span:
+        try:
+            span_item = _span_object_text_item(text_item)
+        except (AttributeError, IndexError, TypeError, ValueError):
+            reason = "the line's outline could not be built from its letters"
+    if span_item is not None:
         layouts = tuple(text_item.source_char_layout)
         outcome = _attempt_native_font(
-            _span_object_text_item(text_item),
+            span_item,
             collection,
             page_number=page_number,
             requested=requested,
