@@ -822,6 +822,13 @@ def test_synthetic_page_number_contract_relabels_page_1_fixture_truthfully(
 
 def test_character_positioned_3d_text_stays_3d_text_and_records_every_entity(monkeypatch):
     fake, collection = _install(monkeypatch)
+    # A span whose letters do not sit at the font's own advances (forced here)
+    # keeps one positioned object per letter.
+    monkeypatch.setattr(
+        bl_text_builder,
+        "span_uses_natural_advances",
+        lambda _item: (False, "forced spacing mismatch"),
+    )
     verification_update_counts = []
     monkeypatch.setattr(
         bl_text_builder,
@@ -885,12 +892,130 @@ def test_character_positioned_3d_text_stays_3d_text_and_records_every_entity(mon
     assert evidence["expected_location_m"] == evidence["actual_baseline_anchor_m"]
     assert evidence["dependency_graph_updates"] == 0
     assert evidence["metric_host_update_skipped"] is True
+    assert evidence["text_object_granularity"] == "per_character"
+    assert evidence["text_object_granularity_reason"] == "forced spacing mismatch"
     assert fake.view_update_count == 0
     assert verification_update_counts == [0, 0]
 
 
+def _verified_transform(_obj, text_item):
+    return (
+        [],
+        {
+            "expected_location_m": [
+                text_item.insertion[0] * 0.001,
+                text_item.insertion[1] * 0.001,
+            ],
+            "actual_baseline_anchor_m": [
+                text_item.insertion[0] * 0.001,
+                text_item.insertion[1] * 0.001,
+            ],
+            "evaluated_bounds_verified": True,
+        },
+    )
+
+
+@pytest.mark.parametrize("mode", ["text", "3d_text"])
+def test_span_matching_its_font_is_one_editable_text_object(monkeypatch, mode):
+    fake, collection = _install(monkeypatch)
+    placed = []
+
+    def record_placement(obj, text_item, *_args, **_kwargs):
+        placed.append((obj.data.body, text_item.target_quad_model, text_item.insertion))
+
+    monkeypatch.setattr(bl_text_builder, "_apply_target_quad_affine", record_placement)
+    monkeypatch.setattr(
+        bl_text_builder, "_verify_transform_and_dimensions", _verified_transform
+    )
+    monkeypatch.setattr(
+        bl_text_builder,
+        "span_uses_natural_advances",
+        lambda _item: (True, "every letter sits where the font's own widths put it"),
+    )
+    monkeypatch.setattr(bl_text_builder, "_span_last_letter_offset_m", lambda _obj, _item: 0.0)
+    opts = types.SimpleNamespace(import_mode="vector", text_mode=mode)
+    item = _item()
+    item.text = "AB"
+    item.normalized = "AB"
+    item.source_char_layout = _character_layout()
+    item.requires_individual_positioning = True
+
+    obj = bl_text_builder.build_text(
+        item, collection, page_number=2, text_mode=mode, provenance_opts=opts,
+    )
+
+    assert obj is not None
+    assert [candidate.data.body for candidate in collection.objects.items] == ["AB"]
+    assert obj.type == "FONT" and obj["pdf_text_mode"] == mode
+    first, last = _character_layout()
+    # Placed from the first letter's origin to the last letter's far edge.
+    assert placed == [(
+        "AB",
+        (first.target_quad[0], last.target_quad[1],
+         (first.target_quad[3][0] + last.target_quad[1][0] - first.target_quad[0][0],
+          first.target_quad[3][1] + last.target_quad[1][1] - first.target_quad[0][1]),
+         first.target_quad[3]),
+        first.target_origin,
+    )]
+    record = opts._text_delivery_records[-1]
+    assert record["final_representation"] == mode and record["fallback_used"] is False
+    assert record["entity_ids"] == [obj.name]
+    evidence = record["attempts"][-1]["evidence"]
+    assert evidence["text_object_granularity"] == "span_object"
+    assert evidence["span_character_count"] == 2
+    assert evidence["span_last_letter_offset_m"] == 0.0
+    # One object, no per-span scene update.
+    assert fake.view_update_count == 0
+
+
+def test_span_object_that_fails_its_check_falls_back_to_one_object_per_letter(monkeypatch):
+    fake, collection = _install(monkeypatch)
+    monkeypatch.setattr(bl_text_builder, "_apply_target_quad_affine", lambda *_a, **_k: None)
+
+    def verify(obj, text_item):
+        if len(str(obj.data.body)) > 1:
+            return ["evaluated_font_advance_axis_mismatch"], {}
+        return _verified_transform(obj, text_item)
+
+    monkeypatch.setattr(bl_text_builder, "_verify_transform_and_dimensions", verify)
+    monkeypatch.setattr(
+        bl_text_builder,
+        "span_uses_natural_advances",
+        lambda _item: (True, "every letter sits where the font's own widths put it"),
+    )
+    opts = types.SimpleNamespace(import_mode="vector", text_mode="text")
+    item = _item()
+    item.text = "AB"
+    item.normalized = "AB"
+    item.source_char_layout = _character_layout()
+    item.requires_individual_positioning = True
+
+    obj = bl_text_builder.build_text(
+        item, collection, page_number=2, text_mode="text", provenance_opts=opts,
+    )
+
+    assert obj is not None
+    assert [candidate.data.body for candidate in collection.objects.items] == ["A", "B"]
+    record = opts._text_delivery_records[-1]
+    assert record["final_representation"] == "text" and record["fallback_used"] is False
+    evidence = record["attempts"][-1]["evidence"]
+    assert evidence["text_object_granularity"] == "per_character"
+    assert evidence["text_object_granularity_reason"] == (
+        "the one-object version did not pass the placement check"
+    )
+    span_attempt = evidence["span_object_attempt"]
+    assert span_attempt["failures"] == ["evaluated_font_advance_axis_mismatch"]
+    assert span_attempt["cleanup"]["status"] == "complete"
+    assert fake.view_update_count == 0
+
+
 def test_positioned_native_text_omits_proven_zero_ink_character_objects(monkeypatch):
     fake, collection = _install(monkeypatch)
+    monkeypatch.setattr(
+        bl_text_builder,
+        "span_uses_natural_advances",
+        lambda _item: (False, "forced spacing mismatch"),
+    )
     monkeypatch.setattr(
         bl_text_builder,
         "_apply_target_quad_affine",
@@ -937,6 +1062,36 @@ def test_positioned_native_text_omits_proven_zero_ink_character_objects(monkeypa
     assert whitespace["verification"]["zero_ink_identity"] is True
     assert whitespace["verification"]["visible_geometry_omitted"] is True
     assert whitespace["verification"]["advance_preserved"] is True
+    assert fake.view_update_count == 0
+
+
+def test_span_object_keeps_its_spaces_in_the_editable_body(monkeypatch):
+    fake, collection = _install(monkeypatch)
+    monkeypatch.setattr(bl_text_builder, "_apply_target_quad_affine", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        bl_text_builder, "_verify_transform_and_dimensions", _verified_transform
+    )
+    monkeypatch.setattr(
+        bl_text_builder,
+        "span_uses_natural_advances",
+        lambda _item: (True, "every letter sits where the font's own widths put it"),
+    )
+    monkeypatch.setattr(bl_text_builder, "_span_last_letter_offset_m", lambda _obj, _item: 0.0)
+    opts = types.SimpleNamespace(import_mode="vector", text_mode="text")
+    item = _item()
+    item.text = "A B"
+    item.normalized = "A B"
+    item.source_char_layout = _character_layout_with_space()
+    item.requires_individual_positioning = True
+
+    obj = bl_text_builder.build_text(
+        item, collection, page_number=2, text_mode="text", provenance_opts=opts,
+    )
+
+    assert obj is not None
+    assert [candidate.data.body for candidate in collection.objects.items] == ["A B"]
+    evidence = opts._text_delivery_records[-1]["attempts"][-1]["evidence"]
+    assert evidence["text_object_granularity"] == "span_object"
     assert fake.view_update_count == 0
 
 

@@ -125,6 +125,12 @@ Notes:
   check fails, the text keeps the outline route below. The import report lists
   each check under `extra.installed_fonts`, and each such text item records
   `font_source: installed` and `widths_matched`.
+- Text and 3D Text make one editable text object per line of PDF text when the
+  PDF places every letter where the font's own widths put it (within 0.5% of
+  the text height: no extra letter spacing, word spacing or spacing gaps).
+  Otherwise, or if the one-object version fails its placement check, each
+  letter is placed as its own text object as before. Each text item records
+  `text_object_granularity` (`span_object` or `per_character`) and the reason.
 - Glyphs and Geometry are distinct host types and conversion paths: Glyphs
   verifies a real Blender `CURVE`; Geometry verifies a real Blender `MESH`.
 - A generic exception is a failure, not proof that the requested type is
