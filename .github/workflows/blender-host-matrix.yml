@@ -1,0 +1,244 @@
+name: blender-host-matrix
+
+# Starts real Blender (portable Windows builds, headless) on every supported
+# release line and imports small, fictional PDFs with the add-on built from
+# this commit. The unit tests in bl-pdfimporter-ci run with a stand-in for
+# Blender's API; only this workflow proves the add-on loads and imports inside
+# Blender itself. Not a required check: a failing leg is a compatibility
+# finding for that Blender version, not a reason to hide the leg.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Mondays 06:17 UTC
+    - cron: "17 6 * * 1"
+  pull_request:
+    paths:
+      - "pdf_vector_importer/**"
+      - "scripts/_headless_import_test.py"
+      - "scripts/make_ci_fixture.py"
+      - "scripts/smoke_registered_properties.py"
+      - "build_release.py"
+      - ".github/workflows/blender-host-matrix.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blender-host-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  blender:
+    name: Blender ${{ matrix.blender }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # Oldest supported (bl_info minimum) plus the newest patch of each LTS
+        # line and the current release. To move a line forward, change the
+        # version here; the download and its checksum come from
+        # download.blender.org/release/BlenderX.Y/.
+        blender: ["3.1.2", "3.6.23", "4.2.23", "4.5.14", "5.2.2"]
+    env:
+      BLENDER_VERSION: ${{ matrix.blender }}
+      # Heavy self-checks on: CI is where the slow proofs belong. Both names are
+      # set because the audit switch is still being added; until it lands they
+      # have no effect.
+      BC_PDF_AUDIT: "1"
+      BC_BL_AUDIT_IMPORT: "1"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.12 (build and fixture tools)
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install build and fixture tools
+        run: python -m pip install "fonttools==4.60.2" "PyMuPDF>=1.28.2,<2.0"
+
+      - name: Work out paths for Blender ${{ matrix.blender }}
+        id: paths
+        run: |
+          series="${BLENDER_VERSION%.*}"
+          name="blender-${BLENDER_VERSION}-windows-x64"
+          tmp="$(cygpath -m "$RUNNER_TEMP")"
+          {
+            echo "series=${series}"
+            echo "name=${name}"
+            echo "url=https://download.blender.org/release/Blender${series}/${name}.zip"
+            echo "sha_url=https://download.blender.org/release/Blender${series}/blender-${BLENDER_VERSION}.sha256"
+            echo "zip_dir=${tmp}/blender-zip"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "BLENDER_DIR=${tmp}/blender"
+            echo "BLENDER_EXE=${tmp}/blender/${name}/blender.exe"
+            echo "BLENDER_USER_SCRIPTS=${tmp}/scripts"
+            echo "BC_PDF_TEMP_DIR=${tmp}/bc_pdf_tmp"
+            echo "CI_OUT=${tmp}/ci_out"
+            echo "CI_FIXTURES=${tmp}/fixtures"
+          } >> "$GITHUB_ENV"
+
+      - name: Restore the cached Blender ${{ matrix.blender }} download
+        id: cache
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.paths.outputs.zip_dir }}
+          key: blender-zip-${{ matrix.blender }}-windows-x64
+
+      - name: Download and check Blender ${{ matrix.blender }}
+        env:
+          ZIP_DIR: ${{ steps.paths.outputs.zip_dir }}
+          NAME: ${{ steps.paths.outputs.name }}
+          URL: ${{ steps.paths.outputs.url }}
+          SHA_URL: ${{ steps.paths.outputs.sha_url }}
+        run: |
+          mkdir -p "$ZIP_DIR"
+          zip="$ZIP_DIR/$NAME.zip"
+          if [ ! -f "$zip" ]; then
+            curl -fsSL --retry 3 --retry-delay 10 -o "$zip" "$URL"
+          fi
+          expected="$(curl -fsSL --retry 3 "$SHA_URL" | grep " $NAME.zip" | cut -d' ' -f1)"
+          actual="$(sha256sum "$zip" | cut -d' ' -f1)"
+          echo "expected sha256: $expected"
+          echo "actual   sha256: $actual"
+          if [ -z "$expected" ] || [ "$expected" != "$actual" ]; then
+            rm -f "$zip"
+            echo "::error::Blender $BLENDER_VERSION download failed its checksum"
+            exit 1
+          fi
+          7z x -y -bd "$zip" -o"$BLENDER_DIR" > /dev/null
+          test -f "$BLENDER_EXE"
+
+      # Saved straight away (not at job end) so a leg that fails later still
+      # keeps its download for the next run.
+      - name: Cache the Blender ${{ matrix.blender }} download
+        if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.paths.outputs.zip_dir }}
+          key: blender-zip-${{ matrix.blender }}-windows-x64
+
+      - name: Build the release ZIP and install it as a Blender add-on
+        id: install
+        run: |
+          python build_release.py
+          mkdir -p "$BLENDER_USER_SCRIPTS/addons" "$BC_PDF_TEMP_DIR" "$CI_OUT" "$CI_FIXTURES"
+          zips=(dist/Blender-PDF-Importer_*.zip)
+          test "${#zips[@]}" -eq 1
+          python -m zipfile -e "${zips[0]}" "$BLENDER_USER_SCRIPTS/addons"
+          test -f "$BLENDER_USER_SCRIPTS/addons/pdf_vector_importer/__init__.py"
+          echo "installed ${zips[0]} into $BLENDER_USER_SCRIPTS/addons"
+
+      - name: Blender starts and registers every option (NATIVE_PROPERTIES_PASS)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: |
+          "$BLENDER_EXE" -b --factory-startup --python-exit-code 1 \
+            --python scripts/smoke_registered_properties.py 2>&1 | tee "$CI_OUT/properties.log"
+          grep -q "NATIVE_PROPERTIES_PASS" "$CI_OUT/properties.log"
+
+      - name: Make the fictional test PDFs
+        id: fixtures
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: |
+          python scripts/make_ci_fixture.py "$CI_FIXTURES/ci.pdf"
+          python scripts/make_ci_fixture.py "$CI_FIXTURES/ci_edge_far.pdf" --variant edge-far
+
+      - name: Import both sheets as Text
+        if: ${{ !cancelled() && steps.fixtures.outcome == 'success' }}
+        env:
+          TEST_ADDON_SOURCE: installed
+          TEST_TEXT_MODE: text
+          TEST_PAGES: all
+          TEST_EXPECT_PAGES: "2"
+          TEST_EXPECT_IMAGES: "1"
+        run: |
+          export TEST_PDF="$CI_FIXTURES/ci.pdf" TEST_RESULT_JSON="$CI_OUT/import_text.json"
+          "$BLENDER_EXE" -b --factory-startup --python-exit-code 1 \
+            --python scripts/_headless_import_test.py 2>&1 | tee "$CI_OUT/import_text.log"
+          grep -q "HEADLESS_IMPORT_PASS" "$CI_OUT/import_text.log"
+
+      - name: Import both sheets as 3D Text
+        if: ${{ !cancelled() && steps.fixtures.outcome == 'success' }}
+        env:
+          TEST_ADDON_SOURCE: installed
+          TEST_TEXT_MODE: 3d_text
+          TEST_PAGES: all
+          TEST_EXPECT_PAGES: "2"
+          TEST_EXPECT_IMAGES: "1"
+        run: |
+          export TEST_PDF="$CI_FIXTURES/ci.pdf" TEST_RESULT_JSON="$CI_OUT/import_3d_text.json"
+          "$BLENDER_EXE" -b --factory-startup --python-exit-code 1 \
+            --python scripts/_headless_import_test.py 2>&1 | tee "$CI_OUT/import_3d_text.log"
+          grep -q "HEADLESS_IMPORT_PASS" "$CI_OUT/import_3d_text.log"
+
+      - name: Import both sheets as Glyphs
+        if: ${{ !cancelled() && steps.fixtures.outcome == 'success' }}
+        env:
+          TEST_ADDON_SOURCE: installed
+          TEST_TEXT_MODE: glyphs
+          TEST_PAGES: all
+          TEST_EXPECT_PAGES: "2"
+          TEST_EXPECT_IMAGES: "1"
+        run: |
+          export TEST_PDF="$CI_FIXTURES/ci.pdf" TEST_RESULT_JSON="$CI_OUT/import_glyphs.json"
+          "$BLENDER_EXE" -b --factory-startup --python-exit-code 1 \
+            --python scripts/_headless_import_test.py 2>&1 | tee "$CI_OUT/import_glyphs.log"
+          grep -q "HEADLESS_IMPORT_PASS" "$CI_OUT/import_glyphs.log"
+
+      - name: "Known failure: edge text on a sheet moved far down the stack (BL-1010-keep-every-sheet)"
+        # Expected to fail until BL-1010-keep-every-sheet lands: sheet 2 is
+        # rolled back and only sheet 1 stays. The step stays green either way;
+        # when the fix lands it prints HEADLESS_IMPORT_XPASS and a warning, and
+        # TEST_EXPECT_FAIL should then be removed so the check becomes strict.
+        if: ${{ !cancelled() && steps.fixtures.outcome == 'success' }}
+        env:
+          TEST_ADDON_SOURCE: installed
+          TEST_TEXT_MODE: 3d_text
+          TEST_PAGES: all
+          TEST_EXPECT_PAGES: "2"
+          TEST_EXPECT_FAIL: BL-1010-keep-every-sheet
+        run: |
+          export TEST_PDF="$CI_FIXTURES/ci_edge_far.pdf" TEST_RESULT_JSON="$CI_OUT/import_edge_far.json"
+          "$BLENDER_EXE" -b --factory-startup --python-exit-code 1 \
+            --python scripts/_headless_import_test.py 2>&1 | tee "$CI_OUT/import_edge_far.log"
+          grep -qE "HEADLESS_IMPORT_(XFAIL|XPASS)" "$CI_OUT/import_edge_far.log"
+
+      - name: Summary
+        if: ${{ always() }}
+        run: |
+          python - <<'PY'
+          import glob, json, os
+          out = os.environ.get("CI_OUT") or ""
+          lines = [f"### Blender {os.environ['BLENDER_VERSION']}", "",
+                   "| Check | Text mode | Sheets imported | Result |", "|---|---|---|---|"]
+          props = os.path.join(out, "properties.log")
+          ok = os.path.isfile(props) and "NATIVE_PROPERTIES_PASS" in open(props, encoding="utf-8", errors="replace").read()
+          lines.append(f"| Options registered | - | - | {'pass' if ok else 'FAIL'} |")
+          for path in sorted(glob.glob(os.path.join(out, "import_*.json"))):
+              data = json.load(open(path, encoding="utf-8"))
+              known = "known failure" if "edge_far" in path else "import"
+              result = "pass" if not data.get("problems") else "; ".join(data["problems"])[:200]
+              if "edge_far" in path:
+                  result = "still failing (expected)" if data.get("problems") else "now passes - remove the known-failure marker"
+              lines.append(f"| {known} {data.get('pdf')} | {data.get('text_mode')} | "
+                           f"{(data.get('stats') or {}).get('pages_imported')} | {result} |")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
+              fh.write("\n".join(lines) + "\n")
+          print("\n".join(lines))
+          PY
+
+      - name: Keep logs and results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: blender-${{ matrix.blender }}-results
+          path: ${{ runner.temp }}/ci_out
+          if-no-files-found: ignore
+          retention-days: 14
