@@ -227,6 +227,8 @@ jobs:
               result = "pass" if not data.get("problems") else "; ".join(data["problems"])[:200]
               if "edge_far" in path:
                   result = "still failing (expected)" if data.get("problems") else "now passes - remove the known-failure marker"
+              elif data.get("text_failure_reasons"):
+                  result += " (first reason: " + data["text_failure_reasons"][0][:160] + ")"
               lines.append(f"| {known} {data.get('pdf')} | {data.get('text_mode')} | "
                            f"{(data.get('stats') or {}).get('pages_imported')} | {result} |")
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
@@ -239,6 +241,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: blender-${{ matrix.blender }}-results
-          path: ${{ runner.temp }}/ci_out
+          path: |
+            ${{ runner.temp }}/ci_out
+            ${{ runner.temp }}/bc_pdf_tmp/*_import_report.json
           if-no-files-found: ignore
           retention-days: 14

@@ -84,19 +84,49 @@ def _page_object_counts(bpy):
     return dict(sorted(counts.items()))
 
 
-def _report_audit_mode(report_path):
+def _read_report(report_path):
     if not report_path or not os.path.isfile(report_path):
-        return None
+        return {}
     try:
         with open(report_path, encoding="utf-8") as fh:
-            report = json.load(fh)
+            return json.load(fh)
     except Exception:  # noqa: BLE001 - diagnostics only
-        return None
+        return {}
+
+
+def _report_audit_mode(report):
     for holder in (report, report.get("extra") or {}):
         for key in ("audit_mode", "audit_import"):
             if key in holder:
                 return holder[key]
     return None
+
+
+def _report_text_failures(report, limit=6):
+    """Why text items failed, from extra.text_delivery in the import report."""
+    delivery = (report.get("extra") or {}).get("text_delivery") or {}
+    reasons = []
+    for item in delivery.get("items") or []:
+        if item.get("status") != "failed":
+            continue
+        parts = [str(item.get("requested_representation") or ""), str(item.get("reason") or "")]
+        viewport = item.get("page_viewport_failure") or {}
+        if viewport:
+            parts.append(f"{viewport.get('stage')}: {viewport.get('reason')}")
+        for attempt in item.get("attempts") or []:
+            if attempt.get("status") in ("verified", "delivered"):
+                continue
+            evidence = attempt.get("evidence") or {}
+            parts += [
+                str(attempt.get("reason") or ""),
+                str(evidence.get("reason") or ""),
+                str(evidence.get("error_type") or ""),
+                str(evidence.get("detail") or "")[:160],
+            ]
+        reasons.append(f"{item.get('item_id')}: " + " / ".join(p for p in parts if p))
+        if len(reasons) >= limit:
+            break
+    return reasons
 
 
 def _checks(summary, expect_pages, expect_images):
@@ -179,11 +209,15 @@ def main():
     summary["object_types"] = dict(collections.Counter(obj.type for obj in bpy.data.objects))
     summary["object_total"] = len(bpy.data.objects)
     summary["objects_per_page"] = _page_object_counts(bpy)
-    summary["audit_mode"] = _report_audit_mode(stats.get("import_report_path") or report_path)
+    report = _read_report(stats.get("import_report_path") or report_path)
+    summary["audit_mode"] = _report_audit_mode(report)
+    summary["text_failure_reasons"] = _report_text_failures(report)
 
     problems = _checks(summary, _int_env("TEST_EXPECT_PAGES"), _int_env("TEST_EXPECT_IMAGES"))
     summary["problems"] = problems
     print("HEADLESS_IMPORT_RESULT", json.dumps(summary, default=str, sort_keys=True))
+    for reason in summary["text_failure_reasons"]:
+        print("HEADLESS_IMPORT_TEXT_FAILURE", reason)
     result_json = os.environ.get("TEST_RESULT_JSON")
     if result_json:
         with open(result_json, "w", encoding="utf-8") as fh:
