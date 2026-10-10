@@ -117,7 +117,7 @@ class TestBlGuiProfessionalImport(unittest.TestCase):
         self.assertIsNotNone(mode_items)
         self.assertEqual(
             [item[0] for item in mode_items],
-            ["labels", "text", "3d_text", "glyphs", "geometry", "raster"],
+            ["text", "3d_text", "glyphs", "geometry", "raster", "labels"],
         )
 
 

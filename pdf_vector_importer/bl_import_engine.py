@@ -1502,6 +1502,11 @@ def _auto_hide_default_cube(scene) -> int:
                 obj.hide_viewport = True
             except Exception:
                 pass
+            try:
+                # Renders (F12) match the viewport: the cube does not cover the drawing.
+                obj.hide_render = True
+            except Exception:
+                pass
             hidden += 1
     except Exception:
         return hidden
@@ -3314,12 +3319,27 @@ def _normalize_page_arrangement(raw: str | None) -> str:
     return "spread"
 
 
+# Compact must stack visibly tighter than Spread (fixed 20% gap) by default.
+_COMPACT_GAP_DEFAULT = 0.05
+
+
 def _normalize_page_gap_ratio(raw) -> float:
     try:
         ratio = float(raw)
     except (TypeError, ValueError):
-        ratio = 0.20
+        ratio = _COMPACT_GAP_DEFAULT
+    if not math.isfinite(ratio):
+        ratio = _COMPACT_GAP_DEFAULT
     return max(0.0, min(1.0, ratio))
+
+
+def _offset_mm(config: Dict, key: str, default: float) -> float:
+    """A Z offset in mm; 0.0 means flat. Only a missing or non-number value uses the default."""
+    try:
+        value = float(config.get(key))
+    except (TypeError, ValueError):
+        return float(default)
+    return value if math.isfinite(value) else float(default)
 
 
 def _page_stack_step(page_height_m: float, arrangement: str, gap_ratio: float) -> float:
@@ -3752,9 +3772,9 @@ def import_pdf(
     visual_style = str(config.get("visual_style", "source") or "source").strip().lower()
     if visual_style not in {"source", "blueprint", "high_contrast"}:
         visual_style = "source"
-    line_z_offset_m = float(config.get("line_z_offset_mm", 0.10) or 0.10) * _MM_TO_M
-    text_z_offset_m = float(config.get("text_z_offset_mm", 0.35) or 0.35) * _MM_TO_M
-    image_z_offset_m = float(config.get("image_z_offset_mm", 0.0) or 0.0) * _MM_TO_M
+    line_z_offset_m = _offset_mm(config, "line_z_offset_mm", 0.10) * _MM_TO_M
+    text_z_offset_m = _offset_mm(config, "text_z_offset_mm", 0.35) * _MM_TO_M
+    image_z_offset_m = _offset_mm(config, "image_z_offset_mm", 0.0) * _MM_TO_M
     auto_focus_view = bool(config.get("auto_focus_view", True))
     keep_selection_after_focus = bool(config.get("keep_selection_after_focus", False))
     auto_hide_default_cube = bool(config.get("auto_hide_default_cube", True))
