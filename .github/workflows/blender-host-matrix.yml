@@ -210,30 +210,51 @@ jobs:
             --python scripts/_headless_import_test.py 2>&1 | tee "$CI_OUT/import_edge_far.log"
           grep -qE "HEADLESS_IMPORT_(XFAIL|XPASS)" "$CI_OUT/import_edge_far.log"
 
+      - name: Keep Blender's crash report, if any
+        if: ${{ always() }}
+        run: |
+          crash="$(cygpath -u "${TEMP:-$RUNNER_TEMP}")/blender.crash.txt"
+          if [ -f "$crash" ] && [ -n "${CI_OUT:-}" ]; then
+            mkdir -p "$CI_OUT"
+            cp "$crash" "$CI_OUT/blender.crash.txt"
+            echo "::warning::Blender $BLENDER_VERSION crashed; blender.crash.txt is kept with the results"
+            head -n 40 "$crash"
+          fi
+
       - name: Summary
         if: ${{ always() }}
         run: |
           python - <<'PY'
-          import glob, json, os
+          import json, os
           out = os.environ.get("CI_OUT") or ""
           lines = [f"### Blender {os.environ['BLENDER_VERSION']}", "",
                    "| Check | Text mode | Sheets imported | Result |", "|---|---|---|---|"]
           props = os.path.join(out, "properties.log")
           ok = os.path.isfile(props) and "NATIVE_PROPERTIES_PASS" in open(props, encoding="utf-8", errors="replace").read()
           lines.append(f"| Options registered | - | - | {'pass' if ok else 'FAIL'} |")
-          for path in sorted(glob.glob(os.path.join(out, "import_*.json"))):
+          checks = (("import_text", "text", False), ("import_3d_text", "3d_text", False),
+                    ("import_glyphs", "glyphs", False), ("import_edge_far", "3d_text", True))
+          crashed = os.path.isfile(os.path.join(out, "blender.crash.txt"))
+          for name, mode, known in checks:
+              label = "known failure: far edge text" if known else "import ci.pdf"
+              path = os.path.join(out, name + ".json")
+              if not os.path.isfile(path):
+                  why = "no result: Blender crashed" if crashed else "no result: step did not finish"
+                  lines.append(f"| {label} | {mode} | - | {why} |")
+                  continue
               data = json.load(open(path, encoding="utf-8"))
-              known = "known failure" if "edge_far" in path else "import"
-              result = "pass" if not data.get("problems") else "; ".join(data["problems"])[:200]
-              if "edge_far" in path:
-                  result = "still failing (expected)" if data.get("problems") else "now passes - remove the known-failure marker"
-              elif data.get("text_failure_reasons"):
-                  result += " (first reason: " + data["text_failure_reasons"][0][:160] + ")"
-              lines.append(f"| {known} {data.get('pdf')} | {data.get('text_mode')} | "
-                           f"{(data.get('stats') or {}).get('pages_imported')} | {result} |")
+              problems = data.get("problems") or []
+              if known:
+                  result = "still failing (expected)" if problems else "now passes - remove the known-failure marker"
+              else:
+                  result = "pass" if not problems else "FAIL: " + "; ".join(problems)[:200]
+                  if problems and data.get("text_failure_reasons"):
+                      result += " (first reason: " + data["text_failure_reasons"][0][:160] + ")"
+              lines.append(f"| {label} | {mode} | {(data.get('stats') or {}).get('pages_imported')} | {result} |")
+          text = "\n".join(lines) + "\n"
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
-              fh.write("\n".join(lines) + "\n")
-          print("\n".join(lines))
+              fh.write(text)
+          print(text)
           PY
 
       - name: Keep logs and results
