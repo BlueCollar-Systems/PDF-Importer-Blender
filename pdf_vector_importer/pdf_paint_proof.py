@@ -69,6 +69,25 @@ def rect_pair_matches(fill, stroke, raw):
         return False
 
 
+def optional_page_svg(page, *, text_as_path=False):
+    """Return the page SVG, or None when MuPDF cannot export it.
+
+    JPEG2000 images with a soft mask make ``get_svg_image`` throw
+    (``pixmap may not have alpha to save as JPEG``). Paint-order proofs are
+    optional. A missing SVG must not cancel the import.
+    """
+    getter = getattr(page, "get_svg_image", None)
+    if not callable(getter):
+        return None
+    try:
+        svg = getter(text_as_path=text_as_path)
+    except Exception:
+        return None
+    if not isinstance(svg, str) or not svg:
+        return None
+    return svg
+
+
 def final_svg_rectangles(svg, rows):
     """Require direct-root final path pairs: no inherited clipping or groups."""
     try:

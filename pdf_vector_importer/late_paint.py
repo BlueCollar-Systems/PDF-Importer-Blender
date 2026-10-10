@@ -65,9 +65,10 @@ def final_rectangles(page, page_data):
     result.reverse()
     if not result:
         return []
-    from .pdf_paint_proof import final_svg_rectangles
+    from .pdf_paint_proof import final_svg_rectangles, optional_page_svg
 
-    if not final_svg_rectangles(page.get_svg_image(text_as_path=True), [row for _, _, row in result]):
+    svg = optional_page_svg(page, text_as_path=True)
+    if svg is None or not final_svg_rectangles(svg, [row for _, _, row in result]):
         return []
     return [(prim, box) for prim, box, _ in result]
 

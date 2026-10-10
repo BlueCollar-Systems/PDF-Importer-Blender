@@ -286,7 +286,11 @@ def plan_opaque_images(page, page_data, *, user_scale=1.0, flip_y=True, raster_d
     ]
     if len(inventory) != len(image_orders):
         return []
-    svg = page.get_svg_image(text_as_path=False)
+    from .pdf_paint_proof import optional_page_svg
+
+    svg = optional_page_svg(page, text_as_path=False)
+    if svg is None:
+        return []
     svg_images = _svg_images(svg, fitz)
     if len(svg_images) != len(inventory):
         return []
@@ -549,7 +553,7 @@ def _verify_native_image(obj, plan, placement, images):
     if (
         len(mesh.materials) != 1
         or not mesh.materials[0].use_nodes
-        or image.colorspace_settings.name != "Non-Color"
+        or image.colorspace_settings.name != "sRGB"
     ):
         raise ValueError("Source-qualified image material binding changed")
     tree = mesh.materials[0].node_tree

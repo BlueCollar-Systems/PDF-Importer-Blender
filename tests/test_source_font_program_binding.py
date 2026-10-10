@@ -12,7 +12,9 @@ from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 from fontTools.ttLib import TTFont
 
-from pdf_vector_importer.pdfcadcore.embedded_fonts import EmbeddedFontCatalog, source_control_zero_ink_proof
+from pdf_vector_importer.pdfcadcore.embedded_fonts import (
+    EmbeddedFontCatalog, EmbeddedFontFailure, source_control_zero_ink_proof,
+)
 from pdf_vector_importer.pdfcadcore.primitive_extractor import (
     _raw_text_with_source_quads, _source_character_font_digest,
     _source_font_occurrence_keys, extract_page,
@@ -114,6 +116,48 @@ def subset_pdf(font_path):
     return pdf
 
 
+def test_truncated_hmtx_sidebearings_still_bind(deterministic_exact_font):
+    """A PDF subset that omits the hmtx side-bearing tail must still become text."""
+    import struct
+
+    source = TTFont(deterministic_exact_font)
+    source["hhea"].numberOfHMetrics = 2
+    saved = BytesIO()
+    source.save(saved)
+    source.close()
+    blob = bytearray(saved.getvalue())
+    table_count = struct.unpack_from(">H", blob, 4)[0]
+    for index in range(table_count):
+        offset = 12 + index * 16
+        tag, _checksum, _table_offset, _length = struct.unpack_from(">4sIII", blob, offset)
+        if tag == b"hmtx":
+            struct.pack_into(">I", blob, offset + 12, 8)
+            break
+    else:
+        raise AssertionError("hmtx table missing")
+    broken = bytes(blob)
+    from pdf_vector_importer.pdfcadcore.embedded_fonts import (
+        _fonttools_loadable,
+        _repair_truncated_hmtx,
+    )
+
+    assert _fonttools_loadable(broken) is False
+    repaired = _repair_truncated_hmtx(broken)
+    assert repaired != broken
+    assert _fonttools_loadable(repaired) is True
+
+    pdf = fitz.open()
+    page = pdf.new_page(width=200, height=80)
+    page.insert_font(fontname="F1", fontbuffer=broken)
+    page.insert_text((20, 50), "AB", fontname="F1", fontsize=18)
+    catalog = EmbeddedFontCatalog.from_page(page, 1)
+    assert catalog.failures == ()
+    assert catalog.assets
+    items = extract_page(page, 1, detect_arcs=False).text_items
+    assert any(item.text.strip() == "AB" and item.font_asset is not None for item in items)
+    pdf.close()
+
+
 @pytest.mark.parametrize("in_form", [False, True])
 def test_complementary_subsets_bind_actual_character_programs(deterministic_exact_font, in_form):
     source = subset_pdf(deterministic_exact_font)
@@ -154,6 +198,21 @@ def test_complementary_subsets_bind_actual_character_programs(deterministic_exac
     assert page.get_pixmap().samples == page.get_pixmap().samples
     pdf.close()
     source.close()
+
+
+def test_failed_font_build_is_not_reported_as_missing_from_the_pdf():
+    failure = EmbeddedFontFailure(
+        1, "Nimbus", "embedded_font_asset_build_failed", 4,
+        "ExactFontSourceImpossible", "unsupported embedded font format: pfa",
+        "source_specific_impossibility",
+    )
+    catalog = EmbeddedFontCatalog(1, {}, {"Nimbus": failure})
+    asset, got = catalog.resolve_span("Nimbus", [{
+        "source_font_program_sha256": "ab" * 32,
+        "source_font_binding_verified": True,
+    }])
+    assert asset is None
+    assert got is failure
 
 
 def test_mixed_partial_and_wrong_program_spans_fail_closed(deterministic_exact_font):

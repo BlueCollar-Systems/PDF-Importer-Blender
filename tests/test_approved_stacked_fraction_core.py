@@ -39,8 +39,13 @@ from pdfcadcore import primitive_extractor  # noqa: E402
 # September 30: original renderer character program binding disambiguates
 # complementary subsets and annotation appearance resources. Reviewed alongside
 # exact source affine and stacked-fraction regression coverage.
+# October 10: a span is placed per character only when every visible character
+# has a text-trace glyph id. Pattern-filled text without those ids stays one
+# editable object instead of cancelling the page. Render mode 3 (no fill or
+# stroke bits) is not imported; that hidden OCR layer is not ink. Fraction
+# predicates, scale, and source-character proofs are unchanged.
 REVIEWED_COMBINED_SUCCESSOR_SHA256 = (
-    "0064571305a21d5a73dee1849929d26632ade4b43971cd837bbf83b1e604b884"
+    "de59a78625e61b8568612a578ca3ff4131720e47cfb874afffceed9fdc200636"
 )
 
 

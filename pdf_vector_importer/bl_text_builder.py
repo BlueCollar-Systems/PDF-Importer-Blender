@@ -3157,7 +3157,7 @@ def _attempt_raster_impl(
                 and tuple(shader.inputs["Base Color"].default_value) == (0, 0, 0, 1)
                 and float(specular.default_value) == 0
                 and float(shader.inputs["Emission Strength"].default_value) == 1
-                and image.colorspace_settings.name == "Non-Color"
+                and image.colorspace_settings.name == "sRGB"
                 and all(node.extension == "EXTEND" for node in texture_nodes)
                 and any(link.from_node in texture_nodes and link.to_node == shader
                         and link.to_socket == emission

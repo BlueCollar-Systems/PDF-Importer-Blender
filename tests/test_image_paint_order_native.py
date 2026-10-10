@@ -135,7 +135,7 @@ def native_case(tmp_path, monkeypatch):
             )
         ),
     )
-    image = NS(packed_file=NS(data=payload), colorspace_settings=NS(name="Non-Color"))
+    image = NS(packed_file=NS(data=payload), colorspace_settings=NS(name="sRGB"))
     mesh.materials = [material(image)]
     plane = Object("Source image", "MESH", mesh)
     plane["pdf_image_datablock"] = "pixels"
@@ -349,7 +349,7 @@ def test_native_image_tampering_fails_before_any_depth_change(native_case, mutat
     elif mutation == "material-link":
         case.mesh.materials[0].node_tree.links.pop()
     elif mutation == "opacity":
-        case.image.colorspace_settings.name = "sRGB"
+        case.image.colorspace_settings.name = "Non-Color"
     else:
         case.mesh.polygons.append(case.mesh.polygons[0])
     with pytest.raises((ValueError, RuntimeError)):

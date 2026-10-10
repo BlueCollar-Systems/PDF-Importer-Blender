@@ -10,6 +10,7 @@ import hashlib
 import json
 import math
 
+from .pdf_paint_proof import optional_page_svg
 from .stroke_footprint import unclipped_capsules, bind_similarity_strokes
 
 SCHEMA = "bcs.pdf.nontext-composite/1"
@@ -127,7 +128,9 @@ def qualify_recipes(page, capsule_proofs, *, source_sha256, page_number, dpi=600
                 level=g.get("level", 0), blendmode=g.get("blendmode", "Normal"),
                 opacity=g.get("opacity", 1), knockout=g.get("knockout", False),
                 isolated=g.get("isolated", False), bounds=list(g["rect"])) for g in groups]
-    original_svg = page.get_svg_image(text_as_path=True)
+    original_svg = optional_page_svg(page, text_as_path=True)
+    if original_svg is None:
+        return []
     original_proofs = bind_similarity_strokes(
         unclipped_capsules(original_rows, page_box), original_rows,
         original_svg)
@@ -232,9 +235,11 @@ def render_recipes(page, recipes, fitz):
                                 "width": pix.width, "height": pix.height, "channels": 3,
                                 "device_bounds": device, "coverage_bounds_pdf": recipe["coverage_bounds_pdf"]}))
     _box_now, log_now = _page_state(page)
+    svg_now = optional_page_svg(page, text_as_path=True)
     if (_digest(log_now) != first["source_paint_inventory_sha256"]
             or _digest(_source_group_declarations(page)) != first["source_group_declarations_sha256"]
-            or hashlib.sha256(page.get_svg_image(text_as_path=True).encode()).hexdigest() != first["source_svg_sha256"]):
+            or svg_now is None
+            or hashlib.sha256(svg_now.encode()).hexdigest() != first["source_svg_sha256"]):
         raise ValueError("Source page changed while rendering composite")
     return result
 

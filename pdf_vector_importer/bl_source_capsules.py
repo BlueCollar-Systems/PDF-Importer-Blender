@@ -76,9 +76,12 @@ def prepare_capsules(
     }
     if not proofs:
         return [], []
-    proofs = bind_similarity_strokes(
-        proofs, rows, page.get_svg_image(text_as_path=True)
-    )
+    from .pdf_paint_proof import optional_page_svg
+
+    svg = optional_page_svg(page, text_as_path=True)
+    if svg is None:
+        return [], []
+    proofs = bind_similarity_strokes(proofs, rows, svg)
     recipes = qualify_recipes(
         page, proofs, source_sha256=source_sha256, page_number=page_number
     )

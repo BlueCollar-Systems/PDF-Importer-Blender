@@ -539,7 +539,11 @@ def plan_terminal_triangles(page, page_data, source_sha256, *, user_scale=1., fl
         _source_group_declarations(page)
     except ValueError:
         return [], []
-    svg = page.get_svg_image(text_as_path=False)
+    from .pdf_paint_proof import optional_page_svg
+
+    svg = optional_page_svg(page, text_as_path=False)
+    if svg is None:
+        return [], []
     svg_rows = _svg_triangles(svg)
     drawings = page.get_drawings()
     raw = {row['seqno']: row for row in drawings}

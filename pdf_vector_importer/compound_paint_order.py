@@ -255,7 +255,11 @@ def plan_compound_fills(page, page_data, source_sha256, *, user_scale=1., flip_y
         _source_group_declarations(page)
     except ValueError:
         return [], []
-    svg = page.get_svg_image(text_as_path=False)
+    from .pdf_paint_proof import optional_page_svg
+
+    svg = optional_page_svg(page, text_as_path=False)
+    if svg is None:
+        return [], []
     svg_fills = _svg_covered_clips(svg)
     svg_strokes = _svg_triangles(svg)
     drawings = page.get_drawings()
