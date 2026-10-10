@@ -107,6 +107,154 @@ class _MaterialList(list):
     pass
 
 
+def _owned_curve_fixture(monkeypatch, kind="BEZIER", *, corrupt_coordinates=False,
+                         bulk_coordinates=False):
+    class Points(list):
+        foreach_set = None
+
+        def add(self, count):
+            for _ in range(count):
+                self.append(point())
+
+        def bulk_set(self, attribute, coordinates):
+            dimension = len(coordinates) // len(self)
+            for index, target in enumerate(self):
+                # Native foreach_set writes raw coordinates without RNA's
+                # per-point automatic handle adjustment.
+                object.__setattr__(target, attribute,
+                    tuple(coordinates[index * dimension:(index + 1) * dimension]))
+
+    if bulk_coordinates:
+        Points.foreach_set = Points.bulk_set
+
+    class TargetPoint(types.SimpleNamespace):
+        def __setattr__(self, name, value):
+            if corrupt_coordinates and name == "co":
+                value = tuple(value[0:1]) + (0.0,) + tuple(value[2:])
+            super().__setattr__(name, value)
+
+    def point():
+        return TargetPoint(co=(0.0, 0.0, 0.0), handle_left=(0.0, 0.0, 0.0),
+            handle_right=(0.0, 0.0, 0.0), handle_left_type="FREE",
+            handle_right_type="FREE", radius=1.0, tilt=0.0, weight=1.0)
+
+    class Splines(list):
+        def new(self, spline_kind):
+            spline = types.SimpleNamespace(type=spline_kind,
+                bezier_points=Points([point()]), points=Points([point()]),
+                use_cyclic_u=False, order_u=2, material_index=0)
+            self.append(spline)
+            return spline
+
+    created, removed = [], []
+    def new_curve(name, curve_kind):
+        curve = types.SimpleNamespace(name=name, type=curve_kind,
+            dimensions="3D", fill_mode="FULL", resolution_u=12,
+            splines=Splines(), materials=[])
+        created.append(curve)
+        return curve
+
+    material = types.SimpleNamespace(name="OwnedInk")
+    main_material = types.SimpleNamespace(name="OwnedInk", main_database=True)
+    fake = types.SimpleNamespace(data=types.SimpleNamespace(
+        curves=types.SimpleNamespace(new=new_curve, remove=removed.append),
+        materials=types.SimpleNamespace(get=lambda name: main_material if name == "OwnedInk" else None)))
+    monkeypatch.setattr(bl_text_builder, "bpy", fake)
+    source_point = types.SimpleNamespace(co=[1.0, 2.0, 3.0] + ([0.75] if kind != "BEZIER" else []),
+        handle_left=[0.0, 2.0, 3.0], handle_right=[2.0, 2.0, 3.0],
+        handle_left_type="FREE", handle_right_type="FREE", radius=1.5, tilt=0.25, weight=0.75)
+    source_spline = types.SimpleNamespace(type=kind, bezier_points=[source_point],
+        points=[source_point], use_cyclic_u=True, order_u=2, material_index=0)
+    source = types.SimpleNamespace(dimensions="2D", fill_mode="BOTH", resolution_u=24,
+        splines=[source_spline], materials=[material])
+    return source, created, removed, main_material
+
+
+@pytest.mark.parametrize("kind", ["BEZIER", "NURBS", "POLY"])
+def test_owned_glyph_curve_preserves_geometry_without_temporary_font_links(monkeypatch, kind):
+    source, created, removed, material = _owned_curve_fixture(monkeypatch, kind)
+    owned = bl_text_builder._copy_evaluated_glyph_curve(source, "Independent")
+    points = owned.splines[0].bezier_points if kind == "BEZIER" else owned.splines[0].points
+    original = source.splines[0].bezier_points[0]
+    assert owned.type == "CURVE" and not hasattr(owned, "font")
+    assert owned.dimensions == "2D" and owned.fill_mode == "BOTH"
+    assert owned.resolution_u == 24 and owned.splines[0].use_cyclic_u
+    assert owned.materials == [material] and owned.materials[0] is material
+    assert points[0].co == tuple(original.co)
+    assert points[0].radius == 1.5 and points[0].tilt == 0.25
+    if kind == "BEZIER":
+        assert points[0].handle_left == tuple(original.handle_left)
+        assert points[0].handle_right == tuple(original.handle_right)
+    else:
+        assert points[0].co[3] == 0.75 and points[0].weight == 0.75
+    original.co[1] = 999.0
+    original.handle_left[1] = 999.0
+    assert points[0].co[1] == 2.0 and points[0].handle_left[1] != 999.0
+    assert created == [owned] and not removed
+
+
+def test_owned_glyph_curve_rejects_changed_readback_and_removes_candidate(monkeypatch):
+    source, created, removed, _material = _owned_curve_fixture(monkeypatch, corrupt_coordinates=True)
+    with pytest.raises(ValueError, match="changed co"):
+        bl_text_builder._copy_evaluated_glyph_curve(source, "Independent")
+    assert removed == created and len(removed) == 1
+
+
+@pytest.mark.parametrize("kind", ["BEZIER", "NURBS", "POLY"])
+def test_owned_glyph_curve_bulk_copy_preserves_coordinates_despite_rna_adjustment(monkeypatch, kind):
+    source, _created, removed, _material = _owned_curve_fixture(
+        monkeypatch, kind, corrupt_coordinates=True, bulk_coordinates=True)
+    owned = bl_text_builder._copy_evaluated_glyph_curve(source, "Independent")
+    points = owned.splines[0].bezier_points if kind == "BEZIER" else owned.splines[0].points
+    assert points[0].co == tuple(source.splines[0].points[0].co)
+    if kind == "BEZIER":
+        assert points[0].handle_left == tuple(source.splines[0].points[0].handle_left)
+        assert points[0].handle_right == tuple(source.splines[0].points[0].handle_right)
+    assert not removed
+
+
+@pytest.mark.parametrize("failure", ["unknown_spline", "unowned_material"])
+def test_owned_glyph_curve_cannot_silently_drop_geometry_or_material(monkeypatch, failure):
+    source, created, removed, _material = _owned_curve_fixture(monkeypatch)
+    if failure == "unknown_spline":
+        source.splines[0].type = "UNSUPPORTED"
+    else:
+        source.materials[0].name = "NotInMainDatabase"
+    with pytest.raises(ValueError):
+        bl_text_builder._copy_evaluated_glyph_curve(source, "Independent")
+    assert removed == created and len(removed) == 1
+
+
+@pytest.mark.parametrize("clear_fails", [False, True])
+def test_owned_glyph_curve_double_failure_retains_cleanup_ownership(monkeypatch, clear_fails):
+    converted, created, _removed, _material = _owned_curve_fixture(
+        monkeypatch, corrupt_coordinates=True)
+
+    def remove_fails(_candidate):
+        raise RuntimeError("host removal failed")
+
+    bl_text_builder.bpy.data.curves.remove = remove_fails
+    bl_text_builder.bpy.types = types.SimpleNamespace(TextCurve=type(converted))
+    def clear():
+        if clear_fails:
+            raise RuntimeError("temporary curve release failed")
+
+    evaluated = types.SimpleNamespace(to_curve=lambda *_args, **_kwargs: converted,
+        to_curve_clear=clear)
+    source_data = types.SimpleNamespace(name="TemporaryFont")
+    source = types.SimpleNamespace(name="TemporaryFont", data=source_data,
+        evaluated_get=lambda _graph: evaluated)
+    final, final_data, outcome = bl_text_builder._prepare_positioned_converted_candidate(
+        source, source_data, _item(), None, page_number=1, requested="glyphs",
+        delivered="glyphs", item_id="page:1:text:41", depsgraph=object())
+    assert final is None and final_data is None and outcome.status == "failed"
+    assert len(created) == 1
+    assert any(data is created[0] for data in outcome.owned_datablocks)
+    assert any(artifact.get("datablock_id") == created[0].name
+               for artifact in outcome.owned_artifacts)
+    assert "host removal failed" in outcome.evidence["detail"]
+
+
 class _FontData:
     type = "FONT"
 
@@ -1506,6 +1654,39 @@ def test_positioned_conversion_delivers_whitespace_only_span_as_empty_typed_carr
     assert evidence["advance_preserved"] is True
 
 
+@pytest.mark.parametrize("owner_available", [True, False])
+def test_empty_geometry_carrier_restores_only_owned_material_dropped_by_host(monkeypatch, owner_available):
+    fake, collection = _install(monkeypatch)
+    _patch_positioned_conversion_fakes(monkeypatch)
+    original_factory = fake.data.meshes.new_from_object
+    def dropping_factory(evaluated, depsgraph=None):
+        mesh = original_factory(evaluated, depsgraph=depsgraph)
+        assert len(mesh.vertices) == 0
+        mesh.materials.clear()
+        if not owner_available:
+            fake.data.materials.items.clear()
+        return mesh
+
+    fake.data.meshes.new_from_object = dropping_factory
+    item = _item()
+    item.text = " "
+    item.normalized = ""
+    item.source_char_layout = (_character_layout_with_space()[1],)
+    item.requires_individual_positioning = True
+    opts = types.SimpleNamespace(import_mode="vector", text_mode="geometry")
+    obj = bl_text_builder.build_text(item, collection, page_number=2,
+        text_mode="geometry", provenance_opts=opts)
+    record = opts._text_delivery_records[-1]
+    assert record["fallback_used"] is False
+    if owner_available:
+        assert obj.type == "MESH" and len(obj.data.vertices) == 0
+        assert len(obj.data.materials) == 1
+        assert obj.data.materials[0] is fake.data.materials.get(obj.data.materials[0].name)
+        assert obj["pdf_zero_ink_identity"] and obj["pdf_advance_preserved"]
+        assert record["status"] == "delivered"
+    else:
+        assert obj is None and record["status"] == "failed"
+        assert "no main-database owner" in record["attempts"][0]["evidence"]["detail"]
 @pytest.mark.parametrize(
     ("mode", "expected_type"),
     [("glyphs", "CURVE"), ("geometry", "MESH")],

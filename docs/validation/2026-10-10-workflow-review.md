@@ -108,11 +108,14 @@ release artifact was replaced by these checks.
 
 ## Boundaries and remaining work
 
-These are **source checkout changes**; no installed add-on was replaced, no
-release was rebuilt, and no publication was performed. The minimum host remains
+The initial review above covered **source checkout changes**. The subsequent
+owner-authorized installable test snapshot, legacy compatibility fixes, and
+native extracted-package checks are recorded in
+`2026-10-10-test-package-review.md`. No installed add-on was replaced and no
+publication was performed. The minimum host remains
 Blender 3.1 / Python 3.10. The portable Blender 4.4.3 executable present on this
-machine exited with `0xC0000135` (missing DLL dependency); older-host native
-acceptance is therefore unavailable from this installation.
+machine exited with `0xC0000135` (missing DLL dependency). A separately verified
+official Blender 3.1.2 portable was subsequently used for the native floor check.
 
 The native results verify the recorded delivery contracts for those inputs;
 they do not certify every PDF, old machine, or pixel-level side-by-side display.

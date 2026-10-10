@@ -1,0 +1,274 @@
+{
+  "schema": "bcs.local-test-native-summary/1",
+  "local_test_build": true,
+  "published_release": false,
+  "archive": "Blender-PDF-Importer_v1.0.106-test-2026-10-10-r5.zip",
+  "sha256": "b74b6a95c1556a6dd2ee23534f3890ac1c1922391fba2eba72f3707be4b27d02",
+  "bytes": 20134343,
+  "source_files": {
+    "pdf_vector_importer/bl_import_engine.py": "d2a1fbedaf4c50724c2f63cbfd9faa42d194eefb3d2196c35e6d3af484002bb0",
+    "pdf_vector_importer/bl_text_builder.py": "7f37711c0e9bdde5b133fa527787a334e38cde9c4997c2e7c4306143a700d76c",
+    "pdf_vector_importer/operators.py": "0226400826ae7b5a905e45efc63c0083c07852ef51a6a51f89ebb90cfef3755d",
+    "pdf_vector_importer/pdfcadcore/embedded_fonts.py": "80ad2ad02f49e7972f5871c238b3e58097b1ff7f0e5f6190c3004ba741550be7",
+    "pdf_vector_importer/pdfcadcore/primitive_extractor.py": "8602183cab654fdeadbf0319329f258df8c0d071b3ef22af2cdd2ca366170e2f",
+    "pdf_vector_importer/pdfcadcore/primitives.py": "ee480136c214b4e6cc16a0071a9ab57b4238be5f5b1f16e65534715e75e97100",
+    "pdf_vector_importer/text_page_clip.py": "a7fd63c915efc61f91ae1ea84083b26cd263ed35a7ac91253ea551ca192ff56c"
+  },
+  "hosts": [
+    {
+      "host": "3.1.2",
+      "python": "3.10.2 (main, Jan 27 2022, 08:34:43) [MSC v.1928 64 bit (AMD64)]",
+      "passed": true,
+      "modes": [
+        {
+          "mode": "text",
+          "case": "synthetic-two-page-fixture",
+          "text_failed": 0,
+          "text_fallback": 0,
+          "raster_failures": 0,
+          "geometry_issues": 0,
+          "native_object_types": [
+            "CURVE",
+            "FONT",
+            "MESH"
+          ],
+          "input_unchanged": true,
+          "contract_ready": true
+        },
+        {
+          "mode": "3d_text",
+          "case": "synthetic-two-page-fixture",
+          "text_failed": 0,
+          "text_fallback": 0,
+          "raster_failures": 0,
+          "geometry_issues": 0,
+          "native_object_types": [
+            "CURVE",
+            "FONT",
+            "MESH"
+          ],
+          "input_unchanged": true,
+          "contract_ready": true
+        },
+        {
+          "mode": "glyphs",
+          "case": "synthetic-two-page-fixture",
+          "text_failed": 0,
+          "text_fallback": 0,
+          "raster_failures": 0,
+          "geometry_issues": 0,
+          "native_object_types": [
+            "CURVE",
+            "MESH"
+          ],
+          "input_unchanged": true,
+          "contract_ready": true
+        },
+        {
+          "mode": "geometry",
+          "case": "synthetic-two-page-fixture",
+          "text_failed": 0,
+          "text_fallback": 0,
+          "raster_failures": 0,
+          "geometry_issues": 0,
+          "native_object_types": [
+            "CURVE",
+            "MESH"
+          ],
+          "input_unchanged": true,
+          "contract_ready": true
+        },
+        {
+          "mode": "raster",
+          "case": "synthetic-two-page-fixture",
+          "text_failed": 0,
+          "text_fallback": 0,
+          "raster_failures": 0,
+          "geometry_issues": 0,
+          "native_object_types": [
+            "CURVE",
+            "MESH"
+          ],
+          "input_unchanged": true,
+          "contract_ready": true
+        },
+        {
+          "mode": "labels",
+          "case": "synthetic-two-page-fixture",
+          "text_failed": 0,
+          "text_fallback": 4,
+          "raster_failures": 0,
+          "geometry_issues": 0,
+          "native_object_types": [
+            "CURVE",
+            "FONT",
+            "MESH"
+          ],
+          "input_unchanged": true,
+          "contract_ready": true
+        },
+        {
+          "mode": "3d_text",
+          "case": "private-shop-drawing",
+          "text_failed": 0,
+          "text_fallback": 0,
+          "raster_failures": 0,
+          "geometry_issues": 0,
+          "native_object_types": [
+            "CURVE",
+            "EMPTY",
+            "FONT",
+            "MESH"
+          ],
+          "input_unchanged": true,
+          "contract_ready": true
+        }
+      ],
+      "controls": {
+        "native_addon_registered": true,
+        "invalid_pages_rejected_without_scene_changes": true,
+        "reversed_duplicate_pages_normalized": true,
+        "native_modal_escape_rollback_resume": true,
+        "native_cancel_operator": true
+      },
+      "runtime_versions": {
+        "PyMuPDF": "1.28.2",
+        "FontTools": "4.60.2"
+      },
+      "synthetic_spacing": {
+        "count": 1,
+        "native_flags": 532,
+        "painted_glyph_id": null,
+        "source_font_binding_verified": true
+      }
+    },
+    {
+      "host": "5.2.2 LTS",
+      "python": "3.13.13 (main, May  8 2026, 12:37:03) [MSC v.1944 64 bit (AMD64)]",
+      "passed": true,
+      "modes": [
+        {
+          "mode": "text",
+          "case": "synthetic-two-page-fixture",
+          "text_failed": 0,
+          "text_fallback": 0,
+          "raster_failures": 0,
+          "geometry_issues": 0,
+          "native_object_types": [
+            "CURVE",
+            "FONT",
+            "MESH"
+          ],
+          "input_unchanged": true,
+          "contract_ready": true
+        },
+        {
+          "mode": "3d_text",
+          "case": "synthetic-two-page-fixture",
+          "text_failed": 0,
+          "text_fallback": 0,
+          "raster_failures": 0,
+          "geometry_issues": 0,
+          "native_object_types": [
+            "CURVE",
+            "FONT",
+            "MESH"
+          ],
+          "input_unchanged": true,
+          "contract_ready": true
+        },
+        {
+          "mode": "glyphs",
+          "case": "synthetic-two-page-fixture",
+          "text_failed": 0,
+          "text_fallback": 0,
+          "raster_failures": 0,
+          "geometry_issues": 0,
+          "native_object_types": [
+            "CURVE",
+            "MESH"
+          ],
+          "input_unchanged": true,
+          "contract_ready": true
+        },
+        {
+          "mode": "geometry",
+          "case": "synthetic-two-page-fixture",
+          "text_failed": 0,
+          "text_fallback": 0,
+          "raster_failures": 0,
+          "geometry_issues": 0,
+          "native_object_types": [
+            "CURVE",
+            "MESH"
+          ],
+          "input_unchanged": true,
+          "contract_ready": true
+        },
+        {
+          "mode": "raster",
+          "case": "synthetic-two-page-fixture",
+          "text_failed": 0,
+          "text_fallback": 0,
+          "raster_failures": 0,
+          "geometry_issues": 0,
+          "native_object_types": [
+            "CURVE",
+            "MESH"
+          ],
+          "input_unchanged": true,
+          "contract_ready": true
+        },
+        {
+          "mode": "labels",
+          "case": "synthetic-two-page-fixture",
+          "text_failed": 0,
+          "text_fallback": 4,
+          "raster_failures": 0,
+          "geometry_issues": 0,
+          "native_object_types": [
+            "CURVE",
+            "FONT",
+            "MESH"
+          ],
+          "input_unchanged": true,
+          "contract_ready": true
+        },
+        {
+          "mode": "3d_text",
+          "case": "private-shop-drawing",
+          "text_failed": 0,
+          "text_fallback": 0,
+          "raster_failures": 0,
+          "geometry_issues": 0,
+          "native_object_types": [
+            "CURVE",
+            "EMPTY",
+            "FONT",
+            "MESH"
+          ],
+          "input_unchanged": true,
+          "contract_ready": true
+        }
+      ],
+      "controls": {
+        "native_addon_registered": true,
+        "invalid_pages_rejected_without_scene_changes": true,
+        "reversed_duplicate_pages_normalized": true,
+        "native_modal_escape_rollback_resume": true,
+        "native_cancel_operator": true
+      },
+      "runtime_versions": {
+        "PyMuPDF": "1.28.2",
+        "FontTools": "4.60.2"
+      },
+      "synthetic_spacing": {
+        "count": 1,
+        "native_flags": 532,
+        "painted_glyph_id": null,
+        "source_font_binding_verified": true
+      }
+    }
+  ],
+  "boundary": "Headless actual host APIs/operators and explicit callback events; selected fixtures, no GUI pixel comparison."
+}
