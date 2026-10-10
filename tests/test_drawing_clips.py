@@ -75,6 +75,63 @@ def test_clip_scope_ends_at_equal_level_and_group_rows_are_not_paint():
     assert "bcs_compound_clip_fill" not in sibling
 
 
+def test_filled_path_inside_a_rectangular_clip_is_cut_to_the_rectangle():
+    mask = rect_clip((0, 0, 10, 10), level=0)
+    diamond = {
+        "type": "f", "level": 1, "seqno": 7,
+        "rect": (-5, -5, 15, 15),
+        "fill": (1, 0.4, 0), "fill_opacity": 1.0, "even_odd": False,
+        "items": [
+            ("l", (-5, 5), (5, 15)),
+            ("l", (5, 15), (15, 5)),
+            ("l", (15, 5), (5, -5)),
+            ("l", (5, -5), (-5, 5)),
+        ],
+    }
+    result = resolve_covered_clip_fills([mask, diamond])
+    assert len(result) == 1
+    row = result[0]
+    assert row["bcs_compound_clip_fill"] is True
+    assert row["bcs_clip_fill_resolution"] == "path-rect-clip"
+    assert row["fill"] == (1, 0.4, 0)
+    for _kind, start, end in row["items"]:
+        for x, y in (start, end):
+            assert -1e-6 <= x <= 10 + 1e-6
+            assert -1e-6 <= y <= 10 + 1e-6
+    assert row["rect"][0] >= -1e-6 and row["rect"][2] <= 10 + 1e-6
+    assert row["rect"][1] >= -1e-6 and row["rect"][3] <= 10 + 1e-6
+    # The diamond crosses the clip, so some of it was removed.
+    assert any(x < -1e-6 or x > 10 or y < -1e-6 or y > 10
+               for item in diamond["items"] for point in item[1:] for x, y in [point])
+
+
+def test_filled_path_fully_inside_a_rectangular_clip_stays_exact():
+    mask = rect_clip((-1, -1, 20, 20), level=0)
+    path = {
+        "type": "f", "level": 1, "seqno": 8,
+        "rect": (1, 1, 4, 4),
+        "fill": (0, 0, 1), "fill_opacity": 1.0, "even_odd": False,
+        "items": [("l", (1, 1), (4, 1)), ("l", (4, 1), (4, 4)), ("l", (4, 4), (1, 1))],
+    }
+    result = resolve_covered_clip_fills([mask, path])
+    assert result[0] is path
+    assert clip_fill_issues(result) == []
+
+
+def test_filled_path_through_a_nonrectangular_clip_is_left_out():
+    path = {
+        "type": "f", "level": 1, "seqno": 9,
+        "rect": (-5, -5, 15, 15),
+        "fill": (1, 0, 0), "fill_opacity": 1.0, "even_odd": False,
+        "items": [("l", (0, 0), (10, 0)), ("l", (10, 0), (5, 8)), ("l", (5, 8), (0, 0))],
+    }
+    result = resolve_covered_clip_fills([clip(), path])
+    assert result == []
+    issues = clip_fill_issues(result)
+    assert issues and issues[0]["dropped"] is True
+    assert issues[0]["action"] == "dropped-unsupported"
+
+
 def test_normal_paint_rows_and_paths_are_not_rewritten():
     stroke = {"type": "s", "level": 1, "items": [("l", (0, 0), (20, 10))]}
     ordinary = fill(level=0)

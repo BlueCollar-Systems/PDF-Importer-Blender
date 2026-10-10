@@ -84,9 +84,9 @@ blender --background --python-expr "import addon_utils; addon_utils.enable('pdf_
 | 5.2 LTS | 3.13 | >=1.24,<2.0 | ✅ Text/3D/Glyphs/Geometry/Raster host acceptance |
 | 5.0–5.1 | 3.12–3.13 | >=1.24,<2.0 | ✅ v1.0.42+ cp310-abi3 |
 | 4.5 LTS | 3.11 | >=1.24,<2.0 | ⚠️ Expected |
-| 4.0–4.2 | 3.11 | >=1.24,<2.0 | ⚠️ Expected |
-| 3.6 LTS | 3.10 | >=1.24,<2.0 | ⚠️ Expected |
-| 3.1–3.5 | 3.10 | >=1.24,<2.0 | ⚠️ Expected |
+| 4.0–4.2 | 3.11 | >=1.24,<2.0 | ✅ 4.2.23 Linux x64 (vector, text, glyphs) |
+| 3.6 LTS | 3.10 | >=1.24,<2.0 | ✅ 3.6.23 Linux x64 (glyphs) |
+| 3.1–3.5 | 3.10 | >=1.24,<2.0 | ✅ 3.1.2 Linux x64 (glyphs). 3.2–3.5 still expected |
 | 3.0.x | 3.9.7 | (none packaged) | ❌ Not supported |
 
 ### Blender 5.x PyMuPDF bootstrap (v1.0.42+)
@@ -103,7 +103,7 @@ confirmation.
 
 | Option | Blender result |
 |--------|----------------|
-| **Labels** | Persistent model label when supported; currently item-specific impossible in Blender, then Text fallback |
+| **Labels** | Same editable text as Text. Blender has no separate label object |
 | **Text** | Flat editable `FONT` using the exact embedded PDF font program |
 | **3D Text** | Extruded editable `FONT` using the exact embedded PDF font program |
 | **Glyphs** | Non-editable real Blender `CURVE` outlines |

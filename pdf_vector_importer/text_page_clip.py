@@ -112,13 +112,35 @@ def _page_prism(bpy, collection, bounds, z_bounds):
 
 def verify_clipped_ink(obj, bpy, bounds, expected_area, original_z):
     points, triangles = _evaluated_ink(obj, bpy)
-    tolerance = max(1e-8, max(abs(value) for value in bounds) * 1e-6)
-    if any(not (bounds[0] - tolerance <= p[0] <= bounds[2] + tolerance and
-                bounds[1] - tolerance <= p[1] <= bounds[3] + tolerance) for p in points):
+    # Measure in page-local coordinates. Blender stores world positions in
+    # float32, so a glyph that was clipped correctly at the origin can fail a
+    # world-space area check after the sheet is stacked several meters away.
+    # Subtracting the page anchor here keeps that quantization from throwing
+    # the page away. A real leak of a millimetre still fails.
+    origin_x, origin_y = float(bounds[0]), float(bounds[1])
+    local_bounds = (0.0, 0.0, float(bounds[2]) - origin_x, float(bounds[3]) - origin_y)
+
+    def _local(point):
+        return (float(point[0]) - origin_x, float(point[1]) - origin_y, float(point[2]))
+
+    local_points = [_local(point) for point in points]
+    local_triangles = [[_local(point) for point in triangle] for triangle in triangles]
+    magnitude = max((abs(float(value)) for value in bounds), default=1.0)
+    ulp = max(1e-9, magnitude * (2.0 ** -23))
+    tolerance = max(1e-8, ulp * 8.0)
+    if any(not (local_bounds[0] - tolerance <= p[0] <= local_bounds[2] + tolerance and
+                local_bounds[1] - tolerance <= p[1] <= local_bounds[3] + tolerance)
+           for p in local_points):
         raise ValueError('Native text viewport retained out-of-page ink')
     area = sum(polygon_area([tuple(point[:2]) for point in triangle])
-               for triangle in triangles)
-    if abs(area - expected_area) > max(1e-12, expected_area * 2e-4):
+               for triangle in local_triangles)
+    ink_span = 0.0
+    if local_points:
+        xs = [point[0] for point in local_points]
+        ys = [point[1] for point in local_points]
+        ink_span = max(max(xs) - min(xs), max(ys) - min(ys), 0.0)
+    area_floor = max(1e-12, abs(float(expected_area)) * 2e-4, ulp * max(ink_span, 1e-6) * 4.0)
+    if abs(area - expected_area) > area_floor:
         raise ValueError('Native text viewport changed the visible source ink area')
     if points and expected_area > 1e-12:
         depth = max(p[2] for p in points) - min(p[2] for p in points)

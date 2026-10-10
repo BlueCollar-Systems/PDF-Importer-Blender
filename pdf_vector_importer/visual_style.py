@@ -26,3 +26,21 @@ def preview_color(color: Color, style: str) -> Color:
         dark + (light - dark) * (1.0 - luminance)
         for dark, light in zip(DARK_PREVIEW_BACKGROUND, foreground, strict=True)
     )
+
+
+def srgb_channel_to_scene_linear(channel: float) -> float:
+    """PDF and preview colors are sRGB. Blender shader colors are scene-linear."""
+    value = max(0.0, min(1.0, float(channel)))
+    if value <= 0.04045:
+        return value / 12.92
+    return ((value + 0.055) / 1.055) ** 2.4
+
+
+def scene_linear_color(color: Color) -> Color:
+    """Convert a display sRGB triplet into the linear value Blender must store.
+
+    Assigning a PDF color such as 0.8 red straight into an emission shader
+    makes Blender display the sRGB encoding of that number, so the sheet looks
+    washed out next to the PDF. Black and white are unchanged.
+    """
+    return tuple(srgb_channel_to_scene_linear(channel) for channel in color)

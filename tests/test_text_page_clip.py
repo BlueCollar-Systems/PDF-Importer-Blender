@@ -55,6 +55,39 @@ def test_verified_ink_cannot_hide_a_flattened_3d_text_depth(monkeypatch):
         clip.verify_clipped_ink(object(), object(), (0, 0, 1, 1), .5, (0, .1))
 
 
+def test_stacked_sheet_float32_noise_does_not_reject_clipped_ink(monkeypatch):
+    import struct
+
+    def f32(value):
+        return struct.unpack("f", struct.pack("f", value))[0]
+
+    local = [(0.01, 0.01, 0.2), (0.03, 0.01, 0.2), (0.01, 0.04, 0.2)]
+    shift = 6.0
+    points = [(f32(point[0] + shift), f32(point[1] + shift), point[2]) for point in local]
+    monkeypatch.setattr(clip, "_evaluated_ink", lambda *_args: (points, [points]))
+    area = clip.polygon_area(local)
+    proof = clip.verify_clipped_ink(
+        object(), object(), (shift, shift, shift + 1.0, shift + 1.0), area, (0.2, 0.2))
+    assert proof["inside_page_verified"] is True
+    assert proof["visible_ink_area_verified"] is True
+
+
+def test_stacked_sheet_still_rejects_a_real_millimetre_leak(monkeypatch):
+    import struct
+
+    def f32(value):
+        return struct.unpack("f", struct.pack("f", value))[0]
+
+    shift = 6.0
+    points = [(f32(shift - 0.001), f32(shift + 0.01), 0.2),
+              (f32(shift + 0.02), f32(shift + 0.01), 0.2),
+              (f32(shift + 0.01), f32(shift + 0.03), 0.2)]
+    monkeypatch.setattr(clip, "_evaluated_ink", lambda *_args: (points, [points]))
+    with pytest.raises(ValueError, match="out-of-page ink"):
+        clip.verify_clipped_ink(
+            object(), object(), (shift, shift, shift + 1.0, shift + 1.0), 0.0001, (0.2, 0.2))
+
+
 def test_source_clipped_to_zero_ink_stays_an_explicit_verified_outcome(monkeypatch):
     monkeypatch.setattr(clip, "_evaluated_ink", lambda *_args: ([], []))
     proof = clip.verify_clipped_ink(object(), object(), (0, 0, 1, 1), 0, (0, .1))

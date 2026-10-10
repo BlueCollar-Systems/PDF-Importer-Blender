@@ -18,6 +18,7 @@ import sys
 from threading import RLock
 
 from .text_delivery import AttemptOutcome
+from .visual_style import scene_linear_color
 
 RESOLUTION = 32
 MAX_PIECES = 4096
@@ -786,7 +787,7 @@ def build_source_outlines(record, collection, *, representation, requested, z_of
             obj.location = (0., 0., _f32(z_offset_m))
             color = placement["color"]
             _require(len(color) == 3 and all(math.isfinite(v) and 0 <= v <= 1 for v in color), "invalid source color")
-            rgba = tuple(_f32(v) for v in color)+(1.,)
+            rgba = tuple(_f32(v) for v in scene_linear_color(tuple(color)))+(1.,)
             material = bpy.data.materials.new(name+"_ink"); blocks.append(material)
             material.use_nodes = True; material.diffuse_color = rgba
             nodes, links = material.node_tree.nodes, material.node_tree.links

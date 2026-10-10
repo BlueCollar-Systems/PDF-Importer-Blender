@@ -18,7 +18,7 @@ from typing import Any, Callable, Dict, Iterator, Optional, Tuple
 
 import bpy
 
-from .visual_style import preview_color
+from .visual_style import preview_color, scene_linear_color
 from .packed_assets import PackedAssetError, pack_and_verify_bytes, verify_packed_sha256
 from .pdfcadcore.primitives import NormalizedText
 from .pdfcadcore.text_scale import calibrate_text_size_to_bbox
@@ -296,6 +296,7 @@ def _get_or_create_text_material(
 ) -> bpy.types.Material:
     style_key = _normalize_style(style)
     r, g, b = _styled_text_color(style_key, source_color=source_color)
+    linear_r, linear_g, linear_b = scene_linear_color((r, g, b))
     if style_key == "source" and source_color is not None:
         mat_name = f"PDF_Text_{round(r * 255):02X}{round(g * 255):02X}{round(b * 255):02X}"
     else:
@@ -304,7 +305,7 @@ def _get_or_create_text_material(
     # can silently inherit the wrong color or node graph.
     material = bpy.data.materials.new(name=mat_name)
     try:
-        material.diffuse_color = (r, g, b, 1.0)
+        material.diffuse_color = (linear_r, linear_g, linear_b, 1.0)
         material.use_nodes = True
         nodes = material.node_tree.nodes
         links = material.node_tree.links
@@ -313,7 +314,7 @@ def _get_or_create_text_material(
         # or add specular halos to their native extruded geometry.
         shader = nodes.new(type="ShaderNodeEmission")
         output = nodes.new(type="ShaderNodeOutputMaterial")
-        shader.inputs["Color"].default_value = (r, g, b, 1.0)
+        shader.inputs["Color"].default_value = (linear_r, linear_g, linear_b, 1.0)
         shader.inputs["Strength"].default_value = 1.0
         links.new(shader.outputs["Emission"], output.inputs["Surface"])
     except Exception as exc:
@@ -1714,7 +1715,9 @@ def _create_font_candidate(
                 visual_style,
                 source_color=text_item.color,
             )
-        expected_rgb = _styled_text_color(visual_style, source_color=text_item.color)
+        expected_rgb = scene_linear_color(
+            _styled_text_color(visual_style, source_color=text_item.color)
+        )
         expected_rgba = (*tuple(float(value) for value in expected_rgb), 1.0)
         obj["pdf_text_material"] = str(getattr(material, "name", "") or "")
         obj["pdf_text_material_owned"] = True
@@ -2391,6 +2394,211 @@ def _attempt_native_font(
         return _verify_font_candidate(obj, text_item, delivered=delivered, item_id=item_id)
 
 
+def _transfer_evaluated_curve(source, dest) -> None:
+    """Copy an evaluated font outline onto a real CURVE datablock."""
+    copied_dimensions = False
+    for attr in (
+        "dimensions",
+        "fill_mode",
+        "extrude",
+        "bevel_depth",
+        "bevel_resolution",
+        "resolution_u",
+        "render_resolution_u",
+        "offset",
+        "use_fill_caps",
+    ):
+        try:
+            value = getattr(source, attr)
+        except (AttributeError, ReferenceError):
+            continue
+        try:
+            setattr(dest, attr, value)
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if attr == "dimensions":
+            copied_dimensions = True
+    if not copied_dimensions:
+        try:
+            dest.dimensions = "2D"
+            dest.fill_mode = "BOTH"
+        except (AttributeError, TypeError, ValueError):
+            pass
+    materials = getattr(source, "materials", None)
+    if materials is not None:
+        for material in list(materials):
+            try:
+                dest.materials.append(material)
+            except (AttributeError, TypeError, ReferenceError):
+                pass
+    for src in list(getattr(source, "splines", []) or []):
+        src_type = str(getattr(src, "type", "POLY") or "POLY").upper()
+        if src_type not in {"POLY", "BEZIER", "NURBS"}:
+            src_type = "POLY"
+        dst = dest.splines.new(src_type)
+        if src_type == "BEZIER":
+            points = list(src.bezier_points)
+            if len(points) > 1:
+                dst.bezier_points.add(len(points) - 1)
+            for index, src_point in enumerate(points):
+                dst_point = dst.bezier_points[index]
+                dst_point.co = src_point.co
+                dst_point.handle_left = src_point.handle_left
+                dst_point.handle_right = src_point.handle_right
+                for handle_attr in ("handle_left_type", "handle_right_type"):
+                    try:
+                        setattr(dst_point, handle_attr, getattr(src_point, handle_attr))
+                    except (AttributeError, TypeError, ValueError):
+                        pass
+        else:
+            points = list(src.points)
+            if len(points) > 1:
+                dst.points.add(len(points) - 1)
+            for index, src_point in enumerate(points):
+                dst.points[index].co = src_point.co
+        try:
+            dst.use_cyclic_u = bool(getattr(src, "use_cyclic_u", False))
+        except (AttributeError, TypeError, ValueError):
+            pass
+
+
+def _retarget_evaluated_materials(data) -> None:
+    """Point material slots at original datablocks.
+
+    Blender 3.1's ``to_curve().copy()`` stores the evaluated material. The
+    glyph curve then outlives the source font. The next view-layer update
+    copy-on-writes that evaluated id and crashes. 3.6 and newer already store
+    the original material, so this is a no-op there.
+    """
+    materials = getattr(data, "materials", None)
+    if materials is None:
+        return
+    try:
+        count = len(materials)
+    except TypeError:
+        return
+    for index in range(count):
+        try:
+            material = materials[index]
+        except (AttributeError, IndexError, ReferenceError, TypeError):
+            continue
+        if material is None or not getattr(material, "is_evaluated", False):
+            continue
+        original = getattr(material, "original", None)
+        if original is None or getattr(original, "is_evaluated", False):
+            continue
+        try:
+            materials[index] = original
+        except (AttributeError, IndexError, ReferenceError, TypeError):
+            continue
+
+
+def _discard_curve_datablock(data) -> None:
+    curves = getattr(getattr(bpy, "data", None), "curves", None)
+    remover = getattr(curves, "remove", None)
+    if data is None or not callable(remover):
+        return
+    try:
+        remover(data)
+    except (AttributeError, ReferenceError, RuntimeError, TypeError):
+        pass
+
+
+def _outline_datablock_kind(data) -> str:
+    """Return FONT or CURVE for an evaluated text outline datablock.
+
+    Blender 4.2 and older type the ``to_curve()`` copy as ``TextCurve``. That
+    datablock has no ``.type`` string, and an object using it stays FONT.
+    """
+    try:
+        identifier = str(getattr(getattr(data, "bl_rna", None), "identifier", "") or "")
+    except (AttributeError, ReferenceError, TypeError):
+        identifier = ""
+    class_name = type(data).__name__
+    if identifier == "TextCurve" or class_name == "TextCurve":
+        return "FONT"
+    data_type = str(getattr(data, "type", "") or "").upper()
+    if data_type == "FONT":
+        return "FONT"
+    if identifier == "Curve" or data_type == "CURVE" or class_name in {"Curve", "_CurveData"}:
+        return "CURVE"
+    return data_type
+
+
+def _host_glyph_copy_is_curve() -> bool:
+    """True when ``to_curve().copy()`` is already a CURVE datablock.
+
+    Measured in real Blender: 4.5 and 5.2 copy a CURVE; 4.2, 3.6, and 3.1 copy
+    a TextCurve, so the new object stays text and Glyphs rejects it. Rebuilding
+    splines is only for those older hosts. Doing it on 5.2 crashes while
+    reading the temporary evaluated curve.
+    """
+    version = getattr(getattr(bpy, "app", None), "version", None)
+    try:
+        return tuple(int(part) for part in version[:2]) >= (4, 5)
+    except (TypeError, ValueError):
+        return True
+
+
+def _own_evaluated_glyph_curve(converted, name: str):
+    """Return a caller-owned CURVE of an evaluated font outline."""
+    # 4.5+ copies a real CURVE. Older hosts are handled below. A direct
+    # datablock copy there stays a FONT (TextCurve) on 4.2 and 3.6, so the
+    # new object would still be text. 3.1 copies the same TextCurve; reading
+    # it is safe, but its material slots are evaluated ids.
+    if _host_glyph_copy_is_curve():
+        copied = converted.copy()
+        try:
+            copied.name = name
+        except (AttributeError, TypeError):
+            pass
+        kind = str(getattr(copied, "type", "") or "").upper()
+        if kind not in {"", "CURVE"}:
+            raise RuntimeError("evaluated font outline stayed a FONT datablock")
+        _retarget_evaluated_materials(copied)
+        return copied
+    # Older than 4.5. copy() is safe on 3.6 and 4.2 but the copy stays a FONT
+    # datablock, so assigning it makes another text object. Reading splines off
+    # the temporary to_curve() result segfaults those hosts. The owned copy is
+    # a normal datablock; its splines can be written into a real CURVE.
+    try:
+        copied = converted.copy()
+    except Exception as exc:
+        raise RuntimeError("evaluated font outline could not be copied") from exc
+    kind = _outline_datablock_kind(copied)
+    if kind == "CURVE":
+        try:
+            copied.name = name
+        except (AttributeError, TypeError):
+            pass
+        return copied
+    curves = getattr(getattr(bpy, "data", None), "curves", None)
+    factory = getattr(curves, "new", None)
+    dest = None
+    if callable(factory):
+        try:
+            dest = factory(name, "CURVE")
+        except (AssertionError, AttributeError, RuntimeError, TypeError, ValueError):
+            dest = None
+    if dest is None or str(getattr(dest, "type", "") or "").upper() == "FONT":
+        _discard_curve_datablock(dest)
+        _discard_curve_datablock(copied)
+        raise RuntimeError(f"evaluated font outline stayed a {kind or 'unknown'} datablock")
+    try:
+        _transfer_evaluated_curve(copied, dest)
+        _retarget_evaluated_materials(dest)
+    except Exception:
+        _discard_curve_datablock(dest)
+        _discard_curve_datablock(copied)
+        raise
+    _discard_curve_datablock(copied)
+    try:
+        dest.name = name
+    except (AttributeError, TypeError):
+        pass
+    return dest
+
+
 def _attempt_glyphs(
     text_item,
     collection,
@@ -2441,7 +2649,7 @@ def _attempt_glyphs(
             )
         converted = to_curve(depsgraph, apply_modifiers=False)
         try:
-            curve_data = converted.copy()
+            curve_data = _own_evaluated_glyph_curve(converted, f"{obj.name}_glyph_curve")
         finally:
             clear = getattr(evaluated, "to_curve_clear", None)
             if callable(clear):
@@ -3440,7 +3648,9 @@ def _prepare_positioned_converted_candidate(
                 )
             converted = to_curve(depsgraph, apply_modifiers=False)
             try:
-                final_data = converted.copy()
+                final_data = _own_evaluated_glyph_curve(
+                    converted, f"{source.name}_glyph_curve"
+                )
             finally:
                 clear = getattr(evaluated, "to_curve_clear", None)
                 if callable(clear):

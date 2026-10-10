@@ -421,7 +421,7 @@ def plan_compound_fills(page, page_data, source_sha256, *, user_scale=1., flip_y
 def _native_compound(spec, plan, members, graph):
     from .fill_paint_order import same_native_object
     from .image_paint_order import _world_corners
-    from .visual_style import preview_color
+    from .visual_style import preview_color, scene_linear_color
 
     obj = spec['object']
     expected = {c['primitive_id']: c['points_mm'] for c in plan['contours']}
@@ -450,7 +450,7 @@ def _native_compound(spec, plan, members, graph):
     if len(obj.data.materials) != 1:
         raise ValueError('Compound fill material ownership changed')
     material = obj.data.materials[0]
-    rgb = preview_color(spec['fill_rgb'], spec['visual_style'])
+    rgb = scene_linear_color(preview_color(spec['fill_rgb'], spec['visual_style']))
     nodes = {n.type: n for n in material.node_tree.nodes} if material.use_nodes else {}
     if (not material.use_nodes or len(material.node_tree.nodes) != 2
             or set(nodes) != {'EMISSION', 'OUTPUT_MATERIAL'}
