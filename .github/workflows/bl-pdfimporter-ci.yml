@@ -13,9 +13,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Source-compat guard for Blender 3.0/3.1 hosts (Python 3.9).
-  # Syntax-only: the vendored PyMuPDF wheel is cp310-abi3, so the full
-  # dependency suite runs on >=3.10 (D5 ABI floor).
+  # Stricter syntax floor, not a supported host: compiling with Python 3.9
+  # keeps the add-on source free of syntax newer than it needs. The oldest
+  # supported Blender (3.1) runs Python 3.10, and Blender 3.0 (Python 3.9) is
+  # not supported because the vendored PyMuPDF wheel is cp310-abi3. The full
+  # dependency suite runs on >=3.10 (D5 ABI floor); real Blender hosts run in
+  # blender-host-matrix.yml.
   legacy-syntax:
     runs-on: ubuntu-latest
     strategy:
@@ -85,7 +88,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        # 3.10 = Blender 3.1-3.6, 3.11 = Blender 4.x, 3.13 = Blender 5.2
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
