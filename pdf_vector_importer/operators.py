@@ -59,16 +59,18 @@ _MODE_ITEMS = [
 # Text rendering is orthogonal to mode. A separate ``import_text``
 # boolean toggles whether text is imported at all.
 _TEXT_MODE_ITEMS = [
-    (
-        "labels",
-        "Labels",
-        "Request persistent model labels; any host limitation and closest fallback are reported per item",
-    ),
     ("text",     "Text",     "Flat editable Blender FONT text using the exact PDF font program"),
     ("3d_text",  "3D Text",  "Extruded editable Blender FONT text using the exact PDF font program"),
     ("glyphs",   "Glyphs",   "Convert exact-font text to non-editable CURVE glyph outlines"),
     ("geometry", "Geometry", "Convert exact-font text to non-editable MESH geometry"),
     ("raster",   "Raster",   "Render each source text item as an aligned raster patch"),
+    # Kept (last) so presets, scripts and the shared six-mode contract still
+    # work; Blender has no label object, so it gives the same flat text as Text.
+    (
+        "labels",
+        "Labels (Blender makes flat Text)",
+        "Blender has no label object: labels come in as flat editable text, the same as Text",
+    ),
 ]
 
 _VISUAL_STYLE_ITEMS = [
@@ -79,7 +81,7 @@ _VISUAL_STYLE_ITEMS = [
 
 _PAGE_ARRANGEMENT_ITEMS = [
     ("spread", "Spread (20% gap)", "Stack pages with a 20% gap"),
-    ("compact", "Compact gap", "Stack pages with configurable compact gap"),
+    ("compact", "Compact gap", "Stack pages with a small gap you set (Compact gap below)"),
     ("touch", "Touching pages", "Stack pages edge-to-edge without a gap"),
     ("overlay", "Overlay pages", "Place all pages at the same origin"),
 ]
@@ -137,7 +139,7 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
     # ── Properties ───────────────────────────────────────────────────
     show_advanced: BoolProperty(  # type: ignore[assignment]
         name="Advanced Options",
-        description="Show import strategy override (Vector / Raster / Hybrid)",
+        description="Show the import strategy override (Vector / Raster / Hybrid) and the height offsets",
         default=False,
         options={"SKIP_SAVE"},
     )
@@ -252,9 +254,9 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
     )
 
     page_gap_ratio: FloatProperty(  # type: ignore[assignment]
-        name="Compact Gap Ratio",
-        description="Gap ratio for compact page layout (0.20 = 20% page break)",
-        default=0.20,
+        name="Compact gap (share of sheet height)",
+        description="Gap between sheets for the Compact gap layout (0.05 = 5% of the sheet height)",
+        default=0.05,
         min=0.0,
         max=1.0,
     )
@@ -353,6 +355,17 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
                 context=context,
                 cancel_callback=_cancel_requested,
             )
+        except bl_import_engine.IncompleteImportError as exc:
+            # Every sheet was built; some items need a look. The delivered
+            # sheets stay in the scene as one undo step.
+            from .import_outcome import plain_outcome_lines
+
+            _set_status(None)
+            _end_import_session()
+            for line in plain_outcome_lines(exc.stats):
+                self.report({"WARNING"}, line)
+            self._remember_last_directory(context)
+            return {"FINISHED"}
         except Exception as exc:
             from .pdfcadcore.fitz_loader import PdfOpenError
 
@@ -462,7 +475,21 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
                 f"{glyph_code_warning} Review extra.text_glyph_codes in "
                 f"{report_path or 'the import report'}.",
             )
+        # Items kept in a lesser form (a letter left untrimmed at the sheet
+        # edge, a text item not re-checked after its sheet moved): the sheet is
+        # complete, but the user should know which ones to look at.
+        from .import_outcome import details_line, step_down_lines
 
+        step_downs = step_down_lines(stats)
+        if step_downs:
+            details = details_line(stats)
+            for line in step_downs + ([details] if details else []):
+                self.report({"WARNING"}, line)
+
+        self._remember_last_directory(context)
+        return {"FINISHED"}
+
+    def _remember_last_directory(self, context):
         prefs = _addon_prefs(context)
         if prefs is not None and bool(getattr(prefs, "remember_last_directory", True)):
             try:
@@ -471,8 +498,6 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
                     prefs.last_import_dir = last_dir
             except Exception:
                 pass
-
-        return {"FINISHED"}
 
     def draw(self, context):
         layout = self.layout
@@ -493,6 +518,10 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
         adv.prop(self, "show_advanced", icon="MODIFIER")
         if self.show_advanced:
             adv.prop(self, "mode")
+            col = adv.column(align=True)
+            col.prop(self, "line_z_offset_mm")
+            col.prop(self, "text_z_offset_mm")
+            col.prop(self, "image_z_offset_mm")
 
         # Individual options (BCS-ARCH-001 Rule 5 — Text + Import Text;
         # strategy override is Advanced-only. Other quality dials are baked in.)
@@ -514,14 +543,11 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
         box.prop(self, "keep_selection_after_focus")
         box.prop(self, "auto_hide_default_cube")
         box.prop(self, "page_arrangement")
-        box.prop(self, "page_gap_ratio")
-        col = box.column(align=True)
-        col.prop(self, "line_z_offset_mm")
-        col.prop(self, "text_z_offset_mm")
-        col.prop(self, "image_z_offset_mm")
+        if self.page_arrangement == "compact":
+            box.prop(self, "page_gap_ratio")
 
-        box = layout.box()
         if SHAPE_EXTRUSION_UI_ENABLED:
+            box = layout.box()
             box.label(text="3D Model", icon="MESH_CUBE")
             box.prop(self, "model3d_mode")
             row = box.row()

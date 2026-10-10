@@ -2130,7 +2130,8 @@ def test_import_stats_exclude_post_stack_failed_text(monkeypatch, tmp_path):
         )
     stats = caught.value.stats
     assert stats["text_items"] == 0
-    assert stats["pages_imported"] == 0
+    # Only the failed item is removed; the sheet itself is kept and counted.
+    assert stats["pages_imported"] == 1
     assert stats["text_final_state_failures"] == [{"item_id": "page:1:text:1"}]
 
 
@@ -2678,8 +2679,10 @@ def test_embedded_soft_mask_delivery_accounting_and_failure_report(monkeypatch, 
         with pytest.raises(bl_import_engine.IncompleteImportError) as raised:
             bl_import_engine.import_pdf(str(input_pdf), config=config)
         stats = raised.value.stats
-        assert stats["pages_imported"] == stats["images"] == stats["image_source_instances"] == 0
-        assert len(discarded) == 1 and not planes
+        # The pictures are left out and listed; the sheet (lines, text) is kept.
+        assert stats["pages_imported"] == 1
+        assert stats["images"] == stats["image_source_instances"] == 0
+        assert not discarded and not planes
         assert stats["raster_delivery_failures"] == [{
             "page": 1, "stage": "embedded_image", "reason": "page 1 image xref 17 unsupported soft mask",
         }]

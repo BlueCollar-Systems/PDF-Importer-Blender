@@ -121,6 +121,16 @@ class PDFVectorImporterPreferences(bpy.types.AddonPreferences):
         default="source",
     )
 
+    audit_import: BoolProperty(  # type: ignore[assignment]
+        name="Audit import (slow self-checks)",
+        description=(
+            "Re-check every imported letter shape in full, after it is built and again "
+            "after its sheet is placed. Much slower; for testing and support. When off, "
+            "the everyday checks still decide how each item is brought in"
+        ),
+        default=False,
+    )
+
     @property
     def pymupdf_installed(self) -> bool:
         """True if PyMuPDF is available for import."""
@@ -166,6 +176,11 @@ class PDFVectorImporterPreferences(bpy.types.AddonPreferences):
         box = layout.box()
         box.label(text="Default Look", icon="SHADING_RENDERED")
         box.prop(self, "default_visual_style")
+
+        layout.separator()
+        box = layout.box()
+        box.label(text="Self-checks", icon="CHECKMARK")
+        box.prop(self, "audit_import")
 
 
 # Additional class for register/unregister — the install operator needs
