@@ -46,6 +46,9 @@ try:
     assert properties["text_mode"].default == "3d_text"
     assert len(properties["visual_style"].enum_items) == 3
     assert bpy.ops.pdfvec.install_pymupdf.get_rna_type().properties["confirm_network_install"].default is False
+    # "Audit import (slow self-checks)" must exist and stay off by default.
+    assert "audit_import" in prefs, "Audit import preference did not register"
+    assert prefs["audit_import"].default is False
     if HAS_FILE_HANDLER:
         handler = bpy.types.FileHandler.bl_rna_get_subclass_py("PDFVEC_FH_import")
         assert handler is operators.PDFVEC_FH_import, "PDF drag-and-drop handler did not register"

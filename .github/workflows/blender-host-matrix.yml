@@ -43,11 +43,10 @@ jobs:
         blender: ["3.1.2", "3.6.23", "4.2.23", "4.5.14", "5.2.2"]
     env:
       BLENDER_VERSION: ${{ matrix.blender }}
-      # Heavy self-checks on: CI is where the slow proofs belong. Both names are
-      # set because the audit switch is still being added; until it lands they
-      # have no effect.
+      # Heavy self-checks on (the "Audit import (slow self-checks)" switch):
+      # CI is where the slow proofs belong. Each import report records
+      # audit_mode, so the results show the switch was on.
       BC_PDF_AUDIT: "1"
-      BC_BL_AUDIT_IMPORT: "1"
     defaults:
       run:
         shell: bash
@@ -192,23 +191,22 @@ jobs:
             --python scripts/_headless_import_test.py 2>&1 | tee "$CI_OUT/import_glyphs.log"
           grep -q "HEADLESS_IMPORT_PASS" "$CI_OUT/import_glyphs.log"
 
-      - name: "Known failure: edge text on a sheet moved far down the stack (BL-1010-keep-every-sheet)"
-        # Expected to fail until BL-1010-keep-every-sheet lands: sheet 2 is
-        # rolled back and only sheet 1 stays. The step stays green either way;
-        # when the fix lands it prints HEADLESS_IMPORT_XPASS and a warning, and
-        # TEST_EXPECT_FAIL should then be removed so the check becomes strict.
+      - name: Keep both sheets when edge text ends up far down the stack (BL-1010-keep-every-sheet)
+        # Before BL-1010-keep-every-sheet, sheet 2 of this PDF was rolled back
+        # and only sheet 1 stayed. Now both sheets must come in with no failed
+        # text; a letter whose sheet-edge trim cannot be re-checked after the
+        # sheet moves is kept and reported as a warning, not a failure.
         if: ${{ !cancelled() && steps.fixtures.outcome == 'success' }}
         env:
           TEST_ADDON_SOURCE: installed
           TEST_TEXT_MODE: 3d_text
           TEST_PAGES: all
           TEST_EXPECT_PAGES: "2"
-          TEST_EXPECT_FAIL: BL-1010-keep-every-sheet
         run: |
           export TEST_PDF="$CI_FIXTURES/ci_edge_far.pdf" TEST_RESULT_JSON="$CI_OUT/import_edge_far.json"
           "$BLENDER_EXE" -b --factory-startup --python-exit-code 1 \
             --python scripts/_headless_import_test.py 2>&1 | tee "$CI_OUT/import_edge_far.log"
-          grep -qE "HEADLESS_IMPORT_(XFAIL|XPASS)" "$CI_OUT/import_edge_far.log"
+          grep -q "HEADLESS_IMPORT_PASS" "$CI_OUT/import_edge_far.log"
 
       - name: Keep Blender's crash report, if any
         if: ${{ always() }}
@@ -232,11 +230,12 @@ jobs:
           props = os.path.join(out, "properties.log")
           ok = os.path.isfile(props) and "NATIVE_PROPERTIES_PASS" in open(props, encoding="utf-8", errors="replace").read()
           lines.append(f"| Options registered | - | - | {'pass' if ok else 'FAIL'} |")
-          checks = (("import_text", "text", False), ("import_3d_text", "3d_text", False),
-                    ("import_glyphs", "glyphs", False), ("import_edge_far", "3d_text", True))
+          checks = (("import_text", "text", "import ci.pdf"),
+                    ("import_3d_text", "3d_text", "import ci.pdf"),
+                    ("import_glyphs", "glyphs", "import ci.pdf"),
+                    ("import_edge_far", "3d_text", "edge text far down the stack"))
           crashed = os.path.isfile(os.path.join(out, "blender.crash.txt"))
-          for name, mode, known in checks:
-              label = "known failure: far edge text" if known else "import ci.pdf"
+          for name, mode, label in checks:
               path = os.path.join(out, name + ".json")
               if not os.path.isfile(path):
                   why = "no result: Blender crashed" if crashed else "no result: step did not finish"
@@ -244,12 +243,9 @@ jobs:
                   continue
               data = json.load(open(path, encoding="utf-8"))
               problems = data.get("problems") or []
-              if known:
-                  result = "still failing (expected)" if problems else "now passes - remove the known-failure marker"
-              else:
-                  result = "pass" if not problems else "FAIL: " + "; ".join(problems)[:200]
-                  if problems and data.get("text_failure_reasons"):
-                      result += " (first reason: " + data["text_failure_reasons"][0][:160] + ")"
+              result = "pass" if not problems else "FAIL: " + "; ".join(problems)[:200]
+              if problems and data.get("text_failure_reasons"):
+                  result += " (first reason: " + data["text_failure_reasons"][0][:160] + ")"
               lines.append(f"| {label} | {mode} | {(data.get('stats') or {}).get('pages_imported')} | {result} |")
           text = "\n".join(lines) + "\n"
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:

@@ -60,9 +60,11 @@ the 2026-10-10 runs. What was seen:
   converted outline comes back as a `FONT` object instead of a `CURVE`
   (`actual_object_type_not_CURVE`); the import is reported incomplete.
 - Glyphs on 3.1.2: Blender itself stops with an access violation.
-- All five versions: a sheet with edge-crossing text that ends up several
-  metres down the stack is rolled back (known defect, fix-list item
-  BL-1010-keep-every-sheet). The check runs this case as a known failure.
+- All five versions, before fix-list item BL-1010-keep-every-sheet: a sheet
+  with edge-crossing text that ends up several metres down the stack was
+  rolled back. With that fix both sheets come in (checked in Blender 5.2.2 on
+  2026-10-10; the letter whose edge trim cannot be re-checked after the move
+  is kept and listed as a warning). The check now requires both sheets.
 - Drag-and-drop import registers on 4.2.23, 4.5.14 and 5.2.2 and is
   correctly absent on 3.1.2 and 3.6.23 (Blender added it in 4.1).
 

@@ -126,7 +126,15 @@ def test_host_matrix_workflow_covers_every_release_line():
         assert mode in text
     assert "NATIVE_PROPERTIES_PASS" in text
     assert 'TEST_EXPECT_PAGES: "2"' in text
-    assert "TEST_EXPECT_FAIL: BL-1010-keep-every-sheet" in text
+    # BL-1010-keep-every-sheet has landed: the far-edge import is a strict
+    # check now, not a known failure that stays green whatever happens.
+    assert "TEST_EXPECT_FAIL" not in text
+    assert "XFAIL" not in text
+    assert 'TEST_PDF="$CI_FIXTURES/ci_edge_far.pdf"' in text
+    assert text.count('grep -q "HEADLESS_IMPORT_PASS"') == 4
+    # The audit switch is BC_PDF_AUDIT; the placeholder name is gone.
+    assert 'BC_PDF_AUDIT: "1"' in text
+    assert "BC_BL_AUDIT_IMPORT" not in text
     assert "TEST_ADDON_SOURCE: installed" in text
     assert "workflow_dispatch:" in text and "schedule:" in text
 
