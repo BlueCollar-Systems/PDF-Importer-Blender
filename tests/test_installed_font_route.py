@@ -1,6 +1,8 @@
 """A font the PDF names but does not carry uses the installed face only when its widths match.
 
-Fixtures are fictional (job D042, mark EX101) and built inside each test.
+Fixtures are fictional (job D042, mark EX101) and built inside each test. Most
+tests install a generated face into a private folder (BCS_GLYPH_REFERENCE_FONTS)
+so they run on every platform; the Windows Arial tests skip where it is absent.
 """
 from __future__ import annotations
 
@@ -13,7 +15,7 @@ import types
 import pytest
 
 ARIAL = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts" / "arial.ttf"
-pytestmark = pytest.mark.skipif(
+needs_arial = pytest.mark.skipif(
     not ARIAL.is_file(), reason="the installed Windows Arial face is not on this machine"
 )
 
@@ -30,6 +32,8 @@ if "bmesh" not in sys.modules:
     sys.modules["bmesh"] = types.SimpleNamespace()
 
 import pymupdf as fitz  # noqa: E402
+from fontTools.fontBuilder import FontBuilder  # noqa: E402
+from fontTools.pens.ttGlyphPen import TTGlyphPen  # noqa: E402
 from fontTools.ttLib import TTFont  # noqa: E402
 
 from pdf_vector_importer import installed_font_route as route  # noqa: E402
@@ -37,24 +41,59 @@ from pdf_vector_importer.pdfcadcore import glyph_code_recovery as gcr  # noqa: E
 from pdf_vector_importer.pdfcadcore.primitive_extractor import extract_page  # noqa: E402
 
 TEXT = "D042 EX101"
+TEST_FACE_NAME = "BCSRouteTest"
 
 
-def _arial_widths():
-    font = TTFont(str(ARIAL))
+def _box(width):
+    pen = TTGlyphPen(None)
+    pen.moveTo((60, 0))
+    pen.lineTo((max(120, width - 60), 0))
+    pen.lineTo((max(120, width - 60), 1400))
+    pen.lineTo((60, 1400))
+    pen.closePath()
+    return pen.glyph()
+
+
+def _build_test_face(path: Path) -> Path:
+    """A small TrueType face whose advances are not round thousandths of an em."""
+    order = [".notdef", "space"] + [f"uni{code:04X}" for code in range(33, 127)]
+    cmap = {32: "space", **{code: f"uni{code:04X}" for code in range(33, 127)}}
+    advances = {".notdef": 1000, "space": 569}
+    advances.update({f"uni{code:04X}": 900 + (code * 37) % 500 for code in range(33, 127)})
+    glyphs = {name: (TTGlyphPen(None).glyph() if name == "space" else _box(advances[name]))
+              for name in order}
+    builder = FontBuilder(2048, isTTF=True)
+    builder.setupGlyphOrder(order)
+    builder.setupCharacterMap(cmap)
+    builder.setupGlyf(glyphs)
+    builder.setupHorizontalMetrics({name: (advances[name], 60) for name in order})
+    builder.setupHorizontalHeader(ascent=1854, descent=-434)
+    builder.setupOS2(sTypoAscender=1854, sTypoDescender=-434, usWinAscent=1854,
+                     usWinDescent=434, sxHeight=1062, sCapHeight=1467)
+    builder.setupNameTable({
+        "familyName": "BCS Route Test", "styleName": "Regular",
+        "uniqueFontIdentifier": "BCS-Route-Test-Regular-1.0",
+        "fullName": "BCS Route Test Regular", "psName": "BCSRouteTest-Regular",
+        "version": "Version 1.0",
+    })
+    builder.setupPost()
+    builder.save(str(path))
+    return path
+
+
+def _face_widths(face: Path):
+    font = TTFont(str(face))
     try:
         upm = font["head"].unitsPerEm
         cmap = font.getBestCmap()
         hmtx = font["hmtx"].metrics
-        return {
-            code: round(hmtx[cmap[code]][0] * 1000 / upm)
-            for code in range(32, 127)
-        }
+        return {code: round(hmtx[cmap[code]][0] * 1000 / upm) for code in range(32, 127)}
     finally:
         font.close()
 
 
-def _arial_glyph_ids(text):
-    font = TTFont(str(ARIAL))
+def _face_glyph_ids(face: Path, text):
+    font = TTFont(str(face))
     try:
         cmap = font.getBestCmap()
         return [font.getGlyphID(cmap[ord(char)]) for char in text]
@@ -62,22 +101,24 @@ def _arial_glyph_ids(text):
         font.close()
 
 
-def _not_embedded_arial_pdf(path: Path, *, width_change=None, encoding=b"/WinAnsiEncoding"):
-    widths = _arial_widths()
+def _not_embedded_pdf(path: Path, face: Path, base_font: str, *, width_change=None,
+                      encoding=b"/WinAnsiEncoding"):
+    widths = _face_widths(face)
     if width_change:
         code, delta = width_change
         widths[code] += delta
     width_text = " ".join(str(widths[code]) for code in range(32, 127)).encode()
+    name = base_font.encode()
     content = b"BT /F1 14 Tf 50 300 Td (" + TEXT.encode() + b") Tj ET\n"
     objects = [
         b"<</Type/Catalog/Pages 2 0 R>>",
         b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
         b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 396]"
         b"/Resources<</Font<</F1 4 0 R>>>>/Contents 5 0 R>>",
-        b"<</Type/Font/Subtype/TrueType/BaseFont/Arial/FirstChar 32/LastChar 126"
+        b"<</Type/Font/Subtype/TrueType/BaseFont/" + name + b"/FirstChar 32/LastChar 126"
         b"/Widths[" + width_text + b"]/Encoding " + encoding + b"/FontDescriptor 6 0 R>>",
         b"<</Length %d>>stream\n" % len(content) + content + b"\nendstream",
-        b"<</Type/FontDescriptor/FontName/Arial/Flags 32/FontBBox[-665 -325 2000 1006]"
+        b"<</Type/FontDescriptor/FontName/" + name + b"/Flags 32/FontBBox[-665 -325 2000 1006]"
         b"/ItalicAngle 0/Ascent 905/Descent -212/CapHeight 716/StemV 80>>",
     ]
     out = bytearray(b"%PDF-1.4\n")
@@ -106,6 +147,17 @@ def _fresh_font_caches(monkeypatch):
     route.clear_installed_face_cache()
 
 
+@pytest.fixture
+def test_face(tmp_path, monkeypatch):
+    """The generated face, installed in a private font folder for this test."""
+    fonts = tmp_path / "fonts"
+    fonts.mkdir()
+    face = _build_test_face(fonts / "bcsroutetest.ttf")
+    monkeypatch.setenv("BCS_GLYPH_REFERENCE_FONTS", str(fonts))
+    gcr.clear_reference_font_cache()
+    return face
+
+
 def _attach(pdf: Path):
     document = fitz.open(str(pdf))
     page = document[0]
@@ -114,6 +166,15 @@ def _attach(pdf: Path):
     stats = {}
     items = route.attach_installed_fonts(document, page, original, 1, stats)
     return document, original, items, stats
+
+
+def _installed_twin(tmp_path, face):
+    document, original, items, _stats = _attach(
+        _not_embedded_pdf(tmp_path / "d042.pdf", face, TEST_FACE_NAME)
+    )
+    document.close()
+    assert route.is_installed_font_asset(items[0].font_asset)
+    return original[0], items[0]
 
 
 def _absence_proof(item):
@@ -135,8 +196,9 @@ def test_private_core_helpers_this_route_reads_still_exist():
     assert gcr._parse_width_array("[32 [278 278 355]]") == {32: 278.0, 33: 278.0, 34: 355.0}
 
 
-def test_matching_widths_attach_the_installed_face_with_its_own_glyph_ids(tmp_path):
-    document, original, items, stats = _attach(_not_embedded_arial_pdf(tmp_path / "d042.pdf"))
+def test_matching_widths_attach_the_installed_face_with_its_own_glyph_ids(tmp_path, test_face):
+    pdf = _not_embedded_pdf(tmp_path / "d042.pdf", test_face, TEST_FACE_NAME)
+    document, original, items, stats = _attach(pdf)
     try:
         assert len(items) == len(original) == 1
         source, installed = original[0], items[0]
@@ -146,12 +208,14 @@ def test_matching_widths_attach_the_installed_face_with_its_own_glyph_ids(tmp_pa
         assert asset is not None and installed is not source
         assert asset.source_origin == route.INSTALLED_FONT_ORIGIN
         assert route.is_installed_font_asset(asset)
-        assert os.path.normcase(asset.face_path) == os.path.normcase(str(ARIAL))
-        assert asset.usable_format == "ttf"
-        assert asset.page_number == 1 and asset.span_font_name == installed.font_name == "Arial"
+        assert os.path.normcase(asset.face_path) == os.path.normcase(str(test_face))
+        assert asset.usable_format == "ttf" and asset.units_per_em == 2048
+        assert asset.page_number == 1 and asset.span_font_name == installed.font_name == TEST_FACE_NAME
         assert asset.usable_sha256 == asset.face_sha256 == asset.asset_id.split(":", 1)[1]
-        assert asset.widths_checked == 95 and asset.worst_width_delta <= 1.0
-        assert [layout.glyph_id for layout in installed.source_char_layout] == _arial_glyph_ids(TEXT)
+        assert asset.widths_checked == 95 and 0.0 < asset.worst_width_delta <= 1.0
+        assert [layout.glyph_id for layout in installed.source_char_layout] == (
+            _face_glyph_ids(test_face, TEXT)
+        )
         assert "".join(layout.text for layout in installed.source_char_layout) == TEXT
         # Placement truth comes from the PDF and is untouched.
         assert [layout.source_quad_pdf for layout in installed.source_char_layout] == [
@@ -163,15 +227,16 @@ def test_matching_widths_attach_the_installed_face_with_its_own_glyph_ids(tmp_pa
         evidence = route.installed_font_evidence(installed)
         assert evidence["font_source"] == "installed"
         assert evidence["widths_matched"] == "95/95"
-        assert evidence["installed_face_file"].lower() == "arial.ttf"
+        assert evidence["installed_face_file"] == "bcsroutetest.ttf"
         assert stats["installed_font_items"] == 1
         assert stats["installed_font_checks"][0]["status"] == "used"
     finally:
         document.close()
 
 
-def test_one_changed_width_keeps_todays_route_and_the_absence_proof(tmp_path):
-    pdf = _not_embedded_arial_pdf(tmp_path / "d042_w.pdf", width_change=(ord("X"), 20))
+def test_one_changed_width_keeps_todays_route_and_the_absence_proof(tmp_path, test_face):
+    pdf = _not_embedded_pdf(tmp_path / "d042_w.pdf", test_face, TEST_FACE_NAME,
+                            width_change=(ord("X"), 20))
     document, original, items, stats = _attach(pdf)
     try:
         assert items[0] is original[0]
@@ -183,9 +248,9 @@ def test_one_changed_width_keeps_todays_route_and_the_absence_proof(tmp_path):
         document.close()
 
 
-def test_a_differences_encoding_keeps_todays_route(tmp_path):
-    pdf = _not_embedded_arial_pdf(
-        tmp_path / "d042_diff.pdf",
+def test_a_differences_encoding_keeps_todays_route(tmp_path, test_face):
+    pdf = _not_embedded_pdf(
+        tmp_path / "d042_diff.pdf", test_face, TEST_FACE_NAME,
         encoding=b"<</Type/Encoding/BaseEncoding/WinAnsiEncoding/Differences[69/X]>>",
     )
     document, original, items, stats = _attach(pdf)
@@ -197,14 +262,11 @@ def test_a_differences_encoding_keeps_todays_route(tmp_path):
         document.close()
 
 
-def test_two_installed_faces_with_the_same_name_are_not_guessed_between(tmp_path, monkeypatch):
-    fonts = tmp_path / "fonts"
-    fonts.mkdir()
-    shutil.copyfile(ARIAL, fonts / "arial.ttf")
-    shutil.copyfile(ARIAL, fonts / "arial_copy.ttf")
-    monkeypatch.setenv("BCS_GLYPH_REFERENCE_FONTS", str(fonts))
+def test_two_installed_faces_with_the_same_name_are_not_guessed_between(tmp_path, test_face):
+    shutil.copyfile(test_face, test_face.with_name("bcsroutetest_copy.ttf"))
     gcr.clear_reference_font_cache()
-    document, original, items, stats = _attach(_not_embedded_arial_pdf(tmp_path / "d042.pdf"))
+    pdf = _not_embedded_pdf(tmp_path / "d042.pdf", test_face, TEST_FACE_NAME)
+    document, original, items, stats = _attach(pdf)
     try:
         assert items[0] is original[0]
         assert "unique" in stats["installed_font_checks"][0]["reason"]
@@ -212,10 +274,11 @@ def test_two_installed_faces_with_the_same_name_are_not_guessed_between(tmp_path
         document.close()
 
 
-def test_no_installed_face_keeps_todays_route(tmp_path, monkeypatch):
+def test_no_installed_face_keeps_todays_route(tmp_path, test_face, monkeypatch):
     monkeypatch.setenv("BCS_GLYPH_REFERENCE_FONTS", "none")
     gcr.clear_reference_font_cache()
-    document, original, items, stats = _attach(_not_embedded_arial_pdf(tmp_path / "d042.pdf"))
+    pdf = _not_embedded_pdf(tmp_path / "d042.pdf", test_face, TEST_FACE_NAME)
+    document, original, items, stats = _attach(pdf)
     try:
         assert items[0] is original[0] and items[0].font_asset is None
         assert stats["installed_font_checks"][0]["status"] == "not_used"
@@ -223,19 +286,40 @@ def test_no_installed_face_keeps_todays_route(tmp_path, monkeypatch):
         document.close()
 
 
-def test_an_embedded_font_is_never_replaced(tmp_path):
+def test_an_embedded_font_is_never_replaced(tmp_path, test_face):
     pdf = tmp_path / "d042_embedded.pdf"
     document = fitz.open()
     page = document.new_page(width=612, height=396)
-    page.insert_font(fontname="F0", fontfile=str(ARIAL))
+    page.insert_font(fontname="F0", fontfile=str(test_face))
     page.insert_text((50, 96), TEXT, fontname="F0", fontsize=14)
     document.save(str(pdf), garbage=3, deflate=True)
     document.close()
     document, original, items, stats = _attach(pdf)
     try:
-        assert [item is source for item, source in zip(items, original, strict=True)] == [True] * len(items)
+        assert [item is source for item, source in zip(items, original, strict=True)] == (
+            [True] * len(items)
+        )
         assert all(not route.is_installed_font_asset(item.font_asset) for item in items)
         assert stats == {}
+    finally:
+        document.close()
+
+
+@needs_arial
+def test_windows_arial_matches_a_cad_style_non_embedded_arial(tmp_path):
+    # The real case: CAD and Tekla PDFs name Arial without storing it.
+    pdf = _not_embedded_pdf(tmp_path / "d042_arial.pdf", ARIAL, "Arial")
+    document, original, items, stats = _attach(pdf)
+    try:
+        asset = items[0].font_asset
+        assert asset is not None and asset.source_origin == route.INSTALLED_FONT_ORIGIN
+        assert os.path.basename(asset.face_path).lower() == "arial.ttf"
+        assert asset.widths_checked == 95 and asset.worst_width_delta <= 1.0
+        assert [layout.glyph_id for layout in items[0].source_char_layout] == (
+            _face_glyph_ids(ARIAL, TEXT)
+        )
+        assert original[0].font_asset is None
+        assert stats["installed_font_checks"][0]["widths_matched"] == "95/95"
     finally:
         document.close()
 
@@ -249,13 +333,13 @@ def _builder():
     return bl_text_builder
 
 
-def test_installed_attempt_that_fails_is_cleaned_up_and_retried_on_the_original(tmp_path, monkeypatch):
+def test_installed_attempt_that_fails_is_cleaned_up_and_retried_on_the_original(
+    tmp_path, test_face, monkeypatch,
+):
     builder = _builder()
     from pdf_vector_importer.text_delivery import AttemptOutcome
 
-    document, original, items, _stats = _attach(_not_embedded_arial_pdf(tmp_path / "d042.pdf"))
-    document.close()
-    installed, source = items[0], original[0]
+    source, installed = _installed_twin(tmp_path, test_face)
     seen = []
     cleaned = []
 
@@ -294,12 +378,38 @@ def test_installed_attempt_that_fails_is_cleaned_up_and_retried_on_the_original(
     assert source is route.installed_font_absence_item(installed)
 
 
-def test_installed_attempt_that_verifies_is_kept(tmp_path, monkeypatch):
+def test_installed_attempt_whose_cleanup_fails_is_reported_not_retried(
+    tmp_path, test_face, monkeypatch,
+):
     builder = _builder()
     from pdf_vector_importer.text_delivery import AttemptOutcome
 
-    document, _original, items, _stats = _attach(_not_embedded_arial_pdf(tmp_path / "d042.pdf"))
-    document.close()
+    _source, installed = _installed_twin(tmp_path, test_face)
+    calls = []
+
+    def fake_once(representation, text_item, collection, **_options):
+        calls.append(text_item is installed)
+        return AttemptOutcome.failed("font_object_creation_failed_not_impossibility_proof",
+                                     owned_objects=("candidate",))
+
+    monkeypatch.setattr(builder, "_attempt_one_representation_once", fake_once)
+    monkeypatch.setattr(builder, "_cleanup_attempt",
+                        lambda outcome, collection: {"status": "failed", "removed": []})
+    outcome = builder._attempt_one_representation(
+        "text", installed, None, effective_page=1, requested="text",
+        item_id="page:1:text:1", visual_style="source", z_offset_m=0.0,
+        terminal_raster_callback=None,
+    )
+    assert calls == [True]
+    assert outcome.status == "failed" and tuple(outcome.owned_objects) == ("candidate",)
+    assert outcome.evidence["installed_font_attempt"]["cleanup"]["status"] == "failed"
+
+
+def test_installed_attempt_that_verifies_is_kept(tmp_path, test_face, monkeypatch):
+    builder = _builder()
+    from pdf_vector_importer.text_delivery import AttemptOutcome
+
+    _source, installed = _installed_twin(tmp_path, test_face)
     delivered = AttemptOutcome.delivered(object(), entity_ids=("P1_text_text_1",),
                                          evidence={"font_source": "installed"})
     calls = []
@@ -310,22 +420,49 @@ def test_installed_attempt_that_verifies_is_kept(tmp_path, monkeypatch):
 
     monkeypatch.setattr(builder, "_attempt_one_representation_once", fake_once)
     outcome = builder._attempt_one_representation(
-        "3d_text", items[0], None, effective_page=1, requested="3d_text",
+        "3d_text", installed, None, effective_page=1, requested="3d_text",
         item_id="page:1:text:1", visual_style="source", z_offset_m=0.0,
         terminal_raster_callback=None,
     )
-    assert outcome is delivered and calls == [items[0]]
+    assert outcome is delivered and calls == [installed]
 
 
-def test_font_evidence_names_the_installed_face_and_the_absence_proof(tmp_path):
+def test_batched_glyph_outcome_that_fails_steps_back_to_the_original(
+    tmp_path, test_face, monkeypatch,
+):
     builder = _builder()
-    document, _original, items, _stats = _attach(_not_embedded_arial_pdf(tmp_path / "d042.pdf"))
-    document.close()
-    evidence = builder._font_asset_evidence(items[0])
+    from pdf_vector_importer.text_delivery import AttemptOutcome
+
+    source, installed = _installed_twin(tmp_path, test_face)
+    work = types.SimpleNamespace(text_item=installed, page_number=1, item_id="page:1:text:1")
+    batch_failure = AttemptOutcome.failed("converted_representation_visual_verification_failed")
+    retried = []
+
+    def fake_once(representation, text_item, collection, **options):
+        retried.append((representation, text_item is source, options["source_outline_callback"]))
+        return AttemptOutcome.delivered(object(), entity_ids=("PDF_Outline_page:1:text:1_0",))
+
+    monkeypatch.setattr(builder, "_attempt_one_representation_once", fake_once)
+    monkeypatch.setattr(builder, "_cleanup_attempt",
+                        lambda outcome, collection: {"status": "complete", "removed": []})
+    attempt = builder._converted_item_attempt(
+        work, batch_failure, None, requested="glyphs", visual_style="source",
+        z_offset_m=0.0, terminal_raster_callback=None, source_outline_callback="outlines",
+    )
+    outcome = attempt("glyphs")
+    assert retried == [("glyphs", True, "outlines")]
+    assert outcome.status == "delivered"
+    assert outcome.evidence["installed_font_attempt"]["status"] == "failed"
+
+
+def test_font_evidence_names_the_installed_face_and_the_absence_proof(tmp_path, test_face):
+    builder = _builder()
+    _source, installed = _installed_twin(tmp_path, test_face)
+    evidence = builder._font_asset_evidence(installed)
     assert evidence["font_source"] == "installed"
     assert evidence["widths_matched"] == "95/95"
     assert evidence["source_font_absence"]["detail"] == "embedded font stream is empty"
-    assert evidence["font_name"] == "Arial"
+    assert evidence["font_name"] == TEST_FACE_NAME
 
 
 def test_report_block_counts_installed_deliveries_and_step_backs():
@@ -341,38 +478,6 @@ def test_report_block_counts_installed_deliveries_and_step_backs():
     assert block["items_delivered_with_installed_font"] == 1
     assert block["items_back_on_previous_route"] == 1
     assert route.installed_font_report({}, []) is None
-
-
-def test_a_large_face_is_decoded_once_per_page_for_glyph_ink_checks(monkeypatch):
-    # Glyphs and Geometry check each glyph's ink. An installed Arial has more
-    # glyphs than the prefetch limit, so it is checked glyph by glyph; decoding
-    # its whole glyph table once per glyph made Glyphs mode slow.
-    from hashlib import sha256
-    import fontTools.ttLib as ttlib
-
-    builder = _builder()
-    data = ARIAL.read_bytes()
-    asset = types.SimpleNamespace(usable_sha256=sha256(data).hexdigest(), usable_bytes=data)
-    real = ttlib.TTFont
-    opened = []
-
-    def counting_ttfont(*args, **kwargs):
-        opened.append(1)
-        return real(*args, **kwargs)
-
-    monkeypatch.setattr(ttlib, "TTFont", counting_ttfont)
-    builder._FONT_GLYPH_INK_CACHE.clear()
-    builder._release_large_font_glyph_sets()
-    try:
-        glyph_e, glyph_x, glyph_space = _arial_glyph_ids("EX ")
-        assert builder._exact_font_glyph_has_visible_ink(asset, glyph_e) is True
-        assert builder._exact_font_glyph_has_visible_ink(asset, glyph_x) is True
-        assert builder._exact_font_glyph_has_visible_ink(asset, glyph_space) is False
-        assert len(opened) == 1
-    finally:
-        builder._release_large_font_glyph_sets()
-        builder._FONT_GLYPH_INK_CACHE.clear()
-    assert builder._LARGE_FONT_GLYPH_SETS == {}
 
 
 def test_engine_offers_installed_faces_only_to_font_drawing_modes(monkeypatch):
@@ -400,3 +505,36 @@ def test_engine_offers_installed_faces_only_to_font_drawing_modes(monkeypatch):
         "page": 3, "status": "not_used",
         "reason": "the installed-font check could not finish (KeyError)",
     }]
+
+
+@needs_arial
+def test_a_large_face_is_decoded_once_per_page_for_glyph_ink_checks(monkeypatch):
+    # Glyphs and Geometry check each glyph's ink. An installed Arial has more
+    # glyphs than the prefetch limit, so it is checked glyph by glyph; decoding
+    # its whole glyph table once per glyph made Glyphs mode slow.
+    from hashlib import sha256
+    import fontTools.ttLib as ttlib
+
+    builder = _builder()
+    data = ARIAL.read_bytes()
+    asset = types.SimpleNamespace(usable_sha256=sha256(data).hexdigest(), usable_bytes=data)
+    real = ttlib.TTFont
+    opened = []
+
+    def counting_ttfont(*args, **kwargs):
+        opened.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(ttlib, "TTFont", counting_ttfont)
+    builder._FONT_GLYPH_INK_CACHE.clear()
+    builder._release_large_font_glyph_sets()
+    try:
+        glyph_e, glyph_x, glyph_space = _face_glyph_ids(ARIAL, "EX ")
+        assert builder._exact_font_glyph_has_visible_ink(asset, glyph_e) is True
+        assert builder._exact_font_glyph_has_visible_ink(asset, glyph_x) is True
+        assert builder._exact_font_glyph_has_visible_ink(asset, glyph_space) is False
+        assert len(opened) == 1
+    finally:
+        builder._release_large_font_glyph_sets()
+        builder._FONT_GLYPH_INK_CACHE.clear()
+    assert builder._LARGE_FONT_GLYPH_SETS == {}
