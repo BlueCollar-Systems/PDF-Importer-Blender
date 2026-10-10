@@ -245,6 +245,11 @@ def test_packaged_release_preferences_hide_installer_and_direct_reinstall(
     package_dir.mkdir()
     (package_dir / "_release_identity.json").write_text("{}\n", encoding="utf-8")
 
+    # On Windows x64, where the bundled runtime can load, the panel directs a
+    # reinstall. (Other systems get the "Windows 64-bit only" truth instead; see
+    # tests/test_release_gate_and_platform_honesty.py.)
+    monkeypatch.setattr(dependency_manager.sys, "platform", "win32")
+    monkeypatch.setattr(dependency_manager.platform, "machine", lambda: "AMD64")
     layout = _draw_missing_runtime_preferences(
         monkeypatch,
         preferences,
@@ -252,7 +257,10 @@ def test_packaged_release_preferences_hide_installer_and_direct_reinstall(
     )
 
     assert preferences.PDFVEC_OT_install_pymupdf.bl_idname not in layout.operators
-    assert any("reinstall the official release zip" in text.lower() for text in layout.labels)
+    assert any(
+        "reinstall the official pdf vector importer release zip" in text.lower()
+        for text in layout.labels
+    )
 
 
 def test_source_development_preferences_label_the_installer_as_development_only(

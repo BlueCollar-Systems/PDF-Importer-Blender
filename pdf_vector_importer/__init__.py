@@ -15,6 +15,7 @@ bl_info = {
     "blender": (3, 1, 0),
     "location": "File > Import > PDF Vector (.pdf)",
     "description": "Import PDF vector drawings as native Blender geometry",
+    "warning": "Windows 64-bit only",
     "category": "Import-Export",
 }
 
@@ -26,6 +27,7 @@ def register():
         ensure_pymupdf_runtime,
         print_diagnostics,
         report_host_python_floor,
+        runtime_unavailable_message,
     )
 
     import bpy
@@ -46,8 +48,7 @@ def register():
     if not ensure_pymupdf_runtime(auto_install=False):
         print(
             "[PDF Vector Importer] PyMuPDF unavailable at register time. "
-            "Reinstall the official release ZIP; runtime checks do not run pip "
-            "or access the network."
+            + runtime_unavailable_message()
         )
 
 

@@ -8,6 +8,7 @@ Shows PyMuPDF install status and provides an Install button.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import bpy
@@ -19,6 +20,7 @@ from .dependency_manager import (
     get_pymupdf_version,
     install_pymupdf,
     runtime_diagnostics,
+    runtime_unavailable_message,
 )
 
 
@@ -92,6 +94,12 @@ class PDFVEC_OT_install_pymupdf(bpy.types.Operator):
         return {"FINISHED"}
 
 
+def _sentences(text: str) -> list[str]:
+    """Split a message into sentences for label rows (labels do not wrap)."""
+    parts = (part.strip() for part in re.split(r"(?<=\.)\s+", text))
+    return [part for part in parts if part]
+
+
 class PDFVectorImporterPreferences(bpy.types.AddonPreferences):
     """Addon preferences for PDF Vector Importer."""
 
@@ -141,13 +149,15 @@ class PDFVectorImporterPreferences(bpy.types.AddonPreferences):
             row.label(text="PyMuPDF: NOT installed", icon="ERROR")
             row = box.row()
             row.label(text=runtime_diagnostics(), icon="BLANK1")
-            row = box.row()
             if _is_packaged_release():
-                row.label(
-                    text="Reinstall the official release ZIP; runtime checks stay offline.",
-                    icon="INFO",
-                )
+                # The same words the import error uses: on macOS, Linux or Windows
+                # on ARM a reinstall cannot help, so the panel must not advise one.
+                # One sentence per row, because Blender labels do not wrap.
+                for index, sentence in enumerate(_sentences(runtime_unavailable_message())):
+                    row = box.row()
+                    row.label(text=sentence, icon="INFO" if index == 0 else "BLANK1")
             else:
+                row = box.row()
                 row.label(
                     text="Source/development dependency tool (network + package mutation):",
                     icon="INFO",
