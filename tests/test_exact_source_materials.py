@@ -14,7 +14,7 @@ if "bmesh" not in sys.modules:
     sys.modules["bmesh"] = types.SimpleNamespace()
 
 from pdf_vector_importer import bl_geometry_builder as builder  # noqa: E402
-from pdf_vector_importer.visual_style import preview_color  # noqa: E402
+from pdf_vector_importer.visual_style import preview_color, scene_linear_color  # noqa: E402
 
 
 class Nodes(list):
@@ -47,8 +47,8 @@ def test_different_stroke_and_fill_program_values_keep_source_style(monkeypatch,
     line_material = builder._get_or_create_material(stroke, cache, style)
     fill_material = builder._get_or_create_material(fill, cache, style)
     assert line_material is not fill_material
-    assert line_material.diffuse_color == (*preview_color(stroke, style), 1.0)
-    assert fill_material.diffuse_color == (*preview_color(fill, style), 1.0)
+    assert line_material.diffuse_color == (*scene_linear_color(preview_color(stroke, style)), 1.0)
+    assert fill_material.diffuse_color == (*scene_linear_color(preview_color(fill, style)), 1.0)
     assert fill_material.node_tree.nodes[0].inputs["Color"].default_value == fill_material.diffuse_color
     assert builder._get_or_create_material(fill, cache, style) is fill_material
     assert len(created) == 2

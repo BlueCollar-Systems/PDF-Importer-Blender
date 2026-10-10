@@ -78,7 +78,7 @@ def fill_depth_plan(records, budget_m=0.00005):
 def validate_source_fill(spec, native_members, graph):
     """Verify actual vertices, opaque emission and importer-owned source data."""
     from .image_paint_order import _close, _world_corners
-    from .visual_style import preview_color
+    from .visual_style import preview_color, scene_linear_color
 
     obj = spec["object"]
     if not any(same_native_object(obj, member) for member in native_members) or obj.type != "MESH" or len(obj.data.polygons) != 1:
@@ -110,7 +110,7 @@ def validate_source_fill(spec, native_members, graph):
         raise ValueError("Opaque fill polygon has no finite projected area")
     if len(obj.data.materials) != 1 or obj.data.polygons[0].material_index != 0:
         raise ValueError("Opaque fill material ownership changed")
-    expected_rgb = preview_color(tuple(spec["fill_rgb"]), spec["visual_style"])
+    expected_rgb = scene_linear_color(preview_color(tuple(spec["fill_rgb"]), spec["visual_style"]))
     material = obj.data.materials[0]
     if not _close(tuple(material.diffuse_color), (*expected_rgb, 1.0)):
         raise ValueError("Opaque fill material differs from its source style")
