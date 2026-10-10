@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import importlib
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -354,13 +355,41 @@ def runtime_diagnostics() -> str:
     return f"Python {py} — PyMuPDF {ver or 'unknown'}"
 
 
+_X64_MACHINES = frozenset({"AMD64", "X86_64"})
+
+
+def _host_machine() -> str:
+    """Processor type the host Python runs as, upper case ("" when unknown)."""
+    try:
+        return str(platform.machine() or "").strip().upper()
+    except Exception:
+        return ""
+
+
 def bundled_runtime_platform_supported() -> bool:
     """Whether the vendored PyMuPDF wheel can load on this platform at all.
 
     The bundle is ``cp310-abi3-win_amd64`` and ships only ``.pyd``/``.dll``
-    binaries, so it is Windows-x64-only as a matter of fact, not policy.
+    binaries, so it is Windows-x64-only as a matter of fact, not policy. A
+    native ARM64 Windows Blender cannot load it either; x64 Blender running
+    under Windows-on-ARM emulation reports AMD64 and can. An unknown processor
+    is not treated as unsupported.
     """
-    return sys.platform == "win32"
+    if sys.platform != "win32":
+        return False
+    machine = _host_machine()
+    return not machine or machine in _X64_MACHINES
+
+
+def _host_platform_name() -> str:
+    if sys.platform == "win32":
+        machine = _host_machine()
+        return "Windows on ARM" if machine.startswith("ARM") else f"Windows ({machine or 'unknown processor'})"
+    if sys.platform == "darwin":
+        return "macOS"
+    if sys.platform.startswith("linux"):
+        return "Linux"
+    return sys.platform
 
 
 def runtime_unavailable_message() -> str:
@@ -381,10 +410,11 @@ def runtime_unavailable_message() -> str:
             "run pip."
         )
     return (
-        "This release bundles a Windows-x64-only PyMuPDF runtime "
-        "(cp310-abi3-win_amd64), so it cannot load on %s. Reinstalling the release "
-        "ZIP will not change that. Import did not download packages or run pip."
-        % sys.platform
+        "This PDF Vector Importer download works only on Windows 64-bit (x64) PCs. "
+        "It cannot run on %s (%s, %s): the PDF reader it bundles (PyMuPDF, "
+        "cp310-abi3-win_amd64) is built for Windows x64 only. Reinstalling the "
+        "release ZIP will not change that. Import did not download packages or run pip."
+        % (_host_platform_name(), sys.platform, _host_machine() or "unknown processor")
     )
 
 

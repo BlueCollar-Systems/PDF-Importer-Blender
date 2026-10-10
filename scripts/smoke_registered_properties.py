@@ -19,6 +19,11 @@ classes = (
     operators.IMPORT_OT_pdf_vector_cancel,
     operators.IMPORT_OT_pdf_vector,
 )
+# Drag-and-drop import: Blender 4.1+ only. Older versions must still load.
+HAS_FILE_HANDLER = hasattr(bpy.types, "FileHandler")
+assert (operators.PDFVEC_FH_import is not None) == HAS_FILE_HANDLER
+if HAS_FILE_HANDLER:
+    classes += (operators.PDFVEC_FH_import,)
 registered = []
 try:
     for cls in classes:
@@ -41,6 +46,14 @@ try:
     assert properties["text_mode"].default == "3d_text"
     assert len(properties["visual_style"].enum_items) == 3
     assert bpy.ops.pdfvec.install_pymupdf.get_rna_type().properties["confirm_network_install"].default is False
+    if HAS_FILE_HANDLER:
+        handler = bpy.types.FileHandler.bl_rna_get_subclass_py("PDFVEC_FH_import")
+        assert handler is operators.PDFVEC_FH_import, "PDF drag-and-drop handler did not register"
+        assert handler.bl_file_extensions == ".pdf"
+        assert handler.bl_import_operator == "import_scene.pdf_vector"
+        print("FILE_HANDLER PDFVEC_FH_import", handler.bl_file_extensions)
+    else:
+        print("FILE_HANDLER none (drag-and-drop needs Blender 4.1+)")
     print("NATIVE_PROPERTIES_PASS", bpy.app.version_string)
 finally:
     for cls in reversed(registered):

@@ -106,6 +106,47 @@ def _addon_prefs(context):
     return addon.preferences
 
 
+def _supplied_pdf_path(operator) -> str:
+    """The PDF handed to the operator before invoke (drag and drop or a script).
+
+    Remembered values from the last run do not count: Blender restores them as
+    "ghost" properties, which is_property_set() reports as not set, so File >
+    Import still opens the file browser.
+    """
+    try:
+        if not operator.properties.is_property_set("filepath"):
+            return ""
+    except Exception:
+        return ""
+    path = str(getattr(operator, "filepath", "") or "")
+    if path.lower().endswith(".pdf") and os.path.isfile(path):
+        return path
+    return ""
+
+
+def _invoke_options_popup(operator, context):
+    """Show the import options for an already chosen PDF, then import on OK.
+
+    ImportHelper.invoke_popup (Blender 4.2+) is not used because it reads a
+    ``files`` property, which this single-file operator does not have.
+    """
+    wm = context.window_manager
+    try:
+        return wm.invoke_props_dialog(
+            operator,
+            title=os.path.basename(operator.filepath),
+            confirm_text=operator.bl_label,
+        )
+    except TypeError:
+        # Older Blender: no title / confirm_text keywords.
+        return wm.invoke_props_dialog(operator)
+
+
+def _poll_pdf_drop(context) -> bool:
+    area = getattr(context, "area", None)
+    return area is not None and area.type in {"VIEW_3D", "OUTLINER"}
+
+
 class IMPORT_OT_pdf_vector_cancel(bpy.types.Operator):
     """Request cooperative cancellation at the next object heartbeat."""
 
@@ -275,6 +316,7 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
     )
 
     def invoke(self, context, event):
+        dropped_pdf = _supplied_pdf_path(self)
         prefs = _addon_prefs(context)
         if prefs is not None:
             try:
@@ -287,9 +329,14 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
 
             remember = bool(getattr(prefs, "remember_last_directory", True))
             last_dir = str(getattr(prefs, "last_import_dir", "") or "")
-            if remember and last_dir and os.path.isdir(last_dir):
+            if not dropped_pdf and remember and last_dir and os.path.isdir(last_dir):
                 # ImportHelper uses filepath as initial browser path.
                 self.filepath = os.path.join(last_dir, "")
+
+        if dropped_pdf:
+            # A PDF dropped on the window (Blender 4.1+) or passed in by a script:
+            # skip the file browser and show the options for that file.
+            return _invoke_options_popup(self, context)
 
         context.window_manager.fileselect_add(self)
         return {"RUNNING_MODAL"}
@@ -527,6 +574,25 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
             row = box.row()
             row.enabled = self.model3d_mode != "off"
             row.prop(self, "model3d_depth_mm")
+
+
+if hasattr(bpy.types, "FileHandler"):
+
+    class PDFVEC_FH_import(bpy.types.FileHandler):
+        """Drag a PDF onto the 3D Viewport or Outliner to import it (Blender 4.1+)."""
+
+        bl_idname = "PDFVEC_FH_import"
+        bl_label = "PDF Vector"
+        bl_import_operator = "import_scene.pdf_vector"
+        bl_file_extensions = ".pdf"
+
+        @classmethod
+        def poll_drop(cls, context):
+            return _poll_pdf_drop(context)
+
+else:
+    # Blender 3.1-4.0 have no drag-and-drop file handlers; File > Import still works.
+    PDFVEC_FH_import = None
 
 
 def menu_func_import(self, context):
