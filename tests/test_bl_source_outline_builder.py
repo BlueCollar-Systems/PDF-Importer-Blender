@@ -18,6 +18,12 @@ def clear_qualification_cache():
     b._clear_qualification_cache()
 
 
+@pytest.fixture(autouse=True)
+def full_audit_proofs(monkeypatch):
+    # These contracts pin the exact build-time proofs, which run in audit mode.
+    monkeypatch.setenv("BC_PDF_AUDIT", "1")
+
+
 def polygon(points):
     return {"start": list(points[0]), "segments": [["L", list(p)] for p in points[1:]+points[:1]], "closed": True}
 

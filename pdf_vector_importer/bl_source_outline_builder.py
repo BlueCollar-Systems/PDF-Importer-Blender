@@ -599,6 +599,23 @@ def _mesh_readback(mesh, polygons):
     return verify_mesh_ink(vertices, triangles, polygons)
 
 
+def _mesh_fingerprint(mesh):
+    """Audit off: read the filled ink once and fingerprint it, without the exact proof.
+
+    The fingerprint is the same digest verify_mesh_ink returns, so an audit-mode
+    re-proof of this object later still binds to it.
+    """
+    mesh.calc_loop_triangles()
+    vertices = [list(map(float, v.co)) for v in mesh.vertices]
+    triangles = [tuple(int(v) for v in t.vertices) for t in mesh.loop_triangles]
+    _require(vertices and triangles, "native outline has no filled ink")
+    _require(all(math.isfinite(value) for vertex in vertices for value in vertex),
+             "native outline has non-finite geometry")
+    return {"vertices": len(vertices), "triangles": len(triangles),
+            "exact_oriented_boundary_chain": False, "proof_level": "light",
+            "mesh_sha256": _digest({"vertices": vertices, "triangles": triangles})}
+
+
 def _matrix(value):
     return [[float(v) for v in row] for row in value]
 
@@ -662,8 +679,14 @@ def _verify_material(obj, color):
             "shader": "constant_emission", "strength": 1., "exact_node_graph": True}
 
 
-def verify_source_outline_entity(obj, *, expected_world_matrix=None, page_clip_verified=False):
-    """Reread underlying controls and actual filled ink after stacking/reopen."""
+def verify_source_outline_entity(obj, *, expected_world_matrix=None, page_clip_verified=False,
+                                 light=False):
+    """Reread underlying controls and actual filled ink after stacking/reopen.
+
+    ``light`` (audit off) keeps the record hash, identity, type, visibility,
+    transform, modifier rule, material and page-ledger binding, and skips the
+    exact re-qualification and the curve and filled-ink re-reads.
+    """
     _require(obj.get("pdf_source_outline") is True, "source outline route missing")
     saved = json.loads(obj["pdf_source_outline_record"])
     import bpy
@@ -687,6 +710,18 @@ def verify_source_outline_entity(obj, *, expected_world_matrix=None, page_clip_v
     modifiers = list(obj.modifiers)
     _require(not modifiers or (page_clip_verified and len(modifiers) == 1 and modifiers[0].type == "NODES"),
              "unverified native modifier")
+    if light:
+        result = {"verified": True, "proof_level": "light", "actual_object_type": obj.type,
+                  "outline_source": "source_renderer_svg", "font_program_authenticity": "absent",
+                  "source_outline_sha256": record["source_outline_sha256"],
+                  "source_placement_index": placement["index"],
+                  "material": _verify_material(obj, placement["color"]),
+                  "entity_id": obj.name, "creation_world_matrix": saved["creation_matrix"],
+                  "actual_location_m": [float(v) for v in obj.location],
+                  "initial_mesh_sha256": saved["initial_mesh_sha256"]}
+        if "source_page_ledger" in record:
+            result["source_page_ledger"] = record["source_page_ledger"]
+        return result
     qualified = qualify_contours(placement["contours"], placement["fill_rule"], native=True)
     expected = _normalized_segments(qualified)
     polygons = _native_polygons(expected)
@@ -702,7 +737,8 @@ def verify_source_outline_entity(obj, *, expected_world_matrix=None, page_clip_v
     else:
         ink = _mesh_readback(obj.data, polygons)
     _require(ink["mesh_sha256"] == saved["initial_mesh_sha256"], "native underlying fill geometry changed")
-    result = {"verified": True, "actual_object_type": obj.type, "outline_source": "source_renderer_svg",
+    result = {"verified": True, "proof_level": "full", "actual_object_type": obj.type,
+              "outline_source": "source_renderer_svg",
             "font_program_authenticity": "absent", "source_outline_sha256": record["source_outline_sha256"],
             "source_placement_index": placement["index"], "material": material, "native_ink": ink,
             "entity_id": obj.name, "creation_world_matrix": saved["creation_matrix"],
@@ -717,7 +753,16 @@ def verify_source_outline_entity(obj, *, expected_world_matrix=None, page_clip_v
 
 
 def build_source_outlines(record, collection, *, representation, requested, z_offset_m=0.0):
-    """Create one source-owned object per visible glyph; return all owned resources."""
+    """Create one source-owned object per visible glyph; return all owned resources.
+
+    With audit off (the default) each glyph keeps the native qualification
+    that decides whether it can be an outline at all, and the build reads its
+    filled ink once for a fingerprint; the exact source-vs-native and
+    tessellation re-proofs run only in audit mode.
+    """
+    from .audit_mode import audit_enabled
+
+    audit = audit_enabled()
     objects, blocks = [], []
     try:
         import bpy
@@ -739,13 +784,16 @@ def build_source_outlines(record, collection, *, representation, requested, z_of
         prepared = []
         for placement in record["placements"]:
             try:
-                source = qualify_contours(placement["contours"], placement["fill_rule"])
+                if audit:
+                    source = qualify_contours(placement["contours"], placement["fill_rule"])
                 native = qualify_contours(placement["contours"], placement["fill_rule"], native=True)
-                _topology(source["depth"] == native["depth"] and source["reverse"] == native["reverse"],
-                          "float32 storage changes source topology")
-                expected = _normalized_segments(native)
-                polygons = _native_polygons(expected)
-                _polygon_qualification(polygons, native["depth"])
+                polygons = None
+                if audit:
+                    _topology(source["depth"] == native["depth"] and source["reverse"] == native["reverse"],
+                              "float32 storage changes source topology")
+                    expected = _normalized_segments(native)
+                    polygons = _native_polygons(expected)
+                    _polygon_qualification(polygons, native["depth"])
             except OutlineTopologyUnavailable as error:
                 return AttemptOutcome.impossible("source_outline_topology_unavailable_for_item", evidence={
                     "importer_id": "bc_pdf_vector_importer.blender", "item_id": record["item_id"],
@@ -809,7 +857,7 @@ def build_source_outlines(record, collection, *, representation, requested, z_of
             mesh = obj.to_mesh()
             retained = None
             try:
-                ink = _mesh_readback(mesh, polygons)
+                ink = _mesh_readback(mesh, polygons) if audit else _mesh_fingerprint(mesh)
                 if representation == "geometry":
                     retained = mesh.copy(); blocks.append(retained)
             finally:
@@ -845,7 +893,7 @@ def build_source_outlines(record, collection, *, representation, requested, z_of
             obj["pdf_source_outline_record"] = _json({"source_record_owner": final_objects[0].name, "placement": placement,
                 "creation_matrix": creation_matrix, "initial_mesh_sha256": ink["mesh_sha256"]})
         for obj in final_objects:
-            evidence.append(verify_source_outline_entity(obj))
+            evidence.append(verify_source_outline_entity(obj, light=not audit))
         return AttemptOutcome.delivered(final_objects[0], entity_ids=[o.name for o in final_objects],
             owned_objects=objects, owned_datablocks=blocks, evidence={"item_id": record["item_id"],
             "outline_source": "source_renderer_svg", "font_program_authenticity": "absent",

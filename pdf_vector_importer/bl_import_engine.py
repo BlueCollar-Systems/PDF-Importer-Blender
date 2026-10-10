@@ -149,6 +149,15 @@ def _default_import_report_path(filepath: str) -> str:
     return os.path.join(run_dir, f"{base}_import_report.json")
 
 
+def _addon_preferences():
+    """This add-on's preferences, or None outside Blender or when not registered."""
+    try:
+        addon = bpy.context.preferences.addons.get("pdf_vector_importer")
+        return getattr(addon, "preferences", None)
+    except Exception:
+        return None
+
+
 def _sha256_path(path: str) -> str:
     digest = hashlib.sha256()
     with open(path, "rb") as handle:
@@ -825,6 +834,7 @@ def write_import_report(
     provenance_opts: Any = None,
 ) -> str:
     """Emit bcs.import_report/1.1 JSON for one import run."""
+    from .audit_mode import audit_enabled
     from .pdfcadcore.import_report import build_actual_text_entity_types, build_import_report
 
     path = (
@@ -1005,6 +1015,7 @@ def write_import_report(
         "text_page_edge_warnings": text_page_edge_warnings,
         "text_final_state_warnings": text_final_state_warnings,
         "pages_requested": int(stats.get("pages_requested", stats.get("pages", 0)) or 0),
+        "audit_mode": bool(stats["audit_mode"]) if "audit_mode" in stats else audit_enabled(),
         "scale_hints": stats.get("scale_hints"),
         "fallback_attempted": bool(fallback_attempted),
         "result_status": (
@@ -3488,7 +3499,11 @@ def _reverify_text_delivery_after_stack(
     A record whose only failures are the float32 sheet-edge trim re-check
     (the item already passed the exact check before the sheet moved) is kept
     as delivered and appended to ``warnings`` instead of being removed.
+    Glyph outlines get the full exact re-proof only in audit mode.
     """
+    from .audit_mode import audit_enabled
+
+    audit = audit_enabled()
     failures = []
     expected_types = {
         "labels": "FONT",
@@ -3585,6 +3600,7 @@ def _reverify_text_delivery_after_stack(
                     proof['source_outline'] = verify_source_outline_entity(
                         obj, expected_world_matrix=expected_matrix,
                         page_clip_verified=bool(proof.get('source_page_viewport')),
+                        light=not audit,
                     )
                     for key in ('source_outline_sha256', 'source_placement_index'):
                         if proof['source_outline'].get(key) != bindings[0].get(key) or key not in bindings[0]:
@@ -3782,6 +3798,12 @@ def import_pdf(
     image_dir = ""
     image_dir_owned = False
     image_cache = _ImportImageCache()
+    from . import audit_mode
+
+    # Heavy self-proofs run only in audit mode (config, BC_PDF_AUDIT, or the
+    # "Audit import (slow self-checks)" preference); default off.
+    audit = audit_mode.resolve_audit_mode(config, _addon_preferences())
+    audit_token = audit_mode.activate(audit)
 
     try:
         # 1. Verify PyMuPDF is available
@@ -3977,6 +3999,7 @@ def import_pdf(
             ]
             if prior_delivery:
                 import_cfg._text_delivery_records = prior_delivery
+        total_stats["audit_mode"] = bool(audit)
         raster_pages_imported = int(
             total_stats.get("raster_pages_imported", 0) or 0
         )
@@ -4871,6 +4894,7 @@ def import_pdf(
         return total_stats
 
     finally:
+        audit_mode.deactivate(audit_token)
         image_cache.release()
         if doc is not None and not bool(getattr(doc, "is_closed", False)):
             try:
