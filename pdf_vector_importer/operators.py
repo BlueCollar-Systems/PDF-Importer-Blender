@@ -433,26 +433,8 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
                 context=context,
                 cancel_callback=_cancel_requested,
             )
-        except bl_import_engine.IncompleteImportError as exc:
-            # Every sheet was built; some items need a look. The delivered
-            # sheets stay in the scene as one undo step.
-            from .import_outcome import plain_outcome_lines
-
-            _set_status(None)
-            _end_import_session()
-            for line in plain_outcome_lines(exc.stats):
-                self.report({"WARNING"}, line)
-            self._remember_last_directory(context)
-            return {"FINISHED"}
-        except bl_import_engine.NothingToResumeError as exc:
-            # Resume after a finished import: nothing failed and nothing changed,
-            # so say so as a notice, not as "PDF import failed".
-            _set_status(None)
-            _end_import_session()
-            self.report({"WARNING"}, str(exc))
-            return {"CANCELLED"}
         except Exception as exc:
-            return self._import_failed(context, exc)
+            return self._import_raised(context, exc)
 
         self._release_import(context)
         return self._report_result(context, stats)
@@ -470,7 +452,7 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
             self._release_import(context)
             return self._report_result(context, completed.value)
         except Exception as exc:
-            return self._import_failed(context, exc)
+            return self._import_raised(context, exc)
         return {"RUNNING_MODAL"}
 
     def cancel(self, context):
@@ -502,6 +484,32 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
             self._steps = None
             self._set_status(None)
             _end_import_session()
+
+    def _import_raised(self, context, exc):
+        """One answer for an import that ended by raising, in the dialog or a script.
+
+        The modal (Esc-cancellable) run and the blocking run must say the same
+        thing, so both send what the import raised through here.
+        """
+        from . import bl_import_engine
+
+        if isinstance(exc, bl_import_engine.IncompleteImportError):
+            # Every sheet was built; some items need a look. The delivered
+            # sheets stay in the scene as one undo step.
+            from .import_outcome import plain_outcome_lines
+
+            self._release_import(context)
+            for line in plain_outcome_lines(exc.stats):
+                self.report({"WARNING"}, line)
+            self._remember_last_directory(context)
+            return {"FINISHED"}
+        if isinstance(exc, bl_import_engine.NothingToResumeError):
+            # Resume after a finished import: nothing failed and nothing changed,
+            # so say so as a notice, not as "PDF import failed".
+            self._release_import(context)
+            self.report({"WARNING"}, str(exc))
+            return {"CANCELLED"}
+        return self._import_failed(context, exc)
 
     def _import_failed(self, context, exc):
         from .pdfcadcore.fitz_loader import PdfOpenError
