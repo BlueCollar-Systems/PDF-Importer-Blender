@@ -102,25 +102,35 @@ def _face_glyph_ids(face: Path, text):
 
 
 def _not_embedded_pdf(path: Path, face: Path, base_font: str, *, width_change=None,
-                      encoding=b"/WinAnsiEncoding"):
+                      encoding=b"/WinAnsiEncoding", to_unicode=None, content=None):
     widths = _face_widths(face)
     if width_change:
         code, delta = width_change
         widths[code] += delta
     width_text = " ".join(str(widths[code]) for code in range(32, 127)).encode()
     name = base_font.encode()
-    content = b"BT /F1 14 Tf 50 300 Td (" + TEXT.encode() + b") Tj ET\n"
+    if content is None:
+        content = b"BT /F1 14 Tf 50 300 Td (" + TEXT.encode() + b") Tj ET\n"
     objects = [
         b"<</Type/Catalog/Pages 2 0 R>>",
         b"<</Type/Pages/Kids[3 0 R]/Count 1>>",
         b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 396]"
         b"/Resources<</Font<</F1 4 0 R>>>>/Contents 5 0 R>>",
         b"<</Type/Font/Subtype/TrueType/BaseFont/" + name + b"/FirstChar 32/LastChar 126"
-        b"/Widths[" + width_text + b"]/Encoding " + encoding + b"/FontDescriptor 6 0 R>>",
+        b"/Widths[" + width_text + b"]/Encoding " + encoding
+        + (b"/ToUnicode 7 0 R" if to_unicode else b"") + b"/FontDescriptor 6 0 R>>",
         b"<</Length %d>>stream\n" % len(content) + content + b"\nendstream",
         b"<</Type/FontDescriptor/FontName/" + name + b"/Flags 32/FontBBox[-665 -325 2000 1006]"
         b"/ItalicAngle 0/Ascent 905/Descent -212/CapHeight 716/StemV 80>>",
     ]
+    if to_unicode:
+        cmap = (
+            b"/CIDInit /ProcSet findresource begin 12 dict begin begincmap "
+            b"/CMapName /D042-UCS def 1 begincodespacerange <00> <FF> endcodespacerange "
+            + to_unicode
+            + b" endcmap CMapName currentdict /CMap defineresource pop end end"
+        )
+        objects.append(b"<</Length %d>>stream\n" % len(cmap) + cmap + b"\nendstream")
     out = bytearray(b"%PDF-1.4\n")
     offsets = []
     for number, body in enumerate(objects, 1):
@@ -189,8 +199,8 @@ def _absence_proof(item):
 def test_private_core_helpers_this_route_reads_still_exist():
     # The route reads these shared-core helpers without changing them. A core
     # sync that renames one must fail here, not silently disable the route.
-    for name in ("_face_style", "_reference_faces_for", "_resolved_key",
-                 "_parse_width_array", "_xref_key", "_descriptor_style",
+    for name in ("_face_style", "_reference_index", "reference_font_directories",
+                 "_resolved_key", "_parse_width_array", "_xref_key", "_descriptor_style",
                  "clear_reference_font_cache"):
         assert callable(getattr(gcr, name)), name
     assert gcr._parse_width_array("[32 [278 278 355]]") == {32: 278.0, 33: 278.0, 34: 355.0}
@@ -270,6 +280,143 @@ def test_two_installed_faces_with_the_same_name_are_not_guessed_between(tmp_path
     try:
         assert items[0] is original[0]
         assert "unique" in stats["installed_font_checks"][0]["reason"]
+    finally:
+        document.close()
+
+
+def test_every_same_named_face_counts_against_uniqueness(tmp_path, test_face):
+    # The shared lookup shortens its list to four; the count here is the
+    # whole set, so five faces are reported as five.
+    for number in range(4):
+        shutil.copyfile(test_face, test_face.with_name(f"bcsroutetest_{number}.ttf"))
+    gcr.clear_reference_font_cache()
+    pdf = _not_embedded_pdf(tmp_path / "d042.pdf", test_face, TEST_FACE_NAME)
+    document, original, items, stats = _attach(pdf)
+    try:
+        assert items[0] is original[0]
+        reason = stats["installed_font_checks"][0]["reason"]
+        assert reason.startswith("5 installed fonts") and "unique" in reason
+    finally:
+        document.close()
+
+
+def _collection_of(face: Path, path: Path) -> Path:
+    from fontTools.ttLib.ttCollection import TTCollection
+
+    collection = TTCollection()
+    collection.fonts.append(TTFont(str(face)))
+    collection.save(str(path))
+    return path
+
+
+def test_a_font_collection_with_the_same_name_counts_against_uniqueness(
+    tmp_path, test_face, monkeypatch,
+):
+    collection = _collection_of(test_face, tmp_path / "bcsroutetest.ttc")
+    # A folder search reads single font files; a collection named directly
+    # is indexed, and then it counts like any other face with that name.
+    monkeypatch.setenv(
+        "BCS_GLYPH_REFERENCE_FONTS", os.pathsep.join([str(test_face.parent), str(collection)])
+    )
+    gcr.clear_reference_font_cache()
+    pdf = _not_embedded_pdf(tmp_path / "d042.pdf", test_face, TEST_FACE_NAME)
+    document, original, items, stats = _attach(pdf)
+    try:
+        assert items[0] is original[0]
+        reason = stats["installed_font_checks"][0]["reason"]
+        assert reason.startswith("2 installed fonts") and "unique" in reason
+    finally:
+        document.close()
+    # A collection alone is not read by this check.
+    monkeypatch.setenv("BCS_GLYPH_REFERENCE_FONTS", str(collection))
+    gcr.clear_reference_font_cache()
+    document, original, items, stats = _attach(pdf)
+    try:
+        assert items[0] is original[0]
+        assert "font collection" in stats["installed_font_checks"][0]["reason"]
+    finally:
+        document.close()
+
+
+def test_a_tounicode_map_that_changes_a_letter_keeps_todays_route(tmp_path, test_face):
+    # The page draws code 0x44 ("D"); the font's map says it reads as "B". The
+    # extracted text is "B042 EX101" while the page shows "D042 EX101", so the
+    # installed face must not be used to draw a B.
+    pdf = _not_embedded_pdf(tmp_path / "d042_tu.pdf", test_face, TEST_FACE_NAME,
+                            to_unicode=b"1 beginbfchar <44> <0042> endbfchar")
+    document, original, items, stats = _attach(pdf)
+    try:
+        assert original[0].text == "B042 EX101"
+        assert items[0] is original[0] and items[0].font_asset is None
+        assert _absence_proof(items[0])
+        assert stats.get("installed_font_items", 0) == 0
+        check = stats["installed_font_checks"][0]
+        assert check["status"] == "not_used" and "ToUnicode" in check["reason"]
+    finally:
+        document.close()
+
+
+def test_a_tounicode_map_keeps_todays_route_even_when_it_agrees(tmp_path, test_face):
+    # Only the drawn character codes say which glyph is drawn. The route does
+    # not read ToUnicode maps at all (2 of 42,095 non-embedded WinAnsi fonts in
+    # the owner's test PDFs carry one), so an agreeing map is not used either.
+    pdf = _not_embedded_pdf(tmp_path / "d042_tu_ok.pdf", test_face, TEST_FACE_NAME,
+                            to_unicode=b"1 beginbfchar <44> <0044> endbfchar")
+    document, original, items, stats = _attach(pdf)
+    try:
+        assert original[0].text == TEXT
+        assert items[0] is original[0] and items[0].font_asset is None
+        assert "ToUnicode" in stats["installed_font_checks"][0]["reason"]
+    finally:
+        document.close()
+
+
+def test_actualtext_in_place_of_the_drawn_letters_keeps_that_item_on_todays_route(
+    tmp_path, test_face,
+):
+    # Marked content replaces the drawn "EX101" with "EX999" in the extracted
+    # text. That item keeps today's route; the plain item beside it does not.
+    content = (
+        b"/Span <</ActualText (EX999)>> BDC BT /F1 14 Tf 50 300 Td (EX101) Tj ET EMC\n"
+        b"BT /F1 14 Tf 50 200 Td (D042) Tj ET\n"
+    )
+    pdf = _not_embedded_pdf(tmp_path / "d042_at.pdf", test_face, TEST_FACE_NAME,
+                            content=content)
+    document, original, items, stats = _attach(pdf)
+    try:
+        by_text = {item.text: (item, source) for item, source in zip(items, original, strict=True)}
+        assert set(by_text) == {"EX999", "D042"}
+        replaced, source = by_text["EX999"]
+        assert replaced is source and replaced.font_asset is None and _absence_proof(replaced)
+        plain, _source = by_text["D042"]
+        assert route.is_installed_font_asset(plain.font_asset)
+        check = stats["installed_font_checks"][0]
+        assert check["status"] == "used"
+        assert check["items_attached"] == 1 and check["items_text_not_drawn"] == 1
+    finally:
+        document.close()
+    only_replaced = _not_embedded_pdf(
+        tmp_path / "d042_at_only.pdf", test_face, TEST_FACE_NAME,
+        content=b"/Span <</ActualText (EX999)>> BDC BT /F1 14 Tf 50 300 Td (EX101) Tj ET EMC\n",
+    )
+    document, original, items, stats = _attach(only_replaced)
+    try:
+        assert items[0] is original[0] and items[0].font_asset is None
+        check = stats["installed_font_checks"][0]
+        assert check["status"] == "not_used" and "not the letters the page draws" in check["reason"]
+    finally:
+        document.close()
+
+
+def test_a_page_whose_drawn_letters_cannot_be_read_keeps_todays_route(
+    tmp_path, test_face, monkeypatch,
+):
+    monkeypatch.setattr(route, "_drawn_letters", lambda _page: None)
+    pdf = _not_embedded_pdf(tmp_path / "d042.pdf", test_face, TEST_FACE_NAME)
+    document, original, items, stats = _attach(pdf)
+    try:
+        assert items[0] is original[0]
+        assert "cannot be read back" in stats["installed_font_checks"][0]["reason"]
     finally:
         document.close()
 

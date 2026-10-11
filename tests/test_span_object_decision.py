@@ -200,9 +200,12 @@ def test_host_kerning_is_assumed_unless_measured_absent(monkeypatch):
     monkeypatch.setattr(bl_text_builder, "bpy", types.SimpleNamespace(
         app=types.SimpleNamespace(version=(5, 2, 2))))
     assert bl_text_builder._host_applies_font_kerning() is False
-    monkeypatch.setattr(bl_text_builder, "bpy", types.SimpleNamespace(
-        app=types.SimpleNamespace(version=(4, 2, 0))))
-    assert bl_text_builder._host_applies_font_kerning() is True
+    # Only the measured release is trusted; an older or a future Blender may
+    # kern, so kerned lines stay letter by letter there.
+    for version in ((4, 2, 0), (5, 1, 1), (5, 3, 0), (6, 0, 0)):
+        monkeypatch.setattr(bl_text_builder, "bpy", types.SimpleNamespace(
+            app=types.SimpleNamespace(version=version)))
+        assert bl_text_builder._host_applies_font_kerning() is True, version
     monkeypatch.setattr(bl_text_builder, "bpy", types.SimpleNamespace())
     assert bl_text_builder._host_applies_font_kerning() is True
 
