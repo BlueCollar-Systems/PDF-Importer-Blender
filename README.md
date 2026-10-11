@@ -1,6 +1,6 @@
 # PDF Vector Importer for Blender
 
-[![Version](https://img.shields.io/badge/Version-1.0.107-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-1.0.108-blue.svg)]()
 
 **BUILT. NOT BOUGHT.** -- BlueCollar-Systems
 
@@ -84,6 +84,12 @@ scene creation, so a typo cannot unexpectedly import the whole document.
 Source Accurate is the initial visual style and preserves PDF colors against a
 separately hideable white sheet. Blueprint and High Contrast are optional previews;
 any previously saved default visual style is respected.
+
+Python callers can pass `user_scale` in the `config` dictionary to
+`pdf_vector_importer.bl_import_engine.import_pdf`. It must be a finite positive
+number and defaults to `1.0`. The multiplier applies to PDF extraction, page
+dimensions and placement, and resume checkpoints. Resume with the same scale as
+the interrupted import; a changed scale is a different import configuration.
 
 Long imports publish phase/page/object progress in Blender's status area and in
 `import_report.json`. The report includes a representation-aware complexity
