@@ -413,6 +413,13 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
                 self.report({"WARNING"}, line)
             self._remember_last_directory(context)
             return {"FINISHED"}
+        except bl_import_engine.NothingToResumeError as exc:
+            # Resume after a finished import: nothing failed and nothing changed,
+            # so say so as a notice, not as "PDF import failed".
+            _set_status(None)
+            _end_import_session()
+            self.report({"WARNING"}, str(exc))
+            return {"CANCELLED"}
         except Exception as exc:
             from .pdfcadcore.fitz_loader import PdfOpenError
 

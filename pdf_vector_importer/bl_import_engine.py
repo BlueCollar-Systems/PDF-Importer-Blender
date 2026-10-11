@@ -84,6 +84,14 @@ class EmbeddedImageDeliveryError(RuntimeError):
     """An embedded image cannot be decoded with its required transparency."""
 
 
+class NothingToResumeError(ValueError):
+    """Resume was asked for, but no import of this PDF with these settings was left unfinished.
+
+    Nothing failed and nothing was changed, so the dialog shows this as a
+    plain notice, not as "PDF import failed".
+    """
+
+
 def _env_bool(name: str, default: bool = False) -> bool:
     raw = os.environ.get(name, "").strip().lower()
     if not raw:
@@ -3955,9 +3963,9 @@ def import_pdf(
         if bool(config.get("resume")):
             if not os.path.isfile(checkpoint_path):
                 # Every sheet of the last run was built (or none was started).
-                raise ValueError(
-                    "Nothing to resume: there is no unfinished import of this PDF with "
-                    "these settings. Turn off Resume Interrupted Import to import it again."
+                raise NothingToResumeError(
+                    "Nothing to resume: no import of this PDF with these settings was "
+                    "left unfinished. Turn off Resume Interrupted Import to import it again."
                 )
             resume_state = load_resume_checkpoint(
                 checkpoint_path,

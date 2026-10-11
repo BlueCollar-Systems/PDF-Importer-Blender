@@ -109,6 +109,23 @@ def test_a_real_error_still_says_failed(monkeypatch, operators_module, tmp_path)
     assert reports == [({"ERROR"}, "PDF import failed: PyMuPDF runtime is missing")]
 
 
+def test_resume_after_a_finished_import_is_a_notice_not_a_failure(
+        monkeypatch, operators_module, tmp_path):
+    operators, engine = operators_module
+    notice = ("Nothing to resume: no import of this PDF with these settings was left "
+              "unfinished. Turn off Resume Interrupted Import to import it again.")
+
+    def nothing_left(*_args, **_kwargs):
+        raise engine.NothingToResumeError(notice)
+
+    monkeypatch.setattr(engine, "import_pdf", nothing_left)
+    operator, reports = _operator(operators, tmp_path)
+    operator.resume_interrupted = True
+    assert operator.execute(_context()) == {"CANCELLED"}
+    assert reports == [({"WARNING"}, notice)]
+    assert operators._IMPORT_ACTIVE is False
+
+
 def test_kept_sheet_edge_letters_are_listed_after_a_finished_import(
         monkeypatch, operators_module, tmp_path):
     operators, engine = operators_module

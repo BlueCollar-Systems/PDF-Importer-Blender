@@ -191,7 +191,11 @@ def test_resume_with_nothing_left_says_so_plainly(monkeypatch, tmp_path):
     monkeypatch.setattr(fitz_loader, "import_fitz", lambda **_kwargs: object())
     monkeypatch.setattr(fitz_loader, "safe_open", lambda _path: types.SimpleNamespace(
         page_count=3, close=lambda: None, is_closed=True))
-    with pytest.raises(ValueError, match="^Nothing to resume: .*Turn off Resume Interrupted Import"):
+    with pytest.raises(engine.NothingToResumeError,
+                       match="^Nothing to resume: .*Turn off Resume Interrupted Import") as caught:
         engine.import_pdf(str(pdf), config={
             "resume": True, "resume_checkpoint_path": str(tmp_path / "finished.json"),
             "auto_hide_default_cube": False, "auto_focus_view": False})
+    # Still a ValueError for any caller that already catches that.
+    assert isinstance(caught.value, ValueError)
+    assert "failed" not in str(caught.value).lower()
