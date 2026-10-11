@@ -18,13 +18,14 @@ Variants:
     All text is Helvetica that is NOT embedded in the PDF (a base-14 font),
     which is how many CAD and office programs write simple text.
 
-``edge-far`` - the known "one edge-crossing text line stops the import" case
+``edge-far`` - the "one edge-crossing text line stops the import" case
     (BL-1010-keep-every-sheet): a very tall first sheet pushes sheet 2 about
     5.9 m down the stack, and sheet 2 has text crossing its top edge (same
-    non-embedded Helvetica). On origin/main 6b8e93a (Blender 5.2.2) sheet 2 is
+    non-embedded Helvetica). On main 6b8e93a (Blender 5.2.2) sheet 2 was
     rolled back by the stacked text re-check ("Native text viewport changed the
-    visible source ink area") and only sheet 1 stays, so CI runs it as an
-    expected failure until that fix lands.
+    visible source ink area") and only sheet 1 stayed. With the
+    keep-every-sheet fix in, CI requires this import to bring in both sheets
+    with no failed text, like the standard fixture.
 
 Usage:
     python scripts/make_ci_fixture.py OUT.pdf [--variant standard|edge-far]
