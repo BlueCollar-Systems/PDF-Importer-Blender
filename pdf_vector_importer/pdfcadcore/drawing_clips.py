@@ -16,6 +16,10 @@ The rule here is per fill:
                                                flattened for curves, and said so)
 * rectangle under a clip the parser does
   not express (text, stroke, image mask)    -> that ONE fill is dropped
+* filled path through rectangular clips     -> the path cut to those rectangles
+                                               (curves flattened only for the cut)
+* filled path through a clip that is not a
+  rectangle, or through an unexpressed clip -> that ONE fill is dropped
 * anything that cannot be proven            -> that ONE fill is dropped
 
 Every fill that did not take the plain path is recorded on the returned list as
@@ -930,6 +934,83 @@ def _resolve_one(row, active, seqno):
     return replacement, _issue(row, seqno, reason, action, not curved and not crossing, detail)
 
 
+def _resolve_path_fill(row, active, seqno):
+    """Cut a non-rectangular fill to the rectangular clips around it.
+
+    A circle or other filled path painted inside a clip used to be kept whole,
+    so ink showed outside the clip. Rectangular clips are cut exactly for line
+    paths and within ``_FLATTEN_TOLERANCE`` for curves. A non-rectangular clip
+    of a non-rectangular fill is not computed; that fill is left out instead of
+    flooding the sheet.
+    """
+    rectangles = []
+    path_clips = []
+    for clip in active:
+        scissor = _rect(clip.get("scissor"))
+        if scissor is None and _finite4(clip.get("scissor")) is not None:
+            return None, _issue(
+                row, seqno, "partial-cover", "dropped-invisible", True,
+                "an active clip is empty; nothing of this filled path shows")
+        if scissor is None or not clip.get("items") or not _items_finite(clip["items"]):
+            return None, _issue(
+                row, seqno, "no-finite-bounds", "dropped-unsupported", False,
+                "an active clip has no finite bounds, no path, or a non-finite point")
+        if _single_rectangle(clip):
+            rectangles.append(scissor)
+        else:
+            path_clips.append(clip)
+    if path_clips:
+        return None, _issue(
+            row, seqno, "path-in-path-clip", "dropped-unsupported", False,
+            "a filled path is painted through a non-rectangular clip; "
+            "that intersection is not computed, so this fill is left out")
+    paint = _rect(row.get("rect"))
+    if paint is None:
+        return None, _issue(
+            row, seqno, "no-finite-bounds", "dropped-unsupported", False,
+            "the filled path has no finite bounds")
+    if not rectangles or all(_contains(box, paint) for box in rectangles):
+        return row, None
+    visible = paint
+    for box in rectangles:
+        visible = _intersection(visible, box)
+        if visible is None:
+            return None, _issue(
+                row, seqno, "partial-cover", "dropped-invisible", True,
+                "the filled path lies wholly outside a rectangular clip")
+    try:
+        contours, curved = _contours(row.get("items") or [])
+    except (TypeError, ValueError, IndexError) as error:
+        return None, _issue(
+            row, seqno, "resolver-error", "dropped-unsupported", False,
+            f"the filled path could not be read: {error}")
+    pieces = [
+        cut for cut in (_clip_contour(list(contour), visible) for contour in contours)
+        if len(cut) >= 3
+    ]
+    if not pieces:
+        return None, _issue(
+            row, seqno, "partial-cover", "dropped-invisible", True,
+            "no part of the filled path lies inside its rectangular clips")
+    sample = _sample_point(row.get("items") or [], row)
+    items = []
+    xs, ys = [], []
+    for cut in pieces:
+        for index, point in enumerate(cut):
+            following = cut[(index + 1) % len(cut)]
+            items.append(("l", _like_point(sample, *point), _like_point(sample, *following)))
+            xs.append(point[0])
+            ys.append(point[1])
+    bounds = _like_rect(row.get("rect"), (min(xs), min(ys), max(xs), max(ys)))
+    even_odd = bool(row.get("even_odd", False)) or len(pieces) > 1
+    replacement = _compound_fill(row, seqno, items, bounds, even_odd, "path-rect-clip")
+    detail = "filled path cut to its rectangular clips"
+    if curved:
+        detail += f"; curves flattened to within {_FLATTEN_TOLERANCE} pt"
+    return replacement, _issue(
+        row, seqno, "partial-cover", "path-rect-clip", not curved, detail)
+
+
 def resolve_covered_clip_fills(drawings, *, rows_from_page=False):
     """Return paint rows, resolving rectangle fills painted through clips.
 
@@ -942,10 +1023,11 @@ def resolve_covered_clip_fills(drawings, *, rows_from_page=False):
     rule must stay off for a second pass; that is the default.
 
     ``drawings`` is the result of ``get_drawings(extended=True)``. Clip/group
-    rows are structural, not paint. Rows other than a clipped rectangle fill keep
-    their geometry; overlapping artwork strokes are marked to prevent later
+    rows are structural, not paint. A clipped rectangle fill and a filled path
+    inside rectangular clips are cut to the visible region. Other paint keeps
+    its geometry. Overlapping artwork strokes are marked to prevent later
     circle fitting. A fill that cannot be resolved is dropped and recorded, never
-    returned as its unclipped rectangle, and never a reason to raise. The caller
+    returned as its unclipped shape, and never a reason to raise. The caller
     owns the returned rows; input dictionaries/items are not changed. Running the
     resolver over its own output is a no-op, because clip rows do not survive it.
     """
@@ -967,7 +1049,7 @@ def resolve_covered_clip_fills(drawings, *, rows_from_page=False):
             groups.append(row)
             continue
         unexpressed = rows_from_page and level > len(active) + len(groups)
-        if not (active or unexpressed) or kind != "f" or not _single_rectangle(row):
+        if not (active or unexpressed) or kind != "f":
             resolved.append(row)
             continue
 
@@ -978,8 +1060,10 @@ def resolve_covered_clip_fills(drawings, *, rows_from_page=False):
                     row, seqno, "unexpressed-clip", "dropped-unsupported", False,
                     "the fill is painted through a clip the parser does not express (a text, "
                     "stroke or image-mask clip); what shows of it is unknown")
-            else:
+            elif _single_rectangle(row):
                 replacement, issue = _resolve_one(row, active, seqno)
+            else:
+                replacement, issue = _resolve_path_fill(row, active, seqno)
         except Exception as error:  # one malformed fill must not cost the page
             replacement = None
             issue = _issue(row, seqno, "resolver-error", "dropped-unsupported", False,

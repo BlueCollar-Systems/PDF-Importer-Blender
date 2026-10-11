@@ -5,7 +5,7 @@ from pdf_vector_importer.visual_style import DARK_PREVIEW_BACKGROUND, preview_co
 
 
 def luminance(color):
-    return sum(c * w for c, w in zip(color, (0.2126, 0.7152, 0.0722)))
+    return sum(c * w for c, w in zip(color, (0.2126, 0.7152, 0.0722), strict=True))
 
 
 @pytest.mark.parametrize("style", ["blueprint", "high_contrast"])
@@ -32,4 +32,4 @@ def test_source_accurate_rgb_is_unchanged(color):
 @pytest.mark.parametrize("style", ["blueprint", "high_contrast"])
 def test_source_grays_retain_order_in_dark_palette(style):
     values = [luminance(preview_color((v, v, v), style)) for v in (0, .25, .5, .75, 1)]
-    assert all(a > b for a, b in zip(values, values[1:]))
+    assert all(a > b for a, b in zip(values[:-1], values[1:], strict=True))

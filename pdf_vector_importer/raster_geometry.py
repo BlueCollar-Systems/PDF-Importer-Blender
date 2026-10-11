@@ -54,3 +54,35 @@ def source_bbox_to_model(item, bounds=None):
         raise ValueError("Raster page placement is not finite")
     return (min(p[0] for p in points), min(p[1] for p in points),
             max(p[0] for p in points), max(p[1] for p in points))
+
+
+def shader_reaches_material_output(nodes, links) -> bool:
+    """True when the Principled shader paints the material output.
+
+    Opaque images link that shader straight to the surface. An image with an
+    alpha channel mixes it with a transparent shader first, because emission
+    ignores the Principled alpha input. Either graph is a real placement.
+    """
+    def kind(node):
+        return str(getattr(node, "type", "") or "")
+
+    shaders = [node for node in nodes if kind(node) == "BSDF_PRINCIPLED"]
+    outputs = [node for node in nodes if kind(node) == "OUTPUT_MATERIAL"]
+    mixes = [node for node in nodes if kind(node) == "MIX_SHADER"]
+    if any(
+        getattr(link, "from_node", None) in shaders
+        and getattr(link, "to_node", None) in outputs
+        for link in links
+    ):
+        return True
+    into_mix = any(
+        getattr(link, "from_node", None) in shaders
+        and getattr(link, "to_node", None) in mixes
+        for link in links
+    )
+    mix_to_output = any(
+        getattr(link, "from_node", None) in mixes
+        and getattr(link, "to_node", None) in outputs
+        for link in links
+    )
+    return bool(into_mix and mix_to_output)

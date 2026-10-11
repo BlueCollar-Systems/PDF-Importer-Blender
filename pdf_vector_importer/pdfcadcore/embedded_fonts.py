@@ -473,6 +473,82 @@ def _install_pdf_unicode_cmap(
         ) from exc
 
 
+def _repair_truncated_hmtx(source_bytes: bytes) -> bytes:
+    """Pad a PDF subset whose ``hmtx`` table dropped the side-bearing tail.
+
+    Some embedded TrueType programs keep the original ``maxp`` glyph count but
+    only store the long horizontal metrics. fontTools then refuses the font, so
+    every letter on the sheet fails and the import is cancelled. The advances
+    for the glyphs the page uses are in that prefix. Missing side bearings are
+    zero, which is what the TrueType spec uses when the tail was never written.
+    A font that already compiles is returned unchanged.
+    """
+    from fontTools.ttLib import TTFont, TTLibError
+
+    font = None
+    try:
+        font = TTFont(BytesIO(source_bytes), lazy=False, recalcTimestamp=False)
+        try:
+            font["hmtx"].compile(font)
+            return source_bytes
+        except (KeyError, TTLibError, ValueError):
+            pass
+        hhea = font["hhea"]
+        maxp = font["maxp"]
+        num_glyphs = int(maxp.numGlyphs)
+        long_count = int(hhea.numberOfHMetrics)
+        order = font.getGlyphOrder()
+        raw = bytes(font.reader["hmtx"])
+    except (AttributeError, KeyError, OSError, TTLibError, TypeError, ValueError, struct.error):
+        return source_bytes
+    finally:
+        if font is not None:
+            font.close()
+    if (
+        long_count <= 0
+        or num_glyphs <= long_count
+        or len(order) != num_glyphs
+        or len(raw) < long_count * 4
+    ):
+        return source_bytes
+    needed_bearings = num_glyphs - long_count
+    present_bearings = max(0, (len(raw) - long_count * 4) // 2)
+    if present_bearings >= needed_bearings:
+        return source_bytes
+    prefix = raw[: long_count * 4]
+    bearing_bytes = raw[long_count * 4 : long_count * 4 + present_bearings * 2]
+    metrics = {}
+    for index in range(long_count):
+        advance, bearing = struct.unpack_from(">Hh", prefix, index * 4)
+        metrics[order[index]] = (int(advance), int(bearing))
+    last_advance = metrics[order[long_count - 1]][0]
+    for index in range(long_count, num_glyphs):
+        bearing_index = index - long_count
+        if bearing_index < present_bearings:
+            bearing = struct.unpack_from(">h", bearing_bytes, bearing_index * 2)[0]
+        else:
+            bearing = 0
+        metrics[order[index]] = (int(last_advance), int(bearing))
+    from fontTools.ttLib import newTable
+
+    font = TTFont(BytesIO(source_bytes), lazy=False, recalcTimestamp=False)
+    try:
+        # Assign a new table. Reading the truncated one raises before a write.
+        table = newTable("hmtx")
+        table.metrics = metrics
+        font["hmtx"] = table
+        output = BytesIO()
+        font.save(output, reorderTables=False)
+        repaired = output.getvalue()
+    except (AttributeError, KeyError, OSError, TTLibError, TypeError, ValueError, struct.error):
+        return source_bytes
+    finally:
+        font.close()
+    if not _fonttools_loadable(repaired):
+        return source_bytes
+    return repaired
+
+
 def _usable_font(
     source_bytes: bytes,
     source_format: str,
@@ -495,7 +571,7 @@ def _usable_font(
             usable_bytes = _cff_to_otf(source_bytes, base_font_name)
         elif source_format in {"ttf", "otf"}:
             usable_format = source_format
-            usable_bytes = source_bytes
+            usable_bytes = _repair_truncated_hmtx(source_bytes)
         else:
             raise ExactFontSourceImpossible(
                 f"unsupported embedded font format: {source_format or '<empty>'}"
@@ -699,7 +775,15 @@ def _page_program_glyph_maps(page, source_text=None):
                 if (char.get("c") == " " and isinstance(flags, int)
                         and not isinstance(flags, bool) and flags & 4):
                     native_synthetic.append(char)
-        if native_synthetic and glyphs:
+        # Filled (16) or stroked (32) word spaces also carry the synthetic bit,
+        # including letters that cross a sheet edge. Those spaces have a real
+        # trace glyph and must stay in the span. Only an unpainted synthetic
+        # space refuses a competing trace glyph.
+        unpainted_synthetic = [
+            char for char in native_synthetic
+            if not (int(char.get("source_stext_flags") or 0) & (16 | 32))
+        ]
+        if unpainted_synthetic and glyphs and len(unpainted_synthetic) == len(chars):
             # Native inferred spacing did not paint. A competing paint at the
             # same identity/origin cannot become its glyph, even when raw and
             # trace census counts happen to match one-to-one.
@@ -857,13 +941,14 @@ class EmbeddedFontCatalog:
         original_failure = self.failure_for_span(name)
         if (self.for_span(name) is None
                 and original_failure.reason == "embedded_font_asset_build_failed"
-                and original_failure.error_type == "ExactFontSourceImpossible"
-                and original_failure.detail == "embedded font stream is empty"
                 and original_failure.proof_category == "source_specific_impossibility"):
-            # A renderer may expose its own substitute for a nonembedded PDF
-            # font. That buffer is not new embedded-source evidence and cannot
-            # erase the original source-specific absence proof (which callers
-            # may use for a separately authenticated exact installed font).
+            # The program was in the PDF and could not be made into one font.
+            # A character-buffer hash then matches nothing, because no asset
+            # was built. Reporting "not in the PDF" hides that proof, so the
+            # text ladder stops and the whole page is cancelled. Keep the
+            # build failure. Callers can still fall back when the absence is
+            # proved, including an empty stream whose renderer substitute is
+            # not embedded-source evidence.
             return None, original_failure
         chars = tuple(characters or ())
         hashes = tuple(str(c.get("source_font_program_sha256", "")) for c in chars)

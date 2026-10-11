@@ -2912,6 +2912,56 @@ class _ImportImageCache:
         self.released = True
 
 
+def _png_has_alpha(image_bytes: bytes) -> bool:
+    """True when a PNG IHDR says the file has an alpha channel.
+
+    Gray+alpha is color type 4 and RGBA is color type 6. Opaque images stay on
+    the three-node shader the paint-order check expects.
+    """
+    if (
+        len(image_bytes) < 26
+        or image_bytes[:8] != b"\x89PNG\r\n\x1a\n"
+        or image_bytes[12:16] != b"IHDR"
+    ):
+        return False
+    return image_bytes[25] in (4, 6)
+
+
+def _assign_source_image_colorspace(image) -> None:
+    """Tag PDF image bytes as sRGB so Blender linearizes them on sample.
+
+    The bytes are display sRGB, same as PDF colors. Tagging them Non-Color
+    stores those numbers as scene-linear. The Standard view transform then
+    gamma-encodes them, so a mid-gray gradient paints washed out next to the
+    PDF. ``sRGB`` is the colorspace name on Blender 3.1 through 5.2.
+    """
+    image.colorspace_settings.name = "sRGB"
+
+
+def _connect_image_shader(nodes, links, tex, bsdf, out, *, has_alpha: bool) -> None:
+    """Show image color, and let soft-mask alpha reveal the page behind it.
+
+    The color is emission so the sheet does not depend on scene lights. Emission
+    does not honor the Principled alpha input, so a transparent pixel would
+    otherwise paint as a solid color. Opaque images keep the direct shader link.
+    Images with an alpha channel mix with a transparent shader by that alpha.
+    """
+    links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
+    if not has_alpha:
+        links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
+        return
+    transparent = nodes.new(type="ShaderNodeBsdfTransparent")
+    mix = nodes.new(type="ShaderNodeMixShader")
+    fac = mix.inputs["Fac"] if "Fac" in mix.inputs else mix.inputs[0]
+    first = mix.inputs[1]
+    second = mix.inputs[2]
+    links.new(tex.outputs["Alpha"], fac)
+    links.new(transparent.outputs["BSDF"], first)
+    links.new(bsdf.outputs["BSDF"], second)
+    shader_out = mix.outputs["Shader"] if "Shader" in mix.outputs else mix.outputs[0]
+    links.new(shader_out, out.inputs["Surface"])
+
+
 def _set_image_plane_metadata(
     obj,
     placement: dict,
@@ -3022,7 +3072,7 @@ def _create_uncached_image_plane(
             raise RuntimeError("packed image digest changed after verification")
         tex.image = image
         tex.extension = "EXTEND"
-        image.colorspace_settings.name = "Non-Color"
+        _assign_source_image_colorspace(image)
         bsdf.inputs["Base Color"].default_value = (0, 0, 0, 1)
         bsdf.inputs["Roughness"].default_value = 1
         from .image_materials import source_image_sockets
@@ -3030,8 +3080,9 @@ def _create_uncached_image_plane(
         specular.default_value = 0
         bsdf.inputs["Emission Strength"].default_value = 1
         links.new(tex.outputs["Color"], emission)
-        links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
-        links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
+        _connect_image_shader(
+            nodes, links, tex, bsdf, out, has_alpha=_png_has_alpha(image_bytes)
+        )
         material.blend_method = "HASHED"
         if mesh.materials:
             mesh.materials[0] = material
@@ -3157,7 +3208,7 @@ def _create_image_plane(
             out = nodes.new(type="ShaderNodeOutputMaterial")
             tex.image = image
             tex.extension = "EXTEND"
-            image.colorspace_settings.name = "Non-Color"
+            _assign_source_image_colorspace(image)
             bsdf.inputs["Base Color"].default_value = (0, 0, 0, 1)
             bsdf.inputs["Roughness"].default_value = 1
             from .image_materials import source_image_sockets
@@ -3165,8 +3216,9 @@ def _create_image_plane(
             specular.default_value = 0
             bsdf.inputs["Emission Strength"].default_value = 1
             links.new(tex.outputs["Color"], emission)
-            links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
-            links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
+            _connect_image_shader(
+                nodes, links, tex, bsdf, out, has_alpha=_png_has_alpha(image_bytes)
+            )
             created.blend_method = "HASHED"
             return created
 

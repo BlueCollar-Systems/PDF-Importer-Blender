@@ -30,6 +30,21 @@ from pdf_vector_importer.pdfcadcore.primitives import NormalizedText, TextCharLa
 from pdf_vector_importer.text_delivery import AttemptOutcome, deliver_item, fallback_ladder
 
 
+def test_retarget_evaluated_materials_replaces_only_evaluated_slots():
+    original = types.SimpleNamespace(name="Ink", is_evaluated=False)
+    evaluated = types.SimpleNamespace(
+        name="Ink", is_evaluated=True, original=original
+    )
+    plain = types.SimpleNamespace(name="Plain", is_evaluated=False)
+    curve = types.SimpleNamespace(materials=[evaluated, plain, None])
+
+    bl_text_builder._retarget_evaluated_materials(curve)
+
+    assert curve.materials[0] is original
+    assert curve.materials[1] is plain
+    assert curve.materials[2] is None
+
+
 def test_font_evidence_preserves_all_identical_program_resource_candidates():
     asset = types.SimpleNamespace(
         source_xref=11,

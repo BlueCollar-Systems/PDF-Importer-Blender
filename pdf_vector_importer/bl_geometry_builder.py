@@ -19,7 +19,7 @@ from typing import Dict, Optional, Tuple
 import bpy
 import bmesh
 
-from .visual_style import preview_color
+from .visual_style import preview_color, scene_linear_color
 from .pdfcadcore.import_bounds import sheet_xy
 from .pdfcadcore.primitives import PageData, Primitive
 
@@ -147,16 +147,19 @@ def _get_or_create_material(
         return cache[key]
 
     r, g, b = _styled_color(color, style)
+    # The material name keeps the display numbers. The shader stores the
+    # scene-linear value so Workbench and EEVEE show the PDF color.
+    linear_r, linear_g, linear_b = scene_linear_color((r, g, b))
     style_key = _normalize_style(style)
     name = f"PDF_{style_key}_{r:.2f}_{g:.2f}_{b:.2f}"
     mat = bpy.data.materials.new(name=name)
-    mat.diffuse_color = (r, g, b, 1.0)
+    mat.diffuse_color = (linear_r, linear_g, linear_b, 1.0)
     mat.use_nodes = True
     nodes = mat.node_tree.nodes
     links = mat.node_tree.links
     nodes.clear()
     emission = nodes.new(type="ShaderNodeEmission")
-    emission.inputs["Color"].default_value = (r, g, b, 1.0)
+    emission.inputs["Color"].default_value = (linear_r, linear_g, linear_b, 1.0)
     emission.inputs["Strength"].default_value = 1.0
     out = nodes.new(type="ShaderNodeOutputMaterial")
     links.new(emission.outputs["Emission"], out.inputs["Surface"])
@@ -983,12 +986,29 @@ def _model3d_should_extrude(
     return True
 
 
+def _near_white_fill(color) -> bool:
+    """True when a fill is paper white. A gray or colored page rect is ink."""
+    if not color:
+        return False
+    try:
+        channels = tuple(float(channel) for channel in tuple(color)[:3])
+    except (TypeError, ValueError):
+        return False
+    return len(channels) == 3 and all(channel >= 0.97 for channel in channels)
+
+
 def _is_background_fill_primitive(prim: Primitive, page_area: float) -> bool:
     """
-    Identify giant page-cover fills that should be skipped in fill-only mode.
-    We intentionally keep smaller fill-only details (e.g., hole markers/icons).
+    Identify giant near-white page-cover fills that should be skipped.
+
+    Those rectangles are the paper. The display aid draws that white sheet.
+    A gray or colored rectangle that covers the page is real paint and must
+    stay, or transparent images composite on white instead of the PDF.
+    Smaller fill-only details (hole markers, icons) are kept either way.
     """
     if prim.type not in ("rect", "closed_loop"):
+        return False
+    if not _near_white_fill(prim.fill_color):
         return False
     return _primitive_area_ratio(prim, page_area) >= _BACKGROUND_FILL_AREA_RATIO
 
@@ -1429,9 +1449,9 @@ def build_page(
             has_stroke = prim.stroke_color is not None
             prim_area = abs(float(prim.area or 0.0))
             area_ratio = (prim_area / page_area) if page_area > 0.0 else 0.0
-            # Giant page-sized fills (often paper background rectangles) can
-            # visually blank the viewport and hide imported vectors.
-            is_giant_page_fill = area_ratio >= 0.92
+            # A near-white page-sized fill is paper. The display aid draws it.
+            # Colored or gray page rectangles are ink and stay under the linework.
+            is_giant_page_fill = area_ratio >= 0.92 and _near_white_fill(prim.fill_color)
             create_face = bool(make_faces and has_fill and len(prim.points) >= 3 and not is_giant_page_fill)
             create_outline = bool(len(prim.points) >= 2 and has_stroke)
             # Keep fills slightly below linework to avoid z-fighting.

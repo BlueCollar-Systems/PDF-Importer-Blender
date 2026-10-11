@@ -117,14 +117,64 @@ def _composite_alpha(color, alpha):
 _SPAN_PAINTED_FLAGS = 16 | 32
 
 
+def _span_paints(span) -> bool:
+    """True when the PDF actually fills or strokes this text span.
+
+    Render mode 3 (the hidden OCR layer on a scanned sheet) is reported with
+    ``char_flags`` lacking both paint bits. Those spans are not ink. Drawing
+    them as black letters does not match the page, and a font that cannot be
+    built for that layer used to cancel the whole import, including the scan.
+    """
+    if not hasattr(span, "get"):
+        return True
+    flags = span.get("char_flags")
+    if flags is None:
+        return True
+    try:
+        return int(flags) & _SPAN_PAINTED_FLAGS != 0
+    except (TypeError, ValueError):
+        return True
+
+
+def _whitespace_span_has_no_area(span, chars) -> bool:
+    """A whitespace-only span with no paintable extent is not a letter.
+
+    Type 3 word-spacing can emit a space whose box has no width. That span
+    cannot be placed as text or as a raster crop, and the failure used to
+    cancel the page even though the glyphs were already vectors.
+    """
+    pieces = [str(char.get("c", "") or "") for char in chars] if chars else []
+    text = "".join(pieces) if pieces else str(span.get("text", "") or "")
+    if not text.isspace():
+        return False
+    boxes = []
+    bbox = span.get("bbox") if hasattr(span, "get") else None
+    if bbox is not None:
+        boxes.append(bbox)
+    for char in chars or ():
+        char_bbox = char.get("bbox") if hasattr(char, "get") else None
+        if char_bbox is not None:
+            boxes.append(char_bbox)
+    if not boxes:
+        return False
+    for box in boxes:
+        try:
+            x0, y0, x1, y1 = (float(value) for value in box)
+        except (TypeError, ValueError):
+            return False
+        if abs(x1 - x0) > 1e-3 and abs(y1 - y0) > 1e-3:
+            return False
+    return True
+
+
 def _span_alpha(span) -> Optional[float]:
     """PyMuPDF text spans carry ``alpha`` as an int 0-255 (drawings use 0.0-1.0).
 
     Invisible text (render mode 3, e.g. the OCR layer of a scanned sheet) is reported
     by PyMuPDF with ``alpha`` 0 and ``char_flags`` lacking both paint bits -- that is
     MuPDF's invisible-text encoding, not a PDF constant alpha, so it must not be
-    composited (it would turn the hidden OCR text white). Its colour is left as-is,
-    exactly as before.
+    composited (it would turn the hidden OCR text white). Its colour is left as-is
+    when a caller still inspects the span. Extraction drops these spans entirely.
     """
     if not hasattr(span, "get"):
         return None
@@ -739,6 +789,26 @@ def _span_text_and_chars(span: dict):
     return str(span.get("text", "") or ""), ()
 
 
+def _layout_can_place_exactly(layouts) -> bool:
+    """Per-character placement needs a glyph id for every visible character.
+
+    Pattern-filled text can appear in the text dictionary without a texttrace
+    glyph id. Forcing exact placement then fails the whole import. Those spans
+    stay one editable text object instead.
+    """
+    if not layouts:
+        return False
+    saw_glyph = False
+    for char in layouts:
+        if char.glyph_id is not None:
+            saw_glyph = True
+            continue
+        if str(char.text).isspace():
+            continue
+        return False
+    return saw_glyph
+
+
 def _character_layout(line, span, font, to_model, glyph_queues):
     layouts = []
     for char in tuple(span.get("chars", ()) or ()):
@@ -1012,6 +1082,10 @@ def _extract_text(
                 text, raw_chars = _span_text_and_chars(span)
                 if text == "":
                     continue
+                if not _span_paints(span):
+                    continue
+                if _whitespace_span_has_no_area(span, raw_chars):
+                    continue
 
                 x, y = _span_baseline_pdf(span, line)
                 px, py = to_model(x, y)
@@ -1081,7 +1155,7 @@ def _extract_text(
                     glyph_height=glyph_height,
                     baseline_descent=baseline_descent,
                     source_char_layout=char_layout,
-                    requires_individual_positioning=bool(char_layout),
+                    requires_individual_positioning=_layout_can_place_exactly(char_layout),
                     font_asset=font_asset,
                     font_failure=font_failure,
                 ))

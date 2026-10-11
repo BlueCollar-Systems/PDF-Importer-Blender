@@ -145,6 +145,9 @@ def _clip_float32_shift(points, bounds):
 
 def verify_clipped_ink(obj, bpy, bounds, expected_area, original_z):
     points, triangles = _evaluated_ink(obj, bpy)
+    # World positions are float32. A sheet stacked a few meters away, or a clip
+    # edge that moves a handful of float32 steps, must not look like lost ink.
+    # A millimetre leak, or half of a clipped strip, still fails.
     shift = _clip_float32_shift(points, bounds)
     tolerance = max(1e-8, max(abs(value) for value in bounds) * 1e-6, shift)
     if any(not (bounds[0] - tolerance <= p[0] <= bounds[2] + tolerance and

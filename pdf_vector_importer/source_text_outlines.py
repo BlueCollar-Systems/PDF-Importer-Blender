@@ -527,7 +527,11 @@ def qualify_page(page, items, *, page_number, width_mm, height_mm, flip_y=True, 
     """Produce complete canonical ownership using actual renderer character IDs."""
     if not re.fullmatch('[0-9a-f]{64}', pdf_sha256):
         raise OutlineUnavailable('source PDF hash is absent')
-    svg = page.get_svg_image(text_as_path=True)
+    from .pdf_paint_proof import optional_page_svg
+
+    svg = optional_page_svg(page, text_as_path=True)
+    if svg is None:
+        raise OutlineUnavailable('source SVG export is unavailable')
     viewbox, placements = svg_placements(svg)
     x0, y0, w, h = viewbox
     sx, sy = float(width_mm)/w, float(height_mm)/h

@@ -77,3 +77,14 @@ def test_transparent_whitespace_cannot_excise_final_annotation_paint():
     assert not _has_final_page_pixels({**visible, "pdf_raster_expected_transparent": True})
     assert not _has_final_page_pixels({**visible, "pdf_raster_final_page_composite": False})
     assert not _has_final_page_pixels({})
+
+
+def test_svg_export_failure_does_not_propagate():
+    from pdf_vector_importer.pdf_paint_proof import optional_page_svg
+
+    class Broken:
+        def get_svg_image(self, *, text_as_path):
+            raise RuntimeError("pixmap may not have alpha to save as JPEG")
+
+    assert optional_page_svg(Broken(), text_as_path=False) is None
+    assert optional_page_svg(object(), text_as_path=True) is None

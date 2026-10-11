@@ -806,6 +806,59 @@ def test_raw_text_extraction_preserves_each_character_glyph_origin_and_affine_qu
     assert item.source_char_layout[0].target_quad == item.source_char_layout[0].source_quad_pdf
 
 
+def test_text_without_trace_glyph_ids_stays_one_editable_object():
+    """Pattern-filled text can lack texttrace glyph ids. Do not fail the import."""
+
+    class RawTextPage:
+        parent = None
+
+        @staticmethod
+        def get_text(kind: str):
+            assert kind == "rawdict"
+            return {
+                "blocks": [{
+                    "type": 0,
+                    "lines": [{
+                        "dir": (1.0, 0.0),
+                        "bbox": (10.0, 10.0, 24.0, 24.0),
+                        "spans": [{
+                            "font": "Arial",
+                            "size": 10.0,
+                            "ascender": 0.8,
+                            "descender": -0.2,
+                            "bbox": (10.0, 10.0, 24.0, 24.0),
+                            "chars": [
+                                {
+                                    "c": "2",
+                                    "origin": (10.0, 20.0),
+                                    "bbox": (10.0, 10.0, 16.0, 22.0),
+                                },
+                            ],
+                        }],
+                    }],
+                }],
+            }
+
+        @staticmethod
+        def get_fonts(*, full=True):
+            return []
+
+        @staticmethod
+        def get_texttrace():
+            return []
+
+    items = _extract_text(
+        RawTextPage(),
+        page_h=100.0,
+        page_num=1,
+        flip_y=True,
+        scale=1.0,
+    )
+    assert len(items) == 1
+    assert items[0].text == "2"
+    assert items[0].requires_individual_positioning is False
+
+
 def test_crop_rotate_and_userunit_use_page_rect_exactly(tmp_path):
     pdf_path = tmp_path / "crop-rotate-userunit.pdf"
     doc = fitz.open()
@@ -993,7 +1046,7 @@ def test_malformed_name_table_struct_error_does_not_escape_font_readers():
     malformed = _truncated_name_table_fixture()
 
     with pytest.raises(struct.error):
-        TTFont(BytesIO(malformed), lazy=False, recalcTimestamp=False)["name"].names
+        _ = TTFont(BytesIO(malformed), lazy=False, recalcTimestamp=False)["name"].names
 
     assert embedded_fonts._font_program_name_aliases(malformed, "ttf") == set()
     assert embedded_fonts._fonttools_loadable(malformed) is False

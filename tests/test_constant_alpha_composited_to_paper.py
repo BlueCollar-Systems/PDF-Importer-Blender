@@ -46,7 +46,7 @@ def alpha_pdf():
 
 
 def _close(a, b, tol=1e-3):
-    return all(abs(x - y) <= tol for x, y in zip(a, b))
+    return all(abs(x - y) <= tol for x, y in zip(a, b, strict=True))
 
 
 def test_fill_alpha_is_composited_against_the_white_page(alpha_pdf):
@@ -103,10 +103,10 @@ def test_span_alpha_accepts_pymupdf_0_255_ints():
     assert PE._span_alpha({"alpha": 255}) == 1.0
 
 
-def test_invisible_text_render_mode_3_is_not_composited(tmp_path):
-    # PyMuPDF reports render-mode-3 (invisible / OCR layer) text with alpha 0 and no paint
-    # bits in char_flags. That is not a PDF constant alpha: leave the colour untouched
-    # (never paint the hidden OCR text white).
+def test_invisible_text_render_mode_3_is_not_imported(tmp_path):
+    # Render mode 3 is the hidden OCR layer on a scan. It is not ink. Leaving
+    # it in the import paints black letters the PDF does not show, and a font
+    # that cannot be built for that layer cancels the scanned page.
     doc = pymupdf.open()
     page = doc.new_page(width=200, height=100)
     page.insert_text(pymupdf.Point(10, 50), "OCR HIDDEN", fontsize=12, color=(0, 0, 0), render_mode=3)
@@ -115,9 +115,26 @@ def test_invisible_text_render_mode_3_is_not_composited(tmp_path):
         data = _extract(doc)
     finally:
         doc.close()
-    by_text = {t.text.strip(): t for t in data.text_items}
-    assert _close(by_text["OCR HIDDEN"].color, (0.0, 0.0, 0.0), tol=0.01), by_text["OCR HIDDEN"].color
-    assert _close(by_text["VISIBLE"].color, (0.0, 0.0, 0.0), tol=0.01)
+    texts = [t.text.strip() for t in data.text_items]
+    assert "OCR HIDDEN" not in texts
+    assert "VISIBLE" in texts
+
+
+def test_zero_area_whitespace_span_is_not_ink():
+    # A Type 3 word-spacing space can be a zero-width box. It is not a letter,
+    # and trying to raster it cancels the page.
+    assert PE._whitespace_span_has_no_area(
+        {"bbox": (20, 10, 20, 20), "text": " "},
+        ({"c": " ", "bbox": (20, 10, 20, 20)},),
+    )
+    assert not PE._whitespace_span_has_no_area(
+        {"bbox": (20, 10, 26, 20), "text": " "},
+        ({"c": " ", "bbox": (20, 10, 26, 20)},),
+    )
+    assert not PE._whitespace_span_has_no_area(
+        {"bbox": (10, 10, 40, 20), "text": "A"},
+        ({"c": "A", "bbox": (10, 10, 20, 20)},),
+    )
 
 
 def test_span_alpha_ignores_unpainted_render_modes():
