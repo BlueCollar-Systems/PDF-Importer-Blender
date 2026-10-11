@@ -1,5 +1,9 @@
 # Preserved draft improvements and current import controls
 
+Final closure: [r8 native and v1.0.108 release acceptance](2026-10-11-r8-native-and-release-acceptance.md)
+supersedes the pending r7/r8 and publication statements below. This record
+preserves the earlier source tests, failures and partial native runs.
+
 Draft #60 was closed before its six unique commits reached main. This merge
 preserves their work against source `92286a1` while retaining the newer modal
 pipeline, item-level failure accounting, packed assets and source fidelity gates.
