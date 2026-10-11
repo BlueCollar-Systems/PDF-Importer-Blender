@@ -3344,16 +3344,26 @@ def _parse_pages(page_str: str, total_pages: int) -> List[int]:
         part = part.strip()
         m = re.match(r"^(\d+)\s*-\s*(\d+)$", part)
         if m:
-            lo = max(1, int(m.group(1)))
-            hi = min(total_pages, int(m.group(2)))
+            lo, hi = sorted((int(m.group(1)), int(m.group(2))))
+            if lo < 1 or hi > total_pages:
+                raise ValueError(
+                    f"Page range out of range: {part}. This PDF has {total_pages} page(s)."
+                )
             for p in range(lo, hi + 1):
                 pages.add(p - 1)
         elif part.isdigit():
             idx = int(part) - 1
-            if 0 <= idx < total_pages:
-                pages.add(idx)
+            if not 0 <= idx < total_pages:
+                raise ValueError(
+                    f"Page out of range: {part}. This PDF has {total_pages} page(s)."
+                )
+            pages.add(idx)
+        else:
+            raise ValueError(
+                f"Invalid page entry: {part or '<empty>'}. Use all, 1, or 1,3-5."
+            )
 
-    return sorted(pages) if pages else list(range(total_pages))
+    return sorted(pages)
 
 
 def _normalize_page_arrangement(raw: str | None) -> str:
@@ -3788,8 +3798,34 @@ def import_pdf(
     context=None,
     cancel_callback: Optional[Callable[[], bool]] = None,
 ) -> Dict[str, int]:
+    """Blocking entry point retained for scripts and headless imports."""
+    steps = iter_import_pdf(filepath, config, progress_callback, context, cancel_callback)
+    try:
+        while True:
+            try:
+                next(steps)
+            except StopIteration as completed:
+                return completed.value
+    finally:
+        steps.close()
+
+
+def iter_import_pdf(
+    filepath: str,
+    config: Optional[dict] = None,
+    progress_callback: Optional[Callable[[float, str], None]] = None,
+    context=None,
+    cancel_callback: Optional[Callable[[], bool]] = None,
+):
     """
-    Import a PDF file into Blender. Main entry point.
+    Import a PDF on the calling thread, yielding between delivery phases.
+
+    A modal operator advances this generator on main-thread timer events so
+    Blender can process Escape and the Cancel command between phases. Headless
+    callers use import_pdf, which consumes the same pipeline without waiting.
+    The terminal StopIteration value is the stats dict. Cancellation must be
+    requested through the callback and then drained so existing page rollback
+    and checkpoint verification run; closing a paused generator is not a stop.
 
     Args:
         filepath: Absolute path to the PDF file.
@@ -3938,6 +3974,8 @@ def import_pdf(
                 "curves": 0, "meshes": 0, "circles": 0, "arcs": 0, "images": 0,
                 "performance_phases": phase_timings_ms,
             }
+
+        yield {"phase": "opened", "pages": len(page_indices)}
 
         # write_resume_checkpoint is intentionally absent: both call sites now go
         # through _write_resume_checkpoint_guarded, which resolves the writer
@@ -4432,6 +4470,7 @@ def import_pdf(
                 except (ImportError, RuntimeError, TypeError, ValueError, AttributeError):
                     page_builder_config["model3d_intent_feasible"] = False
                 _progress(_page_progress(i, 0.72), f"Building geometry for page {page_num}...")
+                yield {"phase": "geometry", "page": page_num}
                 t_phase = time.perf_counter()
                 def _geom_progress(frac, _i=i, _pn=page_num):
                     frac = max(0.0, min(1.0, float(frac)))
@@ -4492,6 +4531,7 @@ def import_pdf(
             text_count = 0
             if import_cfg.import_text and import_cfg.text_mode != "none":
                 _progress(_page_progress(i, 0.82), f"Building text for page {page_num}...")
+                yield {"phase": "text", "page": page_num}
                 t_phase = time.perf_counter()
                 def _text_progress(frac, _i=i, _pn=page_num):
                     frac = max(0.0, min(1.0, float(frac)))
@@ -4576,6 +4616,11 @@ def import_pdf(
             )
             if not import_cfg.ignore_images:
                 _progress(_page_progress(i, 0.92), f"Building images for page {page_num}...")
+                yield {"phase": "images", "page": page_num}
+                if not _progress(_page_progress(i, 0.92), f"Building images for page {page_num}..."):
+                    cancelled_page = page_num
+                    _discard_page_collection(page_col)
+                    break
                 t_phase = time.perf_counter()
                 placements = []
                 embedded_image_failed = False
@@ -4822,6 +4867,14 @@ def import_pdf(
                 f"Finished page {page_num}/{len(page_indices)} "
                 f"({total_stats['primitives']} primitives, {total_stats['text_items']} text)",
             )
+            yield {"phase": "page_complete", "page": page_num}
+            # Check before the page iterator extracts another potentially large
+            # page. Completed-page checkpoints are already durable at this point.
+            if not _progress(_page_progress(i, 1.0), f"Finished page {page_num}"):
+                unfinished = [number for number in requested_page_numbers if number not in completed_pages]
+                if unfinished:
+                    cancelled_page = unfinished[0]
+                    break
 
         if stream_cancelled and cancelled_page is None:
             unfinished = [page for page in requested_page_numbers if page not in completed_pages]
@@ -4829,7 +4882,12 @@ def import_pdf(
 
         if cancelled_page is not None:
             total_stats["cancelled"] = True
-            resume_state = _current_resume_state()
+            # The active page was discarded, but its source counts and paint
+            # telemetry may already be in total_stats. Resume only verified
+            # completed-page evidence; otherwise its text spans are counted a
+            # second time and an exact resumed delivery falsely fails its gate.
+            resume_state = copy.deepcopy(last_completed_resume_state)
+            resume_state["aggregate_stats"]["cancelled"] = True
             total_stats["resume"] = resume_state
             total_stats["resume_checkpoint_path"] = checkpoint_path
             _write_resume_checkpoint_guarded(checkpoint_path, resume_state, total_stats)

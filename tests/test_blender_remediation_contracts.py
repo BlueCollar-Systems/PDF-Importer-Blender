@@ -355,25 +355,20 @@ def test_engine_propagates_cancel_to_geometry_and_writes_resume_checkpoint(
         def remove(self, value):
             self.items.remove(value)
 
-    class Page:
-        rect = types.SimpleNamespace(width=72.0, height=72.0)
-
-        def get_drawings(self):
-            return []
-
-        def get_text(self, _kind):
-            return []
-
-        mediabox = types.SimpleNamespace(width=72.0, height=72.0)
-
     class Document:
         page_count = 1
         is_closed = False
 
+        def __init__(self):
+            import pymupdf
+            self.source = pymupdf.open()
+            self.source.new_page(width=72, height=72)
+
         def load_page(self, _index):
-            return Page()
+            return self.source.load_page(_index)
 
         def close(self):
+            self.source.close()
             self.is_closed = True
 
     fake_bpy = types.SimpleNamespace(
@@ -394,9 +389,10 @@ def test_engine_propagates_cancel_to_geometry_and_writes_resume_checkpoint(
     monkeypatch.setattr(engine, "ensure_lib_path", lambda: None)
     monkeypatch.setattr(fitz_loader, "import_fitz", lambda **_kwargs: object())
     monkeypatch.setattr(fitz_loader, "safe_open", lambda _path: Document())
+    from pdf_vector_importer.pdfcadcore.primitives import Primitive
     page_data = types.SimpleNamespace(
-        primitives=[types.SimpleNamespace()],
-        text_items=[],
+        primitives=[Primitive(id=1, type="line", points=[(1, 1), (10, 1)])],
+        text_items=[types.SimpleNamespace(text="A")],
         width=25.4,
         height=25.4,
         resolved_scale=None,
@@ -428,12 +424,15 @@ def test_engine_propagates_cancel_to_geometry_and_writes_resume_checkpoint(
             "auto_hide_default_cube": False,
             "resume_checkpoint_path": str(checkpoint),
         },
-        cancel_callback=lambda: True,
+        progress_callback=lambda _percent, message: not message.startswith("Building geometry"),
     )
 
     assert stats["cancelled"] is True
     assert stats["pages_imported"] == 0
     assert stats["resume"]["remaining_pages"] == [1]
+    assert stats["text_source_spans"] == 1  # The cancelled attempt remains reported.
+    assert stats["resume"]["aggregate_stats"]["text_source_spans"] == 0
+    assert stats["resume"]["aggregate_stats"]["text_glyph_estimate"] == 0
     assert checkpoint.is_file()
 
 

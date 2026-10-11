@@ -7,6 +7,15 @@ Only actual evaluated ink crossing a page edge receives the modifier.
 from __future__ import annotations
 
 import math
+import struct
+
+# The page clip stays a live Geometry Nodes intersection so text remains editable.
+# After sheets are stacked, Blender re-evaluates that boolean in float32. Cancelling
+# the shared move is not exact: the clip edge shifts by about ten ULPs. On a
+# 0.5–0.8 mm strip at |Y|≈2 m that was a 4.9e-3 area change, past the 2e-4 ink
+# check, so sheet 7 was rolled back and every later sheet was never imported.
+# Sixteen steps covers that measurement. Half of the same strip still fails.
+_FLOAT32_CLIP_EDGE_STEPS = 16
 
 
 def polygon_area(points):
@@ -110,15 +119,46 @@ def _page_prism(bpy, collection, bounds, z_bounds):
     return guide
 
 
+def _float32_ulp(magnitude):
+    """Spacing of the next float32 value at this size, in the same units."""
+    magnitude = abs(float(magnitude))
+    if not math.isfinite(magnitude):
+        return math.inf
+    magnitude = min(magnitude, 3.4028232635611926e+38)
+    encoded = struct.pack('<f', magnitude)
+    current = struct.unpack('<f', encoded)[0]
+    bits = struct.unpack('<I', encoded)[0]
+    if (bits & 0x7F800000) == 0x7F800000:
+        return math.inf
+    step = struct.unpack('<f', struct.pack('<I', bits + 1))[0]
+    return max(step - current, math.ldexp(1.0, -149))
+
+
+def _clip_float32_shift(points, bounds):
+    coords = [abs(float(value)) for value in bounds]
+    for point in points:
+        coords.append(abs(float(point[0])))
+        coords.append(abs(float(point[1])))
+    magnitude = max(coords) if coords else 0.0
+    return _FLOAT32_CLIP_EDGE_STEPS * _float32_ulp(magnitude)
+
+
 def verify_clipped_ink(obj, bpy, bounds, expected_area, original_z):
     points, triangles = _evaluated_ink(obj, bpy)
-    tolerance = max(1e-8, max(abs(value) for value in bounds) * 1e-6)
+    shift = _clip_float32_shift(points, bounds)
+    tolerance = max(1e-8, max(abs(value) for value in bounds) * 1e-6, shift)
     if any(not (bounds[0] - tolerance <= p[0] <= bounds[2] + tolerance and
                 bounds[1] - tolerance <= p[1] <= bounds[3] + tolerance) for p in points):
         raise ValueError('Native text viewport retained out-of-page ink')
     area = sum(polygon_area([tuple(point[:2]) for point in triangle])
                for triangle in triangles)
-    if abs(area - expected_area) > max(1e-12, expected_area * 2e-4):
+    span = 0.0
+    if points:
+        xs = [float(point[0]) for point in points]
+        ys = [float(point[1]) for point in points]
+        span = max(max(xs) - min(xs), max(ys) - min(ys), 0.0)
+    area_budget = max(1e-12, abs(float(expected_area)) * 2e-4, shift * max(span, shift))
+    if abs(area - expected_area) > area_budget:
         raise ValueError('Native text viewport changed the visible source ink area')
     if points and expected_area > 1e-12:
         depth = max(p[2] for p in points) - min(p[2] for p in points)

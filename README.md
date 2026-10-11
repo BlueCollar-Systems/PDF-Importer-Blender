@@ -78,6 +78,9 @@ On Blender 4.1 and newer you can also drag a PDF from Windows Explorer onto the
 **Import PDF Vector** imports it. One PDF per drop.
 
 Geometry is grouped into collections by page and (optionally) by source layer or color.
+Page selections such as `1,3-5` import each selected page once. Reversed ranges
+are accepted; invalid entries and pages outside the PDF are rejected before
+scene creation, so a typo cannot unexpectedly import the whole document.
 Source Accurate is the initial visual style and preserves PDF colors against a
 separately hideable white sheet. Blueprint and High Contrast are optional previews;
 any previously saved default visual style is respected.
@@ -85,8 +88,11 @@ any previously saved default visual style is respected.
 Long imports publish phase/page/object progress in Blender's status area and in
 `import_report.json`. The report includes a representation-aware complexity
 estimate (`work_units` and `tier`) so Geometry, Glyphs, and 3D Text requests are
-not presented as equivalent to flat Text. **Cancel Active PDF Import** requests
-cooperative cancellation at the next object heartbeat. The incomplete page is
+not presented as equivalent to flat Text. Interactive imports use Blender's
+main-thread modal timers, allowing **Esc** and **Cancel Active PDF Import**
+between geometry, text, image, and page phases. The current phase finishes
+before a queued input is processed; the next object heartbeat then applies
+cooperative cancellation. The incomplete page is
 rolled back, completed pages remain, and an atomic source/config-bound checkpoint
 records exactly which pages remain. Enable **Resume Interrupted Import** on the
 same PDF and settings to continue in the existing root collection without

@@ -24,6 +24,7 @@ from bpy_extras.io_utils import ImportHelper
 SHAPE_EXTRUSION_UI_ENABLED = False
 _IMPORT_ACTIVE = False
 _IMPORT_CANCEL_REQUESTED = False
+_ACTIVE_IMPORT_OPERATOR = None
 
 
 def _begin_import_session():
@@ -43,9 +44,15 @@ def _cancel_requested() -> bool:
 
 
 def _end_import_session():
-    global _IMPORT_ACTIVE, _IMPORT_CANCEL_REQUESTED
+    global _IMPORT_ACTIVE, _IMPORT_CANCEL_REQUESTED, _ACTIVE_IMPORT_OPERATOR
     _IMPORT_ACTIVE = False
     _IMPORT_CANCEL_REQUESTED = False
+    _ACTIVE_IMPORT_OPERATOR = None
+
+
+def _interactive_modal_available(context):
+    return (not bool(getattr(getattr(bpy, "app", None), "background", False))
+            and getattr(context, "window", None) is not None)
 
 
 # ── Mode enum items (BCS-ARCH-001) ───────────────────────────────────
@@ -176,6 +183,10 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
 
     filename_ext = ".pdf"
     filter_glob: StringProperty(default="*.pdf", options={"HIDDEN"})  # type: ignore[assignment]
+
+    @classmethod
+    def poll(cls, _context):
+        return not _IMPORT_ACTIVE
 
     # ── Properties ───────────────────────────────────────────────────
     show_advanced: BoolProperty(  # type: ignore[assignment]
@@ -344,7 +355,12 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
         return {"RUNNING_MODAL"}
 
     def execute(self, context):
+        global _ACTIVE_IMPORT_OPERATOR
         from . import bl_import_engine
+
+        if _IMPORT_ACTIVE:
+            self.report({"WARNING"}, "A PDF import is already active; cancel it before starting another.")
+            return {"CANCELLED"}
 
         # Build config dict from operator properties.
         # BCS-ARCH-001 Rule 5: detect_arcs / make_faces / map_dashes /
@@ -385,16 +401,31 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
                 pct_i = int(max(0, min(100, round(float(pct) * 100.0))))
             except Exception:
                 pct_i = 0
-            _set_status(f"PDF Import {pct_i}% - {message}")
-            try:
-                bpy.ops.wm.redraw_timer(type="DRAW_WIN_SWAP", iterations=1)
-            except Exception:
-                pass
+            tip = " - Esc to cancel" if getattr(self, "_modal_import", False) else ""
+            _set_status(f"PDF Import {pct_i}% - {message}{tip}")
+            if not getattr(self, "_modal_import", False):
+                try:
+                    bpy.ops.wm.redraw_timer(type="DRAW_WIN_SWAP", iterations=1)
+                except Exception:
+                    pass
             return not _cancel_requested()
 
+        self._modal_import = _interactive_modal_available(context)
+        self._steps = None
+        self._timer = None
+        self._set_status = _set_status
         _begin_import_session()
+        _ACTIVE_IMPORT_OPERATOR = self
         try:
-            _set_status("PDF Import 0% - Starting import...")
+            _set_status("PDF Import 0% - Starting import... Press Esc to cancel.")
+            if self._modal_import:
+                self._steps = bl_import_engine.iter_import_pdf(
+                    self.filepath, config=config, progress_callback=_on_progress,
+                    context=context, cancel_callback=_cancel_requested,
+                )
+                self._timer = context.window_manager.event_timer_add(0.02, window=context.window)
+                context.window_manager.modal_handler_add(self)
+                return {"RUNNING_MODAL"}
             stats = bl_import_engine.import_pdf(
                 self.filepath,
                 config=config,
@@ -421,18 +452,68 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
             self.report({"WARNING"}, str(exc))
             return {"CANCELLED"}
         except Exception as exc:
-            from .pdfcadcore.fitz_loader import PdfOpenError
+            return self._import_failed(context, exc)
 
-            _set_status(None)
-            if isinstance(exc, PdfOpenError):
-                self.report({"ERROR"}, str(exc))
-            else:
-                self.report({"ERROR"}, f"PDF import failed: {exc}")
+        self._release_import(context)
+        return self._report_result(context, stats)
+
+    def modal(self, context, event):
+        if event.type == "ESC":
+            _request_cancel()
+            self._set_status("PDF cancellation requested; finishing the active safe boundary...")
+            return {"RUNNING_MODAL"}
+        if event.type != "TIMER" or getattr(event, "timer", self._timer) != self._timer:
+            return {"PASS_THROUGH"}
+        try:
+            next(self._steps)
+        except StopIteration as completed:
+            self._release_import(context)
+            return self._report_result(context, completed.value)
+        except Exception as exc:
+            return self._import_failed(context, exc)
+        return {"RUNNING_MODAL"}
+
+    def cancel(self, context):
+        """Host-forced modal cancellation must still drain verified rollback."""
+        _request_cancel()
+        try:
+            if self._steps is not None:
+                while True:
+                    try:
+                        next(self._steps)
+                    except StopIteration:
+                        break
+        except Exception as exc:
+            self.report({"ERROR"}, f"PDF cancellation cleanup failed: {exc}")
+        finally:
+            self._release_import(context)
+
+    def _release_import(self, context):
+        try:
+            if self._timer is not None:
+                try:
+                    context.window_manager.event_timer_remove(self._timer)
+                except (AttributeError, ReferenceError, RuntimeError, TypeError):
+                    pass  # A closing host window may have released its timer.
+                self._timer = None
+            if self._steps is not None:
+                self._steps.close()
+        finally:
+            self._steps = None
+            self._set_status(None)
             _end_import_session()
-            return {"CANCELLED"}
 
-        _end_import_session()
-        _set_status(None)
+    def _import_failed(self, context, exc):
+        from .pdfcadcore.fitz_loader import PdfOpenError
+
+        self._release_import(context)
+        if isinstance(exc, PdfOpenError):
+            self.report({"ERROR"}, str(exc))
+        else:
+            self.report({"ERROR"}, f"PDF import failed: {exc}")
+        return {"CANCELLED"}
+
+    def _report_result(self, context, stats):
 
         if bool(stats.get("cancelled")):
             resume = dict(stats.get("resume") or {})
