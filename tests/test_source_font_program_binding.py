@@ -434,35 +434,26 @@ def test_partial_trace_census_never_borrows_another_same_name_program_glyph():
                 "source_font_binding_verified": True,
                 "source_font_character_codepoint": ord(text)}
 
-    paired = char("A", 10, "a" * 64)
+    unresolved = char("A", 10, "a" * 64)
     proven = char("B", 20, "a" * 64)
     other = char("A", 0, "b" * 64)
-    span = {"font": "Same", "chars": [paired, proven, other]}
+    span = {"font": "Same", "chars": [unresolved, proven, other]}
     raw = {"blocks": [{"type": 0, "lines": [{"spans": [span]}]}]}
-    # Two identical passes of glyph 3 are one occurrence. Glyph 8 belongs to
-    # the other program and must not be borrowed into this one.
+    # Glyphs 3 and 7 at the same origin disagree, so this letter stays
+    # unbound. Glyph 8 belongs to the other program and must not be borrowed.
     trace = {"font": "Same", "chars": [(65, 8, (0, 0)), (65, 3, (10, 0)),
                                              (65, 7, (10, 0)), (66, 4, (20, 0))]}
     page = SimpleNamespace(get_texttrace=lambda: [trace])
     maps, ambiguous = _page_program_glyph_maps(page, raw)
-    assert maps == {"a" * 64: {65: 3, 66: 4}, "b" * 64: {65: 8}}
+    assert maps == {"a" * 64: {66: 4}, "b" * 64: {65: 8}}
     assert not ambiguous
-    assert paired["source_font_binding_verified"] is True
-    assert paired["source_trace_glyph_id"] == 3
+    assert unresolved["source_font_binding_verified"] is False
     layouts = _character_layout({}, span, "Same", lambda x, y: (x, y), _trace_glyph_queues(page))
-    assert layouts[0].glyph_id == 3 and layouts[0].source_font_binding_verified
+    assert layouts[0].glyph_id is None
+    assert not layouts[0].source_font_binding_verified
     assert layouts[1].glyph_id == 4 and layouts[2].glyph_id == 8
-
-    mismatched = char("A", 30, "a" * 64)
-    span2 = {"font": "Same", "chars": [mismatched]}
-    raw2 = {"blocks": [{"type": 0, "lines": [{"spans": [span2]}]}]}
-    trace2 = {"font": "Same", "chars": [(65, 3, (30, 0)), (65, 9, (30, 0))]}
-    page2 = SimpleNamespace(get_texttrace=lambda: [trace2])
-    maps2, ambiguous2 = _page_program_glyph_maps(page2, raw2)
-    assert maps2 == {} and not ambiguous2
-    assert mismatched["source_font_binding_verified"] is False
     catalog = EmbeddedFontCatalog(1, {}, {})
-    asset, failure = catalog.resolve_span("Same", [mismatched])
+    asset, failure = catalog.resolve_span("Same", [unresolved])
     assert asset is None and failure.reason == "incomplete_source_font_character_binding"
 
 
