@@ -9,11 +9,16 @@ This module gives such a font an installed face only when the PDF itself
 proves the match, once per font per page:
 
 - the font dictionary is a simple TrueType or Type1 font,
-- its encoding is WinAnsi (or absent) with no ``/Differences``,
-- exactly one installed face carries the declared name and style,
+- its encoding is WinAnsi (or absent) with no ``/Differences`` and it has no
+  ``/ToUnicode`` map (a ToUnicode map can make the extracted letters differ
+  from the drawn character codes, and only the codes say which glyph is drawn),
+- exactly one installed font file carries the declared name and style,
 - every declared width the face can be checked against is within 1/1000 em of
-  that face's own advance, and
-- the face has every character the page draws with that font.
+  that face's own advance,
+- the face has every character the page draws with that font, and
+- every letter of the item is the letter the page actually draws at that
+  position (MuPDF's page trace), so marked-content ``/ActualText`` that
+  replaces the drawn letters in the extracted text keeps today's route.
 
 Any failed check changes nothing: the item keeps today's route. A proven item
 is handed to the builder as a copy carrying the installed face, while the
@@ -50,6 +55,10 @@ _NAME_ESCAPE = re.compile(r"#([0-9A-Fa-f]{2})")
 _FACE_CACHE: Dict[Tuple[str, int, int], "_InstalledFace"] = {}
 _FACE_CACHE_LIMIT = 4
 _REPORT_CHECK_LIMIT = 200
+# The extracted letter and the trace of drawn letters come from the same
+# MuPDF text matrix, so their origins agree far closer than this.
+_DRAWN_ORIGIN_TOLERANCE_PT = 0.01
+_UNREAD = object()
 
 
 @dataclass(frozen=True)
@@ -220,6 +229,16 @@ def _font_dictionary(document, xref: int) -> Dict[str, Any]:
     kind, subtype = gcr._xref_key(document, xref, "Subtype")
     if kind != "name" or subtype not in _SIMPLE_SUBTYPES:
         raise _NotProven(f"the font is not a simple TrueType or Type1 font ({subtype or 'no subtype'})")
+    # The extracted text of a font with a ToUnicode map comes from that map,
+    # not from the character codes the page draws. The checks below read the
+    # code back from the text, so a map that says code A means "B" would pass
+    # them and draw B where the PDF shows A. Such fonts keep today's route.
+    kind, _to_unicode = gcr._xref_key(document, xref, "ToUnicode")
+    if kind is not None:
+        raise _NotProven(
+            "the font has its own ToUnicode letter map, so its text may not be "
+            "the letters the page draws"
+        )
     kind, encoding = gcr._resolved_key(document, xref, "Encoding")
     if kind is None:
         encoding_name = ""
@@ -329,16 +348,26 @@ def _single_installed_face(font_name: str, italic, bold) -> str:
     from .pdfcadcore import glyph_code_recovery as gcr
 
     style = gcr._face_style(font_name, italic_hint=italic, bold_hint=bold)
-    paths, _indexed = gcr._reference_faces_for(style)
-    paths = tuple(
-        path for path in paths
-        if not str(path).lower().endswith(_COLLECTION_SUFFIXES)
+    directories = gcr.reference_font_directories()
+    index = gcr._reference_index(directories) if directories else ()
+    # Every indexed file with this name and style counts, font collections
+    # included, so any ambiguity means "not proven". (The shared lookup sorts
+    # and shortens its list, which could hide a second match.)
+    paths = sorted(
+        {os.path.normcase(str(path)): str(path)
+         for path, face_style in index if style.matches(face_style)}.values(),
+        key=os.path.normcase,
     )
     if not paths:
         raise _NotProven(f"no installed font is named {style.describe()}")
     if len(paths) != 1:
         raise _NotProven(
             f"{len(paths)} installed fonts are named {style.describe()}; the match must be unique"
+        )
+    if str(paths[0]).lower().endswith(_COLLECTION_SUFFIXES):
+        raise _NotProven(
+            f"the installed font named {style.describe()} is inside a font collection, "
+            "which this check does not read"
         )
     return str(paths[0])
 
@@ -466,6 +495,80 @@ def _asset_for(page_number: int, font_name: str, proof: Dict[str, Any], resource
     )
 
 
+def _origin_cell(x: float, y: float) -> Tuple[int, int]:
+    return (
+        int(math.floor(x / _DRAWN_ORIGIN_TOLERANCE_PT)),
+        int(math.floor(y / _DRAWN_ORIGIN_TOLERANCE_PT)),
+    )
+
+
+def _drawn_letters(page) -> Optional[Dict[Tuple[str, int, int], set]]:
+    """What the page actually draws: (font name, origin cell) -> character codes.
+
+    MuPDF's text extraction puts a marked-content ``/ActualText`` string in
+    place of the letters drawn under it, so an item's text can name letters
+    the page never draws. The page trace is built from the drawn character
+    codes themselves. ``None`` means the trace cannot be read.
+    """
+    try:
+        traces = page.get_texttrace()
+    except Exception:
+        return None
+    drawn: Dict[Tuple[str, int, int], set] = {}
+    try:
+        for trace in traces or ():
+            font = str(trace.get("font", "") or "")
+            for entry in trace.get("chars", ()) or ():
+                if isinstance(entry, dict):
+                    raw = entry.get("unicode", entry.get("c"))
+                    origin = entry.get("origin")
+                else:
+                    raw, origin = entry[0], entry[2]
+                codepoint = ord(raw) if isinstance(raw, str) else int(raw)
+                x, y = float(origin[0]), float(origin[1])
+                if not (math.isfinite(x) and math.isfinite(y)):
+                    continue
+                drawn.setdefault((font, *_origin_cell(x, y)), set()).add(codepoint)
+    except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+        return None
+    return drawn
+
+
+def _item_text_is_drawn(item: Any, drawn: Dict[Tuple[str, int, int], set]) -> bool:
+    """True when every letter of the item is the letter drawn at its position.
+
+    A space may have nothing drawn under it (MuPDF adds spaces for gaps), but
+    never a visible letter.
+    """
+    font = str(getattr(item, "font_name", "") or "")
+    for layout in tuple(getattr(item, "source_char_layout", ()) or ()):
+        text = str(getattr(layout, "text", "") or "")
+        try:
+            x, y = (float(value) for value in layout.source_origin_pdf)
+        except (AttributeError, TypeError, ValueError):
+            return False
+        if len(text) != 1 or not (math.isfinite(x) and math.isfinite(y)):
+            return False
+        cell_x, cell_y = _origin_cell(x, y)
+        codes = set()
+        for step_x in (-1, 0, 1):
+            for step_y in (-1, 0, 1):
+                codes |= drawn.get((font, cell_x + step_x, cell_y + step_y), set())
+        if text.isspace():
+            if any(not _is_space_code(code) for code in codes):
+                return False
+        elif codes != {ord(text)}:
+            return False
+    return True
+
+
+def _is_space_code(code: int) -> bool:
+    try:
+        return chr(int(code)).isspace()
+    except (OverflowError, TypeError, ValueError):
+        return False
+
+
 def _installed_item(item: Any, asset: InstalledFontAsset, face: _InstalledFace):
     layouts = tuple(getattr(item, "source_char_layout", ()) or ())
     remapped = []
@@ -513,6 +616,7 @@ def attach_installed_fonts(document, page, text_items, page_number: int, stats=N
         return items
     page_records = _page_font_records(page)
     resource_names = {xref: resource for xref, _name, resource in page_records}
+    drawn: Any = _UNREAD
     attached = 0
     checks = []
     for font_name in sorted(by_font):
@@ -543,19 +647,37 @@ def attach_installed_fonts(document, page, text_items, page_number: int, stats=N
             )
             checks.append(check)
             continue
+        # The proof reads character codes back from the text, so each item's
+        # text must be the letters the page draws there (MuPDF puts marked
+        # /ActualText in their place). Read the page trace once, only when needed.
+        if drawn is _UNREAD:
+            drawn = _drawn_letters(page)
+        if drawn is None:
+            check.update(status="not_used", reason="the letters the page draws cannot be read back")
+            checks.append(check)
+            continue
+        drawn_indices = [index for index in indices if _item_text_is_drawn(items[index], drawn)]
+        if len(drawn_indices) != len(indices):
+            check["items_text_not_drawn"] = len(indices) - len(drawn_indices)
         used = 0
-        for index in indices:
+        for index in drawn_indices:
             twin = _installed_item(items[index], asset, proof["face"])
             if twin is not None:
                 items[index] = twin
                 used += 1
         attached += used
+        if used:
+            reason = "every PDF width matched the installed face"
+        elif not drawn_indices:
+            reason = (
+                "the text of these items is not the letters the page draws "
+                "(the PDF puts other text in their place)"
+            )
+        else:
+            reason = "no text item could be mapped to the installed face"
         check.update(
             status="used" if used else "not_used",
-            reason=(
-                "every PDF width matched the installed face"
-                if used else "no text item could be mapped to the installed face"
-            ),
+            reason=reason,
             items_attached=used,
             installed_face_file=os.path.basename(asset.face_path),
             widths_matched=f"{asset.widths_checked}/{asset.widths_checked}",

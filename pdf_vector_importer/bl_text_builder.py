@@ -4386,10 +4386,13 @@ _SPAN_POSITION_TOLERANCE_EM = 0.005
 _SPAN_DIRECTION_TOLERANCE = 1e-3
 # Blender lays a text object out at the font's own advances. Measured on
 # Blender 5.2.2 with Arial, whose kern table has A-T = -152 units: "AT" ended
-# exactly where "A" plus "T" without kerning would. Older hosts are not
-# measured, so there a span whose neighbouring letters have a kerning pair
-# keeps one object per letter.
-_HOST_FONT_KERNING_ABSENT_FROM = (5, 2)
+# exactly where "A" plus "T" without kerning would, and a 53-letter kern-heavy
+# line read back from the evaluated mesh sat within 0.0133 mm of the per-letter
+# placement. Only that measured release is trusted: on any other Blender
+# (older or newer) a span whose neighbouring letters have a kerning pair keeps
+# one object per letter, because the after-build check below models the layout
+# rather than reading Blender's evaluated letters back.
+_HOST_FONT_KERNING_MEASURED_ABSENT = frozenset({(5, 2)})
 _SPAN_FONT_TABLES: Dict[Tuple[str, bool], Dict[str, Any]] = {}
 _SPAN_FONT_TABLE_LIMIT = 8
 
@@ -4400,7 +4403,7 @@ def _host_applies_font_kerning() -> bool:
         major, minor = int(version[0]), int(version[1])
     except (IndexError, TypeError, ValueError):
         return True
-    return (major, minor) < _HOST_FONT_KERNING_ABSENT_FROM
+    return (major, minor) not in _HOST_FONT_KERNING_MEASURED_ABSENT
 
 
 def _gpos_value_moves(value) -> bool:
@@ -4643,9 +4646,10 @@ def span_uses_natural_advances(text_item, *, host_applies_font_kerning=None) -> 
             )
         letters.append((index, char, char_origin, int(advances[glyph_id])))
         previous_glyph = glyph_id
-    # Blender's own layout of the body, mapped onto the PDF line from the first
-    # letter's origin to the last letter's far edge, must put every letter
-    # where the PDF does. Letter or word spacing (Tc, Tw) and TJ gaps fail here.
+    # The body laid out at the font's own widths (as Blender lays it out,
+    # measured on 5.2.2), mapped onto the PDF line from the first letter's
+    # origin to the last letter's far edge, must put every letter where the
+    # PDF does. Letter or word spacing (Tc, Tw) and TJ gaps fail here.
     total_units = sum(units for *_rest, units in letters)
     if total_units <= 0:
         return False, "the font's own widths are unavailable"
@@ -4714,9 +4718,12 @@ def _span_object_text_item(text_item):
 def _span_last_letter_offset_m(obj, text_item) -> float:
     """Distance between the built object's last letter origin and the PDF's.
 
-    Reads the affine actually recorded on the object and lays the span out the
-    way Blender does (the font's own advances), so a placement that drifts
-    along the line is caught even though the whole-span check passed.
+    Reads the affine actually recorded on the object and lays the span out at
+    the font's own advances (how Blender 5.2.2 was measured to lay it out), so
+    a placement that drifts along the line is caught even though the
+    whole-span check passed. It models the host layout rather than reading
+    Blender's evaluated letters back, which is why an unmeasured Blender keeps
+    kerned lines letter by letter (see _host_applies_font_kerning).
     """
     layouts = tuple(text_item.source_char_layout)
     asset = text_item.font_asset

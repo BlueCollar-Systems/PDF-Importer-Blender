@@ -140,17 +140,24 @@ Notes:
   the PDF for the source span. When the PDF names a font but does not store it
   (common on CAD and Tekla drawings that use Arial), the installed font of that
   name is used only if the PDF proves it is the same font: the font uses plain
-  WinAnsi letters, exactly one installed font has that name and style, every
-  width the PDF lists matches that installed font to within 1/1000 of the text
-  height, and that font has every character the page draws with it. If any
-  check fails, the text keeps the outline route below. The import report lists
-  each check under `extra.installed_fonts`, and each such text item records
-  `font_source: installed` and `widths_matched`.
+  WinAnsi letters and has no ToUnicode letter map of its own, exactly one
+  installed font file has that name and style (font collections such as .ttc
+  files are not read, and a folder search only looks at single .ttf/.otf
+  files), every width the PDF lists matches that installed font to within
+  1/1000 of the text height, that font has every character the page draws with
+  it, and each text item's letters are the letters the page actually draws
+  there (an `/ActualText` replacement keeps that item on the outline route). If
+  any check fails, the text keeps the outline route below. The import report
+  lists each check under `extra.installed_fonts`, and each such text item
+  records `font_source: installed` and `widths_matched`.
 - Text and 3D Text make one editable text object per line of PDF text when the
   PDF places every letter where the font's own widths put it (within 0.5% of
   the text height: no extra letter spacing, word spacing or spacing gaps).
   Otherwise, or if the one-object version fails its placement check, each
-  letter is placed as its own text object as before. Each text item records
+  letter is placed as its own text object as before. The placement check uses
+  the font's own widths, which is how Blender 5.2.2 was measured to lay out a
+  line (it does not kern); on other Blender versions a line whose font kerns
+  two neighbouring letters stays letter by letter. Each text item records
   `text_object_granularity` (`span_object` or `per_character`) and the reason.
 - Glyphs and Geometry are distinct host types and conversion paths: Glyphs
   verifies a real Blender `CURVE`; Geometry verifies a real Blender `MESH`.
