@@ -290,7 +290,7 @@ class _PageObject:
 
 def _import_stack(monkeypatch, tmp_path: Path, sizes_pt, arrangement,
                   *, gap_ratio=None, resume=None, config_extra=None,
-                  real_pdf=False, cancel_after_page=None):
+                  real_pdf=False, cancel_after_page=None, before_import=None):
     """Run engine.import_pdf over synthetic pages; return (page objects, checkpoints).
 
     ``resume`` = (completed page count, extra build_resume_state keywords).
@@ -475,6 +475,8 @@ def _import_stack(monkeypatch, tmp_path: Path, sizes_pt, arrangement,
             return int(message.split()[2].split("/")[0]) <= cancel_after_page
         return True
 
+    if before_import is not None:
+        before_import(engine, root, run_config)
     stats = engine.import_pdf(
         str(input_pdf), config=run_config,
         progress_callback=progress if cancel_after_page is not None else None,
@@ -482,6 +484,48 @@ def _import_stack(monkeypatch, tmp_path: Path, sizes_pt, arrangement,
     assert stats["pages_imported"] == (cancel_after_page if cancel_after_page is not None else len(sizes_pt))
     assert stats["cancelled"] is (cancel_after_page is not None)
     return engine, placed, checkpoints
+
+
+@pytest.mark.parametrize("unbound", [False, True])
+def test_actual_resume_consumer_rejects_changed_code_before_scene_mutation(monkeypatch, tmp_path, unbound):
+    import os
+    import json
+    from pdf_vector_importer import import_session as session
+    code = tmp_path / "owned-code"
+    code.mkdir()
+    module = code / "module.py"
+    module.write_bytes(b"version = 1\n")
+    original_hash = session.resume_content_sha256
+    monkeypatch.setattr(session, "resume_content_sha256", lambda: original_hash(code))
+    captured = {}
+    def before(engine, root, config):
+        existing = _PageObject(1, .2794, .2159)
+        existing.location = [7.0, -.125, .002]
+        root.all_objects.append(existing)
+        captured["root"] = root
+        captured["children"] = list(root.children.items)
+        captured["objects"] = [(obj, list(obj.location), obj.world_rect()) for obj in root.all_objects]
+        checkpoint = Path(config["resume_checkpoint_path"])
+        if unbound:
+            state = json.loads(checkpoint.read_text(encoding="utf-8"))
+            del state["importer_content_sha256"]
+            checkpoint.write_text(json.dumps(state), encoding="utf-8")
+        else:
+            initial = module.stat()
+            module.write_bytes(b"version = 2\n")
+            os.utime(module, ns=(initial.st_atime_ns, initial.st_mtime_ns))
+            assert module.stat().st_size == initial.st_size and module.stat().st_mtime_ns == initial.st_mtime_ns
+        captured["checkpoint"] = checkpoint
+        captured["bytes"] = checkpoint.read_bytes()
+        monkeypatch.setattr(engine, "_stack_page_objects", lambda *_args: pytest.fail("Rejected resume moved geometry"))
+        monkeypatch.setattr(engine, "_discard_page_collection", lambda *_args: pytest.fail("Rejected resume removed geometry"))
+    with pytest.raises(ValueError, match="importer code has changed or has no code binding"):
+        _import_stack(monkeypatch, tmp_path, [LANDSCAPE, PORTRAIT], "spread",
+                      resume=(1, {"next_stack_offset_m": -.25908}), before_import=before)
+    assert captured["root"].children.items == captured["children"]
+    assert captured["objects"]
+    assert all(obj.location == location and obj.world_rect() == rect for obj, location, rect in captured["objects"])
+    assert captured["checkpoint"].read_bytes() == captured["bytes"]
 
 
 @pytest.mark.parametrize("mode", ["auto", "vector", "raster", "hybrid"])

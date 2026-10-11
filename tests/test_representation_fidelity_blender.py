@@ -1893,6 +1893,36 @@ def test_empty_geometry_carrier_restores_only_owned_material_dropped_by_host(mon
     else:
         assert obj is None and record["status"] == "failed"
         assert "no main-database owner" in record["attempts"][0]["evidence"]["detail"]
+
+
+@pytest.mark.parametrize("source_bound", [True, False])
+def test_nonpositioned_inferred_space_glyph_consumer_requires_original_no_ink_proof(monkeypatch, source_bound):
+    import pymupdf
+    from pdf_vector_importer.pdfcadcore.primitive_extractor import extract_page
+    _fake, collection = _install(monkeypatch)
+    monkeypatch.setattr(bl_text_builder, "_verify_transform_and_dimensions",
+                        lambda *_args, **_kwargs: ([], {"evaluated_bounds_verified": True}))
+    with pymupdf.open() as document:
+        page = document.new_page(width=240, height=160)
+        page.insert_text((20, 40), "A", fontname="helv", fontsize=12)
+        page.insert_text((33, 40), "B", fontname="helv", fontsize=12)
+        item = next(item for item in extract_page(page, 1).text_items if item.text == " ")
+    assert item.requires_individual_positioning is False
+    if not source_bound:
+        item.source_char_layout = tuple(replace(char, source_font_binding_verified=False)
+                                        for char in item.source_char_layout)
+    opts = types.SimpleNamespace(import_mode="vector", text_mode="glyphs")
+    obj = bl_text_builder.build_text(item, collection, page_number=1, text_mode="glyphs", provenance_opts=opts)
+    record = opts._text_delivery_records[-1]
+    assert record["fallback_used"] is False
+    if source_bound:
+        assert obj.type == "CURVE" and not obj.data.splines
+        assert obj["pdf_zero_ink_identity"] and obj["pdf_advance_preserved"]
+        assert record["final_representation"] == "glyphs" and record["status"] == "delivered"
+        assert record["attempts"][-1]["evidence"]["source_space_no_ink_verified"] is True
+    else:
+        assert obj is None and record["status"] == "failed"
+        assert record["attempts"][0]["reason"] == "glyph_curve_has_no_verified_splines"
 @pytest.mark.parametrize(
     ("mode", "expected_type"),
     [("glyphs", "CURVE"), ("geometry", "MESH")],

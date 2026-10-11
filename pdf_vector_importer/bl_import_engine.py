@@ -4412,10 +4412,12 @@ def iter_import_pdf(
             build_resume_state,
             load_resume_checkpoint,
             resume_config_sha256,
+            resume_content_sha256,
         )
 
         source_sha256 = _sha256_path(filepath)
         config_sha256 = resume_config_sha256(config)
+        importer_content_sha256 = resume_content_sha256()
         checkpoint_path = str(config.get("resume_checkpoint_path") or "").strip()
         if not checkpoint_path:
             checkpoint_path = os.path.join(
@@ -4435,6 +4437,7 @@ def iter_import_pdf(
                 checkpoint_path,
                 source_sha256=source_sha256,
                 config_sha256=config_sha256,
+                importer_content_sha256=importer_content_sha256,
             )
             if list(resume_state.get("requested_pages") or []) != requested_page_numbers:
                 raise ValueError("resume checkpoint page selection does not match this import")
@@ -4598,6 +4601,7 @@ def iter_import_pdf(
                 root_collection=str(getattr(root_col, "name", "") or ""),
                 next_stack_offset_m=_page_stack_cursor_m,
                 stacked_page_height_m=_stacked_page_height_m,
+                importer_content_sha256=importer_content_sha256,
                 aggregate_stats=aggregate_stats,
                 text_delivery_items=delivery_items,
             )

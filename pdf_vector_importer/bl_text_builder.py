@@ -2645,6 +2645,65 @@ def _own_evaluated_glyph_curve(converted, name: str):
     return dest
 
 
+def _source_space_no_ink_proof(text_item):
+    """Only source-bound U+0020 with independently empty font outlines qualifies."""
+    text = str(getattr(text_item, "text", "") or "")
+    layout = tuple(getattr(text_item, "source_char_layout", ()) or ())
+    asset = getattr(text_item, "font_asset", None)
+    if not text or set(text) != {" "} or len(layout) != len(text) or asset is None:
+        return None
+    source_sha = str(getattr(asset, "source_sha256", "") or "")
+    usable_sha = str(getattr(asset, "usable_sha256", "") or "")
+    font_bytes = bytes(getattr(asset, "usable_bytes", b"") or b"")
+    if (len(source_sha) != 64 or sha256(font_bytes).hexdigest() != usable_sha
+            or sha256(bytes(getattr(asset, "source_bytes", b"") or b"")).hexdigest() != source_sha):
+        return None
+    from fontTools.ttLib import TTFont, TTLibError
+    from fontTools.pens.boundsPen import BoundsPen
+    try:
+        original = bytes(asset.source_bytes)
+        if str(asset.source_format).lower() == "cff":
+            from .pdfcadcore.embedded_fonts import _cff_to_otf
+            original = _cff_to_otf(original, asset.base_font_name)
+        with TTFont(BytesIO(original), lazy=False, recalcTimestamp=False) as source_font, \
+                TTFont(BytesIO(font_bytes), lazy=False, recalcTimestamp=False) as font:
+            name = (font.getBestCmap() or {}).get(32)
+            if not name:
+                return None
+            glyphs = font.getGlyphSet()
+            pen = BoundsPen(glyphs)
+            glyphs[name].draw(pen)
+            if pen.bounds is not None:
+                return None
+            glyph_id = font.getGlyphID(name)
+            for char in layout:
+                if (char.text != " " or char.source_font_binding_verified is not True
+                        or char.source_font_program_sha256 != source_sha):
+                    return None
+                if char.glyph_id is None:
+                    flags = char.source_stext_flags
+                    if (char.source_synthetic_spacing is not True or type(flags) is not int
+                            or not flags & 4):
+                        return None
+                    original_name = (source_font.getBestCmap() or {}).get(32)
+                elif type(char.glyph_id) is not int or char.glyph_id != glyph_id:
+                    return None
+                else:
+                    original_name = source_font.getGlyphOrder()[char.glyph_id]
+                if not original_name:
+                    return None
+                originals = source_font.getGlyphSet()
+                original_pen = BoundsPen(originals)
+                originals[original_name].draw(original_pen)
+                if original_pen.bounds is not None:
+                    return None
+    except (AttributeError, IndexError, KeyError, OSError, TypeError, ValueError, TTLibError):
+        return None
+    return {"source_space_no_ink_verified": True, "source_sha256": source_sha,
+            "usable_sha256": usable_sha, "space_glyph_id": glyph_id,
+            "zero_ink_identity": True, "advance_preserved": True}
+
+
 def _attempt_glyphs(
     text_item,
     collection,
@@ -2676,6 +2735,7 @@ def _attempt_glyphs(
     )
     if source_verification.status != "delivered":
         return source_verification
+    zero_ink_proof = _source_space_no_ink_proof(text_item)
     try:
         depsgraph = bpy.context.evaluated_depsgraph_get()
         evaluated = obj.evaluated_get(depsgraph)
@@ -2700,7 +2760,8 @@ def _attempt_glyphs(
             clear = getattr(evaluated, "to_curve_clear", None)
             if callable(clear):
                 clear()
-        if not list(getattr(curve_data, "splines", []) or []):
+        empty_curve = not list(getattr(curve_data, "splines", []) or [])
+        if empty_curve and zero_ink_proof is None:
             return AttemptOutcome.failed(
                 "glyph_curve_has_no_verified_splines",
                 evidence={"item_id": item_id},
@@ -2711,6 +2772,14 @@ def _attempt_glyphs(
                 owned_objects=_owned_objects_for_text_entity(obj),
                 owned_datablocks=(data, curve_data),
             )
+        if empty_curve and not len(curve_data.materials):
+            # Older Blender drops slots when an empty FONT becomes a CURVE.
+            # Keep this proven empty glyph in Glyphs, with owned exact material.
+            for material in data.materials:
+                owned = bpy.data.materials.get(material.name)
+                if owned is None:
+                    raise ValueError("empty glyph curve material has no main-database owner")
+                curve_data.materials.append(owned)
         curve_data.name = f"{obj.name}_glyph_curve"
         final = bpy.data.objects.new(obj.name, curve_data)
         _copy_object_transform(obj, final)
@@ -2723,6 +2792,10 @@ def _attempt_glyphs(
         )
         _copy_text_material_metadata(obj, final)
         final["pdf_text_source"] = str(text_item.text)
+        if empty_curve:
+            final["pdf_zero_ink_identity"] = True
+            final["pdf_visible_geometry_omitted"] = True
+            final["pdf_advance_preserved"] = True
         collection.objects.link(final)
         try:
             bpy.context.view_layer.update()
@@ -2778,6 +2851,7 @@ def _attempt_glyphs(
             "item_id": item_id,
             **verification_evidence,
             "spline_count": len(curve_data.splines),
+            **((zero_ink_proof or {}) if empty_curve else {}),
         },
         owned_artifacts=_owned_artifacts_for_text_entity(final, curve_data),
         owned_objects=_owned_objects_for_text_entity(final),

@@ -23,7 +23,9 @@ host's float32 coordinates, without weakening clipping or containment checks.
 Validation on the reconciled source:
 
 - 288 focused page placement, framing, raster, clipping and remediation tests.
-- Full source suite: 1,907 passed, 5 skipped, 22 subtests passed (91.90 seconds).
+- Initial merge suite: 1,907 passed, 5 skipped, 22 subtests passed (91.90 seconds).
+- Final source with the controls below: 1,924 passed, 5 skipped, 22 subtests
+  passed (169.11 seconds).
 - Whole-repository Ruff and Git whitespace checks passed.
 
 These are source tests, including actual PDF extraction/renderer checks and
@@ -32,3 +34,18 @@ r6 package at `b42cee9` remains frozen and its native evidence applies only to r
 The new source requires its own packaged all-mode/save/reopen, mixed-sheet and
 cancellation/resume acceptance before publication. No release was triggered by
 this reconciliation.
+
+The final source also closes two concrete control gaps. Resume checkpoints bind
+actual importer Python and bundled native runtime bytes with a streamed SHA256;
+same-size/same-timestamp changes and old unbound checkpoints reject before scene
+mutation and leave existing geometry/checkpoints intact. Legacy stack-height
+recovery remains supported for correctly code-bound checkpoints.
+
+The actual r6 Blender 3.1.2 probe rejected a standalone inferred spacing item in
+Glyphs because its converted curve had no splines. Glyphs now retains an empty
+typed carrier only with verified character/program binding, original and usable
+font byte hashes, and independently empty outlines in both programs. A missing
+painted glyph ID additionally requires the native synthetic-spacing marker and
+flag. Original origin and advance remain; visible/unbound whitespace is not
+accepted as empty. Material restoration on older hosts requires a main-database
+owner. These source regressions passed; the new native r7 acceptance is pending.
