@@ -1,6 +1,5 @@
 """Checkpoint code/runtime changes must reject without relying on timestamps."""
 import os
-from pathlib import Path
 
 import pytest
 
