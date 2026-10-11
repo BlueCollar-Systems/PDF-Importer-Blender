@@ -2754,12 +2754,27 @@ def _attempt_glyphs(
                 owned_datablocks=(data,),
             )
         converted = to_curve(depsgraph, apply_modifiers=False)
+        conversion_error = None
         try:
             curve_data = _own_evaluated_glyph_curve(converted, f"{obj.name}_glyph_curve")
+        except Exception as exc:
+            conversion_error = exc
+            raise
         finally:
             clear = getattr(evaluated, "to_curve_clear", None)
             if callable(clear):
-                clear()
+                try:
+                    clear()
+                except Exception as cleanup_exc:
+                    raise _OwnedConstructionError(
+                        "temporary glyph curve release failed: "
+                        f"conversion={conversion_error}; "
+                        f"cleanup={type(cleanup_exc).__name__}:{cleanup_exc}",
+                        owned_objects=getattr(conversion_error, "owned_objects", ()),
+                        owned_datablocks=tuple(value for value in (
+                            curve_data, *getattr(conversion_error, "owned_datablocks", ())
+                        ) if value is not None),
+                    ) from cleanup_exc
         empty_curve = not list(getattr(curve_data, "splines", []) or [])
         if empty_curve and zero_ink_proof is None:
             return AttemptOutcome.failed(
@@ -2822,11 +2837,13 @@ def _attempt_glyphs(
                 owned_datablocks=tuple(remaining_data) + (curve_data,),
             )
     except Exception as exc:
-        owned_objects = _unique_owned_objects(obj, final)
-        owned_data = tuple(value for value in (data, curve_data) if _valid_owned_ref(value))
+        owned_objects = _unique_owned_objects(obj, final, *getattr(exc, "owned_objects", ()))
+        extra_data = tuple(value for value in getattr(exc, "owned_datablocks", ()) if _valid_owned_ref(value))
+        owned_data = tuple(value for value in (data, curve_data, *extra_data) if _valid_owned_ref(value))
         artifacts = (
             *_owned_artifacts_for_text_entity(obj, data),
             *_owned_artifacts_for_text_entity(final, curve_data),
+            *(_artifact(None, value) for value in extra_data),
         )
         return AttemptOutcome.failed(
             "glyph_curve_conversion_failed_not_impossibility_proof",
@@ -2901,11 +2918,13 @@ def _attempt_geometry(
     )
     if source_verification.status != "delivered":
         return source_verification
+    zero_ink_proof = _source_space_no_ink_proof(text_item)
     try:
         depsgraph = bpy.context.evaluated_depsgraph_get()
         evaluated = obj.evaluated_get(depsgraph)
         mesh = mesh_factory(evaluated, depsgraph=depsgraph)
-        if not list(getattr(mesh, "vertices", []) or []):
+        empty_mesh = not list(getattr(mesh, "vertices", []) or [])
+        if empty_mesh and zero_ink_proof is None:
             return AttemptOutcome.failed(
                 "geometry_mesh_has_no_verified_vertices",
                 evidence={"item_id": item_id},
@@ -2916,6 +2935,15 @@ def _attempt_geometry(
                 owned_objects=_owned_objects_for_text_entity(obj),
                 owned_datablocks=(data, mesh),
             )
+        if empty_mesh:
+            if len(mesh.edges) or len(mesh.polygons):
+                raise ValueError("verified empty source space produced nonempty mesh topology")
+            if not len(mesh.materials):
+                for material in data.materials:
+                    owned = bpy.data.materials.get(material.name)
+                    if owned is None:
+                        raise ValueError("empty source space mesh material has no main-database owner")
+                    mesh.materials.append(owned)
         mesh.name = f"{obj.name}_mesh"
         final = bpy.data.objects.new(obj.name, mesh)
         _copy_object_transform(obj, final)
@@ -2928,12 +2956,16 @@ def _attempt_geometry(
         )
         _copy_text_material_metadata(obj, final)
         final["pdf_text_source"] = str(text_item.text)
+        if empty_mesh:
+            final["pdf_zero_ink_identity"] = True
+            final["pdf_visible_geometry_omitted"] = True
+            final["pdf_advance_preserved"] = True
         collection.objects.link(final)
         try:
             bpy.context.view_layer.update()
         except Exception:
             pass
-        if not bool(getattr(text_item, "positioned_character", False)):
+        if not empty_mesh and not bool(getattr(text_item, "positioned_character", False)):
             _fit_text_to_bbox(final, text_item)
         try:
             bpy.context.view_layer.update()
@@ -2983,6 +3015,7 @@ def _attempt_geometry(
             "item_id": item_id,
             **verification_evidence,
             "vertex_count": len(mesh.vertices),
+            **((zero_ink_proof or {}) if empty_mesh else {}),
         },
         owned_artifacts=_owned_artifacts_for_text_entity(final, mesh),
         owned_objects=_owned_objects_for_text_entity(final),

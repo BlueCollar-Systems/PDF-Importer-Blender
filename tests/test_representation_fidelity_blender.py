@@ -319,12 +319,14 @@ class _MeshData:
         self.name = name
         self.materials = _MaterialList()
         self.vertices = [object()]
+        self.edges = []
         self.polygons = [object()]
         self.base_dimensions = base_dimensions
 
     def copy(self):
         copied = _MeshData(f"{self.name}_copy", self.base_dimensions)
         copied.vertices = list(self.vertices)
+        copied.edges = list(self.edges)
         copied.polygons = list(self.polygons)
         copied.materials.extend(self.materials)
         return copied
@@ -1896,7 +1898,10 @@ def test_empty_geometry_carrier_restores_only_owned_material_dropped_by_host(mon
 
 
 @pytest.mark.parametrize("source_bound", [True, False])
-def test_nonpositioned_inferred_space_glyph_consumer_requires_original_no_ink_proof(monkeypatch, source_bound):
+@pytest.mark.parametrize("mode,expected_type,geometry_attribute", [
+    ("glyphs","CURVE","splines"),("geometry","MESH","vertices")])
+def test_nonpositioned_inferred_space_consumer_requires_original_no_ink_proof(
+    monkeypatch, source_bound, mode, expected_type, geometry_attribute):
     import pymupdf
     from pdf_vector_importer.pdfcadcore.primitive_extractor import extract_page
     _fake, collection = _install(monkeypatch)
@@ -1911,18 +1916,79 @@ def test_nonpositioned_inferred_space_glyph_consumer_requires_original_no_ink_pr
     if not source_bound:
         item.source_char_layout = tuple(replace(char, source_font_binding_verified=False)
                                         for char in item.source_char_layout)
-    opts = types.SimpleNamespace(import_mode="vector", text_mode="glyphs")
-    obj = bl_text_builder.build_text(item, collection, page_number=1, text_mode="glyphs", provenance_opts=opts)
+    opts = types.SimpleNamespace(import_mode="vector", text_mode=mode)
+    obj = bl_text_builder.build_text(item, collection, page_number=1, text_mode=mode, provenance_opts=opts)
     record = opts._text_delivery_records[-1]
     assert record["fallback_used"] is False
     if source_bound:
-        assert obj.type == "CURVE" and not obj.data.splines
+        assert obj.type == expected_type and not getattr(obj.data,geometry_attribute)
         assert obj["pdf_zero_ink_identity"] and obj["pdf_advance_preserved"]
-        assert record["final_representation"] == "glyphs" and record["status"] == "delivered"
+        assert record["final_representation"] == mode and record["status"] == "delivered"
         assert record["attempts"][-1]["evidence"]["source_space_no_ink_verified"] is True
     else:
         assert obj is None and record["status"] == "failed"
-        assert record["attempts"][0]["reason"] == "glyph_curve_has_no_verified_splines"
+        assert record["attempts"][0]["reason"] == (
+            "glyph_curve_has_no_verified_splines" if mode=="glyphs"
+            else "geometry_mesh_has_no_verified_vertices")
+
+
+@pytest.mark.parametrize("fault", ["missing_material_owner", "unexpected_edge", "unexpected_face"])
+def test_nonpositioned_empty_space_geometry_preserves_ownership_and_topology_gates(monkeypatch, fault):
+    import pymupdf
+    from pdf_vector_importer.pdfcadcore.primitive_extractor import extract_page
+    fake, collection = _install(monkeypatch)
+    monkeypatch.setattr(bl_text_builder,"_verify_transform_and_dimensions",
+                        lambda *_args,**_kwargs:([],{"evaluated_bounds_verified":True}))
+    original=fake.data.meshes.new_from_object
+    def changed_factory(evaluated,depsgraph=None):
+        mesh=original(evaluated,depsgraph=depsgraph)
+        assert not mesh.vertices
+        if fault=="missing_material_owner":
+            mesh.materials.clear()
+            fake.data.materials.items.clear()
+        elif fault=="unexpected_edge": mesh.edges.append(object())
+        else: mesh.polygons.append(object())
+        return mesh
+    fake.data.meshes.new_from_object=changed_factory
+    with pymupdf.open() as document:
+        page=document.new_page(width=240,height=160)
+        page.insert_text((20,40),"A",fontname="helv",fontsize=12)
+        page.insert_text((33,40),"B",fontname="helv",fontsize=12)
+        item=next(item for item in extract_page(page,1).text_items if item.text==" ")
+    opts=types.SimpleNamespace(import_mode="vector",text_mode="geometry")
+    obj=bl_text_builder.build_text(item,collection,page_number=1,text_mode="geometry",provenance_opts=opts)
+    record=opts._text_delivery_records[-1]
+    assert obj is None and record["status"]=="failed" and record["fallback_used"] is False
+    assert fake.data.meshes.removed and fake.data.curves.removed
+    assert not collection.objects.items
+    detail=record["attempts"][0]["evidence"]["detail"]
+    assert ("no main-database owner" in detail if fault=="missing_material_owner"
+            else "nonempty mesh topology" in detail)
+
+
+@pytest.mark.parametrize("clear_also_fails", [False,True])
+def test_nonpositioned_glyph_clone_retains_surviving_datablock_ownership(monkeypatch,clear_also_fails):
+    fake,collection=_install(monkeypatch)
+    survivor=_CurveData("Allocated curve whose first rollback failed")
+    def failed_clone(*_args,**_kwargs):
+        raise bl_text_builder._OwnedConstructionError("clone rollback failed",owned_datablocks=(survivor,))
+    monkeypatch.setattr(bl_text_builder,"_own_evaluated_glyph_curve",failed_clone)
+    if clear_also_fails:
+        def failed_clear(_self):
+            raise RuntimeError("temporary clear failed")
+        monkeypatch.setattr(_Object,"to_curve_clear",failed_clear)
+    opts=types.SimpleNamespace(import_mode="vector",text_mode="glyphs")
+    obj=bl_text_builder.build_text(_item(),collection,page_number=2,
+        text_mode="glyphs",provenance_opts=opts)
+    record=opts._text_delivery_records[-1]
+    assert obj is None and record["status"]=="failed" and record["fallback_used"] is False
+    assert survivor.name in fake.data.curves.removed
+    assert not collection.objects.items
+    detail=record["attempts"][0]["evidence"]["detail"]
+    assert "clone rollback failed" in detail
+    if clear_also_fails:
+        assert "temporary clear failed" in detail
+
 @pytest.mark.parametrize(
     ("mode", "expected_type"),
     [("glyphs", "CURVE"), ("geometry", "MESH")],

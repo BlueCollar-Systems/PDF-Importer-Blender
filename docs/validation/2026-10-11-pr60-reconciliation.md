@@ -49,3 +49,19 @@ painted glyph ID additionally requires the native synthetic-spacing marker and
 flag. Original origin and advance remain; visible/unbound whitespace is not
 accepted as empty. Material restoration on older hosts requires a main-database
 owner. These source regressions passed; the new native r7 acceptance is pending.
+
+The exact r7 native run on Blender 3.1.2 subsequently passed Text, 3D Text and
+Glyphs with mixed-height Compact placement and save/reopen. Geometry exposed
+the same standalone inferred-space gap: a verified empty mesh was rejected
+because it had no vertices. Geometry now keeps an empty MESH only with the
+original/usable font zero-ink proof, zero vertices/edges/faces, exact source
+metric placement and owned material. It skips bbox fitting of an empty mesh.
+Unbound, visible, unexpected-topology and missing-material-owner cases remain
+failures. The nonpositioned Glyphs conversion also retains a surviving allocated
+curve when construction rollback and temporary-curve release fail together.
+
+The final source with prepared 1.0.108 metadata passed 1,932 tests, 5 skips and
+22 subtests (159.16 seconds); affected consumer/proof tests passed 135 tests.
+Whole Ruff passed. Earlier r7 packages and partial native receipts remain
+unchanged. The new r8 package requires its own native Geometry, remaining-mode
+and control acceptance; production publication remains explicit and held.
