@@ -140,3 +140,67 @@ def test_kept_sheet_edge_letters_are_listed_after_a_finished_import(
     assert warnings == ["1 letter on sheet 2 was left untrimmed at the sheet edge.",
                         f"Details: {tmp_path / 'run'}"]
     assert not [message for level, message in reports if level == {"ERROR"}]
+
+
+def _modal_run(operators, operator, steps):
+    """Drive the Esc-cancellable dialog run the way Blender's timer does."""
+    timer = object()
+    removed = []
+    context = _context(types.SimpleNamespace(remember_last_directory=True, last_import_dir=""))
+    context.window_manager = types.SimpleNamespace(event_timer_remove=removed.append)
+    operator._steps = steps
+    operator._timer = timer
+    operator._set_status = lambda _text: None
+    operators._begin_import_session()
+    results = []
+    for _ in range(4):
+        result = operator.modal(context, types.SimpleNamespace(type="TIMER", timer=timer))
+        results.append(result)
+        if result != {"RUNNING_MODAL"}:
+            break
+    return results, removed, timer, context
+
+
+def test_modal_run_also_keeps_every_sheet_and_lists_the_items(operators_module, tmp_path):
+    # The dialog now imports step by step (Esc cancels). A mostly-finished
+    # import must still finish there, not say "PDF import failed".
+    operators, engine = operators_module
+    stats = {
+        "pages_requested": 2, "pages_imported": 2,
+        "text_delivery_failed_item_ids": ["page:2:text:4"],
+        "import_report_path": str(tmp_path / "run" / "D042_import_report.json"),
+    }
+
+    def steps():
+        yield {"phase": "page_complete", "page": 1}
+        yield {"phase": "page_complete", "page": 2}
+        raise engine.IncompleteImportError(["final text check failed (1 item(s))"], stats)
+
+    operator, reports = _operator(operators, tmp_path)
+    results, removed, timer, context = _modal_run(operators, operator, steps())
+
+    assert results[-1] == {"FINISHED"}
+    assert removed == [timer]
+    assert {tuple(level) for level, _message in reports} == {("WARNING",)}
+    messages = [message for _level, message in reports]
+    assert messages[0] == "Imported 2 of 2 sheets; 1 item needs a look."
+    assert not any(message.startswith("PDF import failed") for message in messages)
+    assert context.preferences.addons["pdf_vector_importer"].preferences.last_import_dir == str(tmp_path)
+    assert operators._IMPORT_ACTIVE is False
+
+
+def test_modal_run_says_nothing_to_resume_as_a_notice(operators_module, tmp_path):
+    operators, engine = operators_module
+    notice = "Nothing to resume: no import of this PDF with these settings was left unfinished."
+
+    def steps():
+        yield {"phase": "opened", "pages": 2}
+        raise engine.NothingToResumeError(notice)
+
+    operator, reports = _operator(operators, tmp_path)
+    results, removed, timer, _context_used = _modal_run(operators, operator, steps())
+
+    assert results[-1] == {"CANCELLED"}
+    assert removed == [timer]
+    assert reports == [({"WARNING"}, notice)]
+    assert operators._IMPORT_ACTIVE is False
