@@ -131,6 +131,7 @@ def build_resume_state(
     next_stack_offset_m: float,
     aggregate_stats: Dict[str, Any],
     text_delivery_items: Sequence[Dict[str, Any]],
+    stacked_page_height_m: float | None = None,
 ) -> Dict[str, Any]:
     source_hash = str(source_sha256 or "").strip().lower()
     config_hash = str(config_sha256 or "").strip().lower()
@@ -141,7 +142,7 @@ def build_resume_state(
     requested = sorted({int(page) for page in requested_pages if int(page) > 0})
     completed = sorted({int(page) for page in completed_pages if int(page) in requested})
     remaining = [page for page in requested if page not in completed]
-    return {
+    state = {
         "schema": "bcs.blender.page_resume/1.0",
         "source_sha256": source_hash,
         "config_sha256": config_hash,
@@ -154,6 +155,12 @@ def build_resume_state(
         "aggregate_stats": dict(aggregate_stats or {}),
         "text_delivery_items": [dict(item) for item in text_delivery_items],
     }
+    # Height of the last stacked page: the next page is placed from it so a
+    # taller page cannot reach into the pages above. Absent until a page is
+    # placed, and absent in checkpoints written before it was recorded.
+    if stacked_page_height_m is not None:
+        state["stacked_page_height_m"] = float(stacked_page_height_m)
+    return state
 
 
 def write_resume_checkpoint(path: str | Path, state: Dict[str, Any]) -> None:
