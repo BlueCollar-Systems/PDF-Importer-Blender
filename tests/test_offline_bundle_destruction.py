@@ -63,8 +63,8 @@ class TestBundleSurvivesInstallFailure(unittest.TestCase):
                     lib = Path(tmp)
                     _make_bundle(lib)
 
-                    def _fail(*_a, **_k):
-                        raise exc
+                    def _fail(*_a, _exc=exc, **_k):
+                        raise _exc
 
                     with patch.object(dependency_manager, "get_lib_dir", return_value=lib), \
                             patch("subprocess.check_call", _fail):

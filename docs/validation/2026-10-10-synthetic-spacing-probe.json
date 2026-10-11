@@ -1,0 +1,44 @@
+{
+  "host": "5.2.2 LTS",
+  "python": "3.13.13 (main, May  8 2026, 12:37:03) [MSC v.1944 64 bit (AMD64)]",
+  "source_text_items": 3,
+  "inferred_spaces": 1,
+  "modes": [
+    {
+      "mode": "text",
+      "text_failed": 0,
+      "text_fallback": 0,
+      "contract_ready": true
+    },
+    {
+      "mode": "3d_text",
+      "text_failed": 0,
+      "text_fallback": 0,
+      "contract_ready": true
+    },
+    {
+      "mode": "glyphs",
+      "text_failed": 0,
+      "text_fallback": 0,
+      "contract_ready": true
+    },
+    {
+      "mode": "geometry",
+      "text_failed": 0,
+      "text_fallback": 0,
+      "contract_ready": true
+    },
+    {
+      "mode": "raster",
+      "text_failed": 0,
+      "text_fallback": 0,
+      "contract_ready": true
+    },
+    {
+      "mode": "labels",
+      "text_failed": 0,
+      "text_fallback": 3,
+      "contract_ready": true
+    }
+  ]
+}

@@ -199,3 +199,56 @@ def test_an_unused_trim_guide_is_removed(monkeypatch):
                                            width_mm=1000, height_mm=1000)
     assert len(result.skipped) == 1 and not letter.modifiers
     assert removed == ["PDF text page viewport", "PDF text viewport helper"]
+
+
+def _quad(x, y, width, height):
+    return [(x, y, 0.0), (x + width, y, 0.0),
+            (x + width, y + height, 0.0), (x, y + height, 0.0)]
+
+
+def test_stacked_sheet_accepts_float32_clip_edge_and_keeps_later_pages(monkeypatch):
+    # Sheet 7 of a letter stack sits near |Y|=2 m. A 0.6 mm strip whose clip
+    # edge moves ten float32 steps changes area by about 4e-3 relative.
+    # The old 2e-4 check called that lost ink, rolled the sheet back, and
+    # never reached sheets 8–12. The text object stays on this rung.
+    y0 = -2.012
+    width = 0.004
+    height = 0.0006
+    shift = 10 * clip._float32_ulp(abs(y0))
+    points = _quad(0.01, y0, width, height - shift)
+    expected = width * height
+    actual = clip.polygon_area([point[:2] for point in points])
+    assert abs(actual - expected) / expected > 2e-4
+    monkeypatch.setattr(clip, "_evaluated_ink", lambda *_args: (points, [points]))
+    proof = clip.verify_clipped_ink(
+        object(), object(), (0.0, y0, 0.216, y0 + 0.2794), expected, (0.0, 0.0))
+    assert proof["visible_ink_area_verified"] is True
+    assert proof["inside_page_verified"] is True
+
+
+def test_stacked_sheet_still_rejects_half_of_a_clipped_strip(monkeypatch):
+    y0 = -2.012
+    width = 0.004
+    height = 0.0006
+    points = _quad(0.01, y0, width, height * 0.5)
+    monkeypatch.setattr(clip, "_evaluated_ink", lambda *_args: (points, [points]))
+    with pytest.raises(ValueError, match="visible source ink area"):
+        clip.verify_clipped_ink(
+            object(), object(), (0.0, y0, 0.216, y0 + 0.2794), width * height, (0.0, 0.0))
+
+
+def test_stacked_sheet_allows_a_float32_vertex_but_not_a_millimetre(monkeypatch):
+    y0 = -2.012
+    nudge = 10 * clip._float32_ulp(abs(y0))
+    inside = [(0.01, y0 - nudge, 0.0), (0.02, y0 - nudge, 0.0), (0.015, y0 + 0.01, 0.0)]
+    area = clip.polygon_area([point[:2] for point in inside])
+    monkeypatch.setattr(clip, "_evaluated_ink", lambda *_args: (inside, [inside]))
+    proof = clip.verify_clipped_ink(
+        object(), object(), (0.0, y0, 0.216, y0 + 0.2794), area, (0.0, 0.0))
+    assert proof["inside_page_verified"] is True
+
+    outside = [(0.01, y0 - 0.001, 0.0), (0.02, y0 - 0.001, 0.0), (0.015, y0 + 0.01, 0.0)]
+    monkeypatch.setattr(clip, "_evaluated_ink", lambda *_args: (outside, [outside]))
+    with pytest.raises(ValueError, match="out-of-page ink"):
+        clip.verify_clipped_ink(
+            object(), object(), (0.0, y0, 0.216, y0 + 0.2794), area, (0.0, 0.0))

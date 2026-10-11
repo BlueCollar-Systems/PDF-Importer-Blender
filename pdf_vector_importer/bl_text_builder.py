@@ -3650,6 +3650,109 @@ def _attempt_positioned_native_characters(
     )
 
 
+def _copy_evaluated_glyph_curve(converted, name):
+    """Own spline geometry without copying temporary FONT-specific ID links.
+
+    Blender 3.1 returns a TextCurve from Object.to_curve(). Copying that ID
+    retains font links which can crash its dependency graph after the evaluated
+    source is freed. A main-database CURVE owns the identical spline data and
+    does not depend on those temporary font pointers.
+    """
+    final_data = bpy.data.curves.new(name, "CURVE")
+    try:
+        for attribute in (
+            "dimensions", "resolution_u", "resolution_v", "render_resolution_u",
+            "render_resolution_v", "fill_mode", "twist_mode", "twist_smooth",
+            "offset", "extrude", "bevel_depth", "bevel_resolution", "use_fill_caps",
+        ):
+            if hasattr(converted, attribute) and hasattr(final_data, attribute):
+                setattr(final_data, attribute, getattr(converted, attribute))
+                if getattr(final_data, attribute) != getattr(converted, attribute):
+                    raise ValueError("owned glyph curve changed " + attribute)
+        for material in converted.materials:
+            # Evaluated IDs must resolve to their owning main-database ID.
+            owned_material = bpy.data.materials.get(material.name)
+            if owned_material is None:
+                raise ValueError("converted glyph material has no main-database owner")
+            final_data.materials.append(owned_material)
+        for source_spline in converted.splines:
+            kind = source_spline.type
+            if kind not in {"BEZIER", "NURBS", "POLY"}:
+                raise ValueError("unsupported evaluated glyph spline: " + str(kind))
+            target_spline = final_data.splines.new(kind)
+            if kind == "BEZIER":
+                source_points = source_spline.bezier_points
+                target_points = target_spline.bezier_points
+                point_attributes = (
+                    "handle_left_type", "handle_right_type", "co", "handle_left",
+                    "handle_right", "radius", "tilt",
+                )
+            else:
+                source_points = source_spline.points
+                target_points = target_spline.points
+                point_attributes = ("co", "radius", "tilt", "weight")
+            if not source_points:
+                raise ValueError("evaluated glyph spline has no points")
+            target_points.add(len(source_points) - 1)
+            bulk_set = getattr(target_points, "foreach_set", None)
+            for source_point, target_point in zip(source_points, target_points, strict=True):
+                for attribute in point_attributes:
+                    if hasattr(source_point, attribute) and hasattr(target_point, attribute):
+                        if callable(bulk_set) and attribute in {"co", "handle_left", "handle_right"}:
+                            continue
+                        value = getattr(source_point, attribute)
+                        if attribute in {"co", "handle_left", "handle_right"}:
+                            value = tuple(value)
+                        setattr(target_point, attribute, value)
+            spline_attributes = (
+                "material_index", "resolution_u", "use_cyclic_u", "use_smooth",
+                "tilt_interpolation", "radius_interpolation",
+            )
+            if kind == "NURBS":
+                spline_attributes += ("order_u", "use_endpoint_u", "use_bezier_u")
+            # FONT outlines are curves, not V-dimensional surfaces. In old
+            # evaluated TextCurves, unused surface/order fields contain zeros
+            # which RNA clamps on assignment; they do not describe this ink.
+            for attribute in spline_attributes:
+                if hasattr(source_spline, attribute) and hasattr(target_spline, attribute):
+                    setattr(target_spline, attribute, getattr(source_spline, attribute))
+                    if getattr(target_spline, attribute) != getattr(source_spline, attribute):
+                        raise ValueError("owned glyph spline changed " + attribute)
+            if callable(bulk_set):
+                # Per-point RNA setters can realign neighboring handles. Bulk
+                # writes preserve the evaluated float coordinates verbatim.
+                for attribute in ("co", "handle_left", "handle_right"):
+                    if kind != "BEZIER" and attribute != "co":
+                        continue
+                    bulk_set(attribute, [coordinate for point in source_points
+                        for coordinate in getattr(point, attribute)])
+            if len(target_points) != len(source_points):
+                raise ValueError("owned glyph curve point count changed")
+            for source_point, target_point in zip(source_points, target_points, strict=True):
+                for attribute in point_attributes:
+                    if hasattr(source_point, attribute) and hasattr(target_point, attribute):
+                        original = getattr(source_point, attribute)
+                        copied = getattr(target_point, attribute)
+                        if attribute in {"co", "handle_left", "handle_right"}:
+                            original, copied = tuple(original), tuple(copied)
+                        if original != copied:
+                            raise ValueError("owned glyph curve changed " + attribute)
+        if len(final_data.splines) != len(converted.splines):
+            raise ValueError("owned glyph curve spline count changed")
+        return final_data
+    except Exception as exc:
+        try:
+            bpy.data.curves.remove(final_data)
+        except Exception as cleanup_exc:
+            raise _OwnedConstructionError(
+                "glyph curve construction and rollback failed: "
+                f"creation={type(exc).__name__}:{exc}; "
+                f"cleanup={type(cleanup_exc).__name__}:{cleanup_exc}",
+                owned_datablocks=(final_data,),
+            ) from exc
+        raise
+
+
 def _prepare_positioned_converted_candidate(
     source,
     source_data,
@@ -3688,14 +3791,43 @@ def _prepare_positioned_converted_candidate(
                     owned_datablocks=(source_data,),
                 )
             converted = to_curve(depsgraph, apply_modifiers=False)
+            conversion_error = None
             try:
-                final_data = _own_evaluated_glyph_curve(
-                    converted, f"{source.name}_glyph_curve"
-                )
+                text_curve = getattr(getattr(bpy, "types", None), "TextCurve", ())
+                # Blender 3.1–4.2 type to_curve() as TextCurve. copy() stays a
+                # FONT, so Glyphs fails the visual check (3.6/4.2) or crashes
+                # on temporary font materials (3.1). Own a real CURVE from a
+                # datablock copy; reading the temporary curve segfaults those
+                # hosts. A host whose copy is already a CURVE uses the spline
+                # rebuild that drops temporary FONT links.
+                if isinstance(converted, text_curve) and not _host_glyph_copy_is_curve():
+                    final_data = _own_evaluated_glyph_curve(
+                        converted, f"{source.name}_glyph_curve"
+                    )
+                elif isinstance(converted, text_curve):
+                    final_data = _copy_evaluated_glyph_curve(
+                        converted, f"{source.name}_glyph_curve"
+                    )
+                else:
+                    final_data = converted.copy()
+            except Exception as exc:
+                conversion_error = exc
+                raise
             finally:
                 clear = getattr(evaluated, "to_curve_clear", None)
                 if callable(clear):
-                    clear()
+                    try:
+                        clear()
+                    except Exception as cleanup_exc:
+                        raise _OwnedConstructionError(
+                            "temporary glyph curve release failed: "
+                            f"conversion={conversion_error}; "
+                            f"cleanup={type(cleanup_exc).__name__}:{cleanup_exc}",
+                            owned_objects=getattr(conversion_error, "owned_objects", ()),
+                            owned_datablocks=tuple(value for value in (
+                                final_data, *getattr(conversion_error, "owned_datablocks", ())
+                            ) if value is not None),
+                        ) from cleanup_exc
             if not allow_empty:
                 splines = getattr(final_data, "splines", None)
                 if splines is None or len(splines) == 0:
@@ -3714,6 +3846,15 @@ def _prepare_positioned_converted_candidate(
             if not callable(mesh_factory):  # pragma: no cover - checked by caller
                 raise RuntimeError("positioned mesh conversion capability disappeared")
             final_data = mesh_factory(evaluated, depsgraph=depsgraph)
+            if (allow_empty and len(final_data.vertices) == 0
+                    and len(final_data.materials) == 0):
+                # Blender 3.1 drops material slots when converting an empty
+                # FONT. Keep the proven zero-ink MESH and its exact ink identity.
+                for material in source_data.materials:
+                    owned_material = bpy.data.materials.get(material.name)
+                    if owned_material is None:
+                        raise ValueError("empty glyph mesh material has no main-database owner")
+                    final_data.materials.append(owned_material)
             if not allow_empty:
                 vertices = getattr(final_data, "vertices", None)
                 if vertices is None or len(vertices) == 0:
@@ -3764,6 +3905,12 @@ def _prepare_positioned_converted_candidate(
         )
         return final, final_data, None
     except Exception as exc:
+        construction_objects = tuple(getattr(exc, "owned_objects", ()) or ())
+        construction_data = tuple(getattr(exc, "owned_datablocks", ()) or ())
+        owned_data = []
+        for value in (source_data, final_data, *construction_data):
+            if _valid_owned_ref(value) and all(value is not owned for owned in owned_data):
+                owned_data.append(value)
         reason = (
             "glyph_curve_conversion_failed_not_impossibility_proof"
             if delivered == "glyphs"
@@ -3779,13 +3926,11 @@ def _prepare_positioned_converted_candidate(
             owned_artifacts=(
                 *_owned_artifacts_for_text_entity(source, source_data),
                 *_owned_artifacts_for_text_entity(final, final_data),
+                *tuple(_artifact(obj, None) for obj in construction_objects),
+                *tuple(_artifact(None, data) for data in construction_data),
             ),
-            owned_objects=_unique_owned_objects(source, final),
-            owned_datablocks=tuple(
-                value
-                for value in (source_data, final_data)
-                if _valid_owned_ref(value)
-            ),
+            owned_objects=_unique_owned_objects(source, final, *construction_objects),
+            owned_datablocks=tuple(owned_data),
         )
 
 

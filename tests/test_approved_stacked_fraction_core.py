@@ -43,10 +43,12 @@ from pdfcadcore import primitive_extractor  # noqa: E402
 # has a text-trace glyph id. Pattern-filled text without those ids stays one
 # editable object instead of cancelling the page. Render mode 3 (no fill or
 # stroke bits) is not imported; that hidden OCR layer is not ink. A
-# whitespace-only span whose box has no area is not ink either. Fraction
-# predicates, scale, and source-character proofs are unchanged.
+# whitespace-only span whose box has no area is not ink either.
+# October 11: main's verified character-program glyph id and synthetic-spacing
+# fields are kept beside those filters. Fraction predicates, scale, and
+# source-character proofs are unchanged.
 REVIEWED_COMBINED_SUCCESSOR_SHA256 = (
-    "64760122e5bc54a0355a8e1a94d4e1c44b7cd7a2545003d8ec81a677e7b5e161"
+    "4c6ce01b197cedff5a42b3905a6da01322651e3f1af8538d419df4dbd2bcbed5"
 )
 
 

@@ -1,0 +1,66 @@
+{
+  "host": "5.2.2 LTS",
+  "operator_properties": [
+    "auto_focus_view",
+    "auto_hide_default_cube",
+    "filepath",
+    "filter_glob",
+    "group_by_color",
+    "image_z_offset_mm",
+    "import_text",
+    "keep_selection_after_focus",
+    "line_z_offset_mm",
+    "mode",
+    "model3d_depth_mm",
+    "model3d_mode",
+    "page_arrangement",
+    "page_gap_ratio",
+    "pages",
+    "resume_interrupted",
+    "rna_type",
+    "show_advanced",
+    "text_mode",
+    "text_z_offset_mm",
+    "visual_style",
+    "white_page_background"
+  ],
+  "execute_result": [
+    "RUNNING_MODAL"
+  ],
+  "escape_result": [
+    "RUNNING_MODAL"
+  ],
+  "result_stats": [
+    {
+      "cancelled": true,
+      "pages": 0,
+      "text_failed": 0,
+      "report": "Private temporary import report"
+    },
+    {
+      "cancelled": false,
+      "pages": 1,
+      "text_failed": 0,
+      "report": "Private temporary import report"
+    }
+  ],
+  "final_result": [
+    "CANCELLED"
+  ],
+  "active_after_finish": false,
+  "native_pdf_objects_after_cancel": 0,
+  "page_checkpoints": [
+    [],
+    [],
+    []
+  ],
+  "checkpoint_completed_pages": [],
+  "checkpoint_remaining_pages": [
+    1
+  ],
+  "resume_result": [
+    "FINISHED"
+  ],
+  "resume_reused_root": true,
+  "checkpoint_removed_after_completion": true
+}
