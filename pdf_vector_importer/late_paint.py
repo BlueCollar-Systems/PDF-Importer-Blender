@@ -65,9 +65,10 @@ def final_rectangles(page, page_data):
     result.reverse()
     if not result:
         return []
-    from .pdf_paint_proof import final_svg_rectangles
+    from .pdf_paint_proof import final_svg_rectangles, optional_page_svg
 
-    if not final_svg_rectangles(page.get_svg_image(text_as_path=True), [row for _, _, row in result]):
+    svg = optional_page_svg(page, text_as_path=True)
+    if svg is None or not final_svg_rectangles(svg, [row for _, _, row in result]):
         return []
     return [(prim, box) for prim, box, _ in result]
 
@@ -135,7 +136,7 @@ def apply_final_rectangles(page, page_data, collection, builder_config):
         return []
     import bpy
     from mathutils import Vector
-    from .visual_style import preview_color
+    from .visual_style import preview_color, scene_linear_color
 
     owned = builder_config.get("_source_paint_objects", {})
     # Only freshly built objects in this page collection can supply final crop
@@ -183,7 +184,7 @@ def apply_final_rectangles(page, page_data, collection, builder_config):
         face.data.materials.clear()
         alpha = prim.fill_opacity
         for source_rgb, opacity in ((prim.source_fill_color, alpha), (prim.source_stroke_color, 1.0)):
-            rgb = preview_color(source_rgb, builder_config.get("visual_style", "source"))
+            rgb = scene_linear_color(preview_color(source_rgb, builder_config.get("visual_style", "source")))
             material = bpy.data.materials.new("PDF final annotation paint")
             material.diffuse_color = (*rgb, opacity)
             material.use_nodes = True

@@ -84,6 +84,14 @@ class EmbeddedImageDeliveryError(RuntimeError):
     """An embedded image cannot be decoded with its required transparency."""
 
 
+class NothingToResumeError(ValueError):
+    """Resume was asked for, but no import of this PDF with these settings was left unfinished.
+
+    Nothing failed and nothing was changed, so the dialog shows this as a
+    plain notice, not as "PDF import failed".
+    """
+
+
 def _env_bool(name: str, default: bool = False) -> bool:
     raw = os.environ.get(name, "").strip().lower()
     if not raw:
@@ -149,6 +157,15 @@ def _default_import_report_path(filepath: str) -> str:
     return os.path.join(run_dir, f"{base}_import_report.json")
 
 
+def _addon_preferences():
+    """This add-on's preferences, or None outside Blender or when not registered."""
+    try:
+        addon = bpy.context.preferences.addons.get("pdf_vector_importer")
+        return getattr(addon, "preferences", None)
+    except Exception:
+        return None
+
+
 def _sha256_path(path: str) -> str:
     digest = hashlib.sha256()
     with open(path, "rb") as handle:
@@ -175,66 +192,38 @@ def _discard_page_collection(page_collection) -> None:
         pass
 
 
-def _fail_text_page_guarded(page_collection, provenance_opts, stats, *, page_number,
-                            reason, stage):
-    """Roll back only the failed page; an unavailable check is never proof."""
-    failure = {"page": page_number, "reason": reason, "stage": stage}
-    for record in getattr(provenance_opts, "_text_delivery_records", ()):
-        if record.get("page") != page_number:
-            continue
-        record["status"] = "failed"
-        record["reason"] = "source_page_verification_failed"
-        record["final_representation"] = None
-        record["entity_ids"] = []
-        record["page_viewport_failure"] = failure
-    try:
-        owned_names = [obj.name for obj in page_collection.all_objects]
-        collection_name = page_collection.name
-        _discard_page_collection(page_collection)
-        object_get = bpy.data.objects.get
-        collection_get = bpy.data.collections.get
-        if not callable(object_get) or not callable(collection_get):
-            raise ValueError("Native rollback registry is unavailable")
-        remaining = [name for name in owned_names if object_get(name) is not None]
-        remaining_collection = collection_get(collection_name) is not None
-        failure["rollback"] = "failed" if remaining or remaining_collection else "verified"
-        failure["remaining_owned_entities"] = remaining
-        failure["remaining_page_collection"] = remaining_collection
-    except Exception as error:
-        failure["rollback"] = "unverified"
-        failure["rollback_error"] = f"{type(error).__name__}: {error}"
-    stats.setdefault("text_page_viewport_failures", []).append(failure)
-    return False
-
-
 def _clip_text_page_guarded(page_collection, provenance_opts, stats, *, page_number,
                             width_mm, height_mm):
+    """Trim edge text to the sheet; never discard the sheet over it.
+
+    A letter whose trim cannot be proven stays as delivered (untrimmed) and is
+    listed in stats["text_page_edge_warnings"]; the sheet's lines and every
+    other letter stay, and later sheets are still imported.
+    """
     from .text_page_clip import clip_delivered_page_text
 
+    records = getattr(provenance_opts, "_text_delivery_records", ()) or ()
     try:
-        clip_delivered_page_text(
-            page_collection, getattr(provenance_opts, "_text_delivery_records", ()),
+        result = clip_delivered_page_text(
+            page_collection, records,
             page_number=page_number, width_mm=width_mm, height_mm=height_mm)
-        return True
+        skipped = list(getattr(result, "skipped", ()) or ())
+        reason = "letters left untrimmed at the sheet edge"
     except Exception as error:
-        return _fail_text_page_guarded(
-            page_collection, provenance_opts, stats, page_number=page_number,
-            reason=f"{type(error).__name__}: {error}", stage="page_viewport")
-
-
-def _checkpoint_failed_text_page(stats, root_collection, checkpoint_path, safe_state):
-    """Resume only the previous completed state after positively verified rollback."""
-    failures = stats.get("text_page_viewport_failures") or []
-    if all(failure.get("rollback") == "verified" for failure in failures):
-        stats["resume"] = safe_state
-        stats["resume_checkpoint_path"] = checkpoint_path
-        _write_resume_checkpoint_guarded(checkpoint_path, safe_state, stats)
-    else:
-        stats["resume_unavailable"] = "Failed page rollback was not verified"
-        root_collection["pdf_import_resume_blocked"] = stats["resume_unavailable"]
-    remaining = list(safe_state.get("remaining_pages") or [])
-    for failure in failures:
-        failure["remaining_requested_pages"] = remaining
+        skipped = [
+            dict(entry)
+            for record in records
+            if isinstance(record, dict) and record.get("page") == page_number
+            for entry in record.get("page_viewport_clip_skipped") or ()
+        ]
+        reason = f"{type(error).__name__}: {error}"
+        result = None
+    if skipped or result is None:
+        stats.setdefault("text_page_edge_warnings", []).append({
+            "page": page_number, "reason": reason, "stage": "page_viewport",
+            "skipped_items": skipped,
+        })
+    return True
 
 
 def _importer_version() -> str:
@@ -620,6 +609,11 @@ def _terminal_import_failures(config: Dict, stats: Dict, provenance_opts: Any) -
             "text delivery failed "
             f"(required={required}, recorded={recorded}, delivered={delivered}, zero_ink={zero_ink}, failed={failed})"
         )
+    elif stats.get("text_final_state_failures"):
+        # The sheet is kept now, so a removed item must still be reported here.
+        failures.append(
+            f"final text check failed ({len(stats['text_final_state_failures'])} item(s))"
+        )
 
     raster_failures = list(stats.get("raster_delivery_failures") or [])
     if raster_failures:
@@ -848,6 +842,7 @@ def write_import_report(
     provenance_opts: Any = None,
 ) -> str:
     """Emit bcs.import_report/1.1 JSON for one import run."""
+    from .audit_mode import audit_enabled
     from .pdfcadcore.import_report import build_actual_text_entity_types, build_import_report
 
     path = (
@@ -903,11 +898,27 @@ def write_import_report(
         or len(tuple(record.get("attempts") or ())) > 1
         for record in text_delivery["items"]
     )
+    # Kept in a lesser form instead of failing the sheet: letters left
+    # untrimmed at the sheet edge, items not re-checked after the sheet moved,
+    # a sheet kept without the pictures that could not be placed.
+    text_page_edge_warnings = [
+        row for row in list(stats.get("text_page_edge_warnings") or []) if isinstance(row, dict)
+    ]
+    text_final_state_warnings = [
+        row for row in list(stats.get("text_final_state_warnings") or []) if isinstance(row, dict)
+    ]
+    sheets_kept_without_pictures = any(
+        record.get("stage") == "embedded_image" for record in raster_delivery_failures
+    )
+    sheet_step_downs = bool(
+        text_page_edge_warnings or text_final_state_warnings or sheets_kept_without_pictures
+    )
     fallback_used = (
         raster_is_fallback
         or bool(geometry_approximations)
         or int(text_delivery_summary["fallback_items"]) > 0
         or text_fallback is not None
+        or sheet_step_downs
     )
     fallback_attempted = (
         fallback_used
@@ -922,6 +933,12 @@ def write_import_report(
     elif geometry_approximations:
         count = len(geometry_approximations)
         fallback_reason = f"geometry_approximation_{count}_primitive{'s' if count != 1 else ''}"
+    elif text_page_edge_warnings:
+        fallback_reason = "sheet_edge_text_left_untrimmed"
+    elif text_final_state_warnings:
+        fallback_reason = "text_kept_without_post_move_recheck"
+    elif sheets_kept_without_pictures:
+        fallback_reason = "sheet_kept_without_unplaceable_pictures"
     else:
         fallback_reason = None
     from .pdfcadcore.fitz_loader import sample_process_mb
@@ -1003,6 +1020,10 @@ def write_import_report(
         "compound_fill_paint_order": stats.get("compound_fill_paint_order", []),
         "display_aids": stats.get("display_aids", []),
         "text_page_viewport_failures": stats.get("text_page_viewport_failures", []),
+        "text_page_edge_warnings": text_page_edge_warnings,
+        "text_final_state_warnings": text_final_state_warnings,
+        "pages_requested": int(stats.get("pages_requested", stats.get("pages", 0)) or 0),
+        "audit_mode": bool(stats["audit_mode"]) if "audit_mode" in stats else audit_enabled(),
         "scale_hints": stats.get("scale_hints"),
         "fallback_attempted": bool(fallback_attempted),
         "result_status": (
@@ -1022,6 +1043,11 @@ def write_import_report(
         extra["housekeeping_warnings"] = housekeeping_warnings
     if int(text_delivery_summary["source_items"]) > 0:
         extra["text_delivery"] = text_delivery
+    from .installed_font_route import installed_font_report
+
+    installed_fonts = installed_font_report(stats, text_delivery.get("items"))
+    if installed_fonts is not None:
+        extra["installed_fonts"] = installed_fonts
     if text_source_spans > 0 or int(text_delivery_summary["source_items"]) > 0:
         extra["text_representation_delivery"] = {
             "required": text_delivery_required,
@@ -1105,6 +1131,9 @@ def write_import_report(
             + clip_fill_warnings
             + glyph_code_warnings
             + (1 if stats.get("temp_cleanup_error") else 0)
+            + sum(max(1, len(list(row.get("skipped_items") or ())))
+                  for row in text_page_edge_warnings)
+            + len(text_final_state_warnings)
         ),
         fallback_used=fallback_used,
         fallback_reason=fallback_reason,
@@ -1116,6 +1145,13 @@ def write_import_report(
         text_fallback=text_fallback,
         extra=extra,
     )
+    if sheet_step_downs:
+        from .import_outcome import human_summary_note
+
+        note = human_summary_note(stats)
+        summary = str(report.extra.get("human_summary") or "").strip()
+        if note and note not in summary:
+            report.extra["human_summary"] = f"{summary} {note}".strip()
     if raster_delivery_failures:
         diagnostics = report.extra.get("diagnostics")
         if isinstance(diagnostics, dict):
@@ -1477,6 +1513,11 @@ def _auto_hide_default_cube(scene) -> int:
                 pass
             try:
                 obj.hide_viewport = True
+            except Exception:
+                pass
+            try:
+                # Renders (F12) match the viewport: the cube does not cover the drawing.
+                obj.hide_render = True
             except Exception:
                 pass
             hidden += 1
@@ -2386,6 +2427,37 @@ def _render_page_raster(
     }
 
 
+_INSTALLED_FONT_TEXT_MODES = frozenset({"labels", "text", "3d_text", "glyphs", "geometry"})
+
+
+def _with_installed_fonts(doc, page, text_items, page_number, text_mode, stats):
+    """Text items with width-proven installed faces attached (see installed_font_route).
+
+    The route only adds a better first attempt; if its check cannot finish the
+    page keeps today's items unchanged and the reason is recorded.
+    """
+    items = list(text_items or [])
+    try:
+        mode = normalize_representation(text_mode)
+    except ValueError:
+        return items
+    if mode not in _INSTALLED_FONT_TEXT_MODES or not items:
+        return items
+    from .installed_font_route import attach_installed_fonts
+
+    try:
+        return attach_installed_fonts(doc, page, items, int(page_number), stats)
+    except Exception as exc:
+        checks = stats.setdefault("installed_font_checks", [])
+        if isinstance(checks, list):
+            checks.append({
+                "page": int(page_number),
+                "status": "not_used",
+                "reason": f"the installed-font check could not finish ({type(exc).__name__})",
+            })
+        return items
+
+
 def _delivered_text_bboxes(text_items, delivery_records, page_number: int):
     delivered_ids = {
         int(record.get("source_span_id"))
@@ -2840,6 +2912,56 @@ class _ImportImageCache:
         self.released = True
 
 
+def _png_has_alpha(image_bytes: bytes) -> bool:
+    """True when a PNG IHDR says the file has an alpha channel.
+
+    Gray+alpha is color type 4 and RGBA is color type 6. Opaque images stay on
+    the three-node shader the paint-order check expects.
+    """
+    if (
+        len(image_bytes) < 26
+        or image_bytes[:8] != b"\x89PNG\r\n\x1a\n"
+        or image_bytes[12:16] != b"IHDR"
+    ):
+        return False
+    return image_bytes[25] in (4, 6)
+
+
+def _assign_source_image_colorspace(image) -> None:
+    """Tag PDF image bytes as sRGB so Blender linearizes them on sample.
+
+    The bytes are display sRGB, same as PDF colors. Tagging them Non-Color
+    stores those numbers as scene-linear. The Standard view transform then
+    gamma-encodes them, so a mid-gray gradient paints washed out next to the
+    PDF. ``sRGB`` is the colorspace name on Blender 3.1 through 5.2.
+    """
+    image.colorspace_settings.name = "sRGB"
+
+
+def _connect_image_shader(nodes, links, tex, bsdf, out, *, has_alpha: bool) -> None:
+    """Show image color, and let soft-mask alpha reveal the page behind it.
+
+    The color is emission so the sheet does not depend on scene lights. Emission
+    does not honor the Principled alpha input, so a transparent pixel would
+    otherwise paint as a solid color. Opaque images keep the direct shader link.
+    Images with an alpha channel mix with a transparent shader by that alpha.
+    """
+    links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
+    if not has_alpha:
+        links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
+        return
+    transparent = nodes.new(type="ShaderNodeBsdfTransparent")
+    mix = nodes.new(type="ShaderNodeMixShader")
+    fac = mix.inputs["Fac"] if "Fac" in mix.inputs else mix.inputs[0]
+    first = mix.inputs[1]
+    second = mix.inputs[2]
+    links.new(tex.outputs["Alpha"], fac)
+    links.new(transparent.outputs["BSDF"], first)
+    links.new(bsdf.outputs["BSDF"], second)
+    shader_out = mix.outputs["Shader"] if "Shader" in mix.outputs else mix.outputs[0]
+    links.new(shader_out, out.inputs["Surface"])
+
+
 def _set_image_plane_metadata(
     obj,
     placement: dict,
@@ -2950,7 +3072,7 @@ def _create_uncached_image_plane(
             raise RuntimeError("packed image digest changed after verification")
         tex.image = image
         tex.extension = "EXTEND"
-        image.colorspace_settings.name = "Non-Color"
+        _assign_source_image_colorspace(image)
         bsdf.inputs["Base Color"].default_value = (0, 0, 0, 1)
         bsdf.inputs["Roughness"].default_value = 1
         from .image_materials import source_image_sockets
@@ -2958,8 +3080,9 @@ def _create_uncached_image_plane(
         specular.default_value = 0
         bsdf.inputs["Emission Strength"].default_value = 1
         links.new(tex.outputs["Color"], emission)
-        links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
-        links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
+        _connect_image_shader(
+            nodes, links, tex, bsdf, out, has_alpha=_png_has_alpha(image_bytes)
+        )
         material.blend_method = "HASHED"
         if mesh.materials:
             mesh.materials[0] = material
@@ -3085,7 +3208,7 @@ def _create_image_plane(
             out = nodes.new(type="ShaderNodeOutputMaterial")
             tex.image = image
             tex.extension = "EXTEND"
-            image.colorspace_settings.name = "Non-Color"
+            _assign_source_image_colorspace(image)
             bsdf.inputs["Base Color"].default_value = (0, 0, 0, 1)
             bsdf.inputs["Roughness"].default_value = 1
             from .image_materials import source_image_sockets
@@ -3093,8 +3216,9 @@ def _create_image_plane(
             specular.default_value = 0
             bsdf.inputs["Emission Strength"].default_value = 1
             links.new(tex.outputs["Color"], emission)
-            links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
-            links.new(bsdf.outputs["BSDF"], out.inputs["Surface"])
+            _connect_image_shader(
+                nodes, links, tex, bsdf, out, has_alpha=_png_has_alpha(image_bytes)
+            )
             created.blend_method = "HASHED"
             return created
 
@@ -3301,12 +3425,27 @@ def _normalize_page_arrangement(raw: str | None) -> str:
     return "spread"
 
 
+# Compact must stack visibly tighter than Spread (fixed 20% gap) by default.
+_COMPACT_GAP_DEFAULT = 0.05
+
+
 def _normalize_page_gap_ratio(raw) -> float:
     try:
         ratio = float(raw)
     except (TypeError, ValueError):
-        ratio = 0.20
+        ratio = _COMPACT_GAP_DEFAULT
+    if not math.isfinite(ratio):
+        ratio = _COMPACT_GAP_DEFAULT
     return max(0.0, min(1.0, ratio))
+
+
+def _offset_mm(config: Dict, key: str, default: float) -> float:
+    """A Z offset in mm; 0.0 means flat. Only a missing or non-number value uses the default."""
+    try:
+        value = float(config.get(key))
+    except (TypeError, ValueError):
+        return float(default)
+    return value if math.isfinite(value) else float(default)
 
 
 def _page_stack_step(page_height_m: float, arrangement: str, gap_ratio: float) -> float:
@@ -3443,14 +3582,54 @@ class _ObjectNameLookup:
         self._snapshot = None
 
 
+_PAGE_CLIP_RECHECK_FAILURE = "final_entity_page_clip_unverified:"
+_OUTLINE_RECHECK_FAILURE = "final_source_outline_unverified:"
+_OUTLINE_MODIFIER_DEPENDENT = ":unverified native modifier"
+
+
+def _post_stack_failures_are_warning_only(record_failures, entity_ids) -> bool:
+    """True when only the after-move sheet-edge trim re-check failed.
+
+    The outline re-proof refuses any modifier it cannot see verified, so an
+    outline letter whose trim re-check failed also reports "unverified native
+    modifier"; that one is a consequence, not a separate problem.
+    """
+    clipped = set()
+    dependent = set()
+    for failure in record_failures:
+        text = str(failure)
+        clip_entity = next((entity_id for entity_id in entity_ids if text.startswith(
+            f"{_PAGE_CLIP_RECHECK_FAILURE}{entity_id}:")), None)
+        if clip_entity is not None:
+            clipped.add(clip_entity)
+            continue
+        outline_entity = next((entity_id for entity_id in entity_ids
+                               if text == f"{_OUTLINE_RECHECK_FAILURE}{entity_id}{_OUTLINE_MODIFIER_DEPENDENT}"),
+                              None)
+        if outline_entity is None:
+            return False
+        dependent.add(outline_entity)
+    return bool(clipped) and dependent <= clipped
+
+
 def _reverify_text_delivery_after_stack(
     delivery_records,
     *,
     page_number: int,
     stack_offset_m: float,
     provenance_opts=None,
+    warnings=None,
 ):
-    """Bind proof to final host state after every page-placement mutation."""
+    """Bind proof to final host state after every page-placement mutation.
+
+    A record whose only failures are the float32 sheet-edge trim re-check
+    (the item already passed the exact check before the sheet moved) is kept
+    as delivered and appended to ``warnings`` instead of being removed.
+    Glyph outlines get the full exact re-proof only in audit mode.
+    """
+    from .audit_mode import audit_enabled
+
+    audit = audit_enabled()
     failures = []
     expected_types = {
         "labels": "FONT",
@@ -3547,6 +3726,7 @@ def _reverify_text_delivery_after_stack(
                     proof['source_outline'] = verify_source_outline_entity(
                         obj, expected_world_matrix=expected_matrix,
                         page_clip_verified=bool(proof.get('source_page_viewport')),
+                        light=not audit,
                     )
                     for key in ('source_outline_sha256', 'source_placement_index'):
                         if proof['source_outline'].get(key) != bindings[0].get(key) or key not in bindings[0]:
@@ -3578,6 +3758,16 @@ def _reverify_text_delivery_after_stack(
         record["final_state_verification"] = final_proof
         if delivered_attempt:
             delivered_attempt["final_state_verification"] = final_proof
+        if record_failures and _post_stack_failures_are_warning_only(record_failures, entity_ids):
+            final_proof["status"] = "warning"
+            record["post_stack_recheck"] = {"status": "warning", "failures": list(record_failures)}
+            if warnings is not None:
+                warnings.append({
+                    "item_id": str(record.get("item_id") or ""),
+                    "page": int(page_number),
+                    "failures": list(record_failures),
+                })
+            continue
         if record_failures:
             item_id = str(record.get("item_id") or "")
             outcomes = getattr(provenance_opts, "_text_delivery_outcomes", None)
@@ -3714,9 +3904,9 @@ def iter_import_pdf(
     visual_style = str(config.get("visual_style", "source") or "source").strip().lower()
     if visual_style not in {"source", "blueprint", "high_contrast"}:
         visual_style = "source"
-    line_z_offset_m = float(config.get("line_z_offset_mm", 0.10) or 0.10) * _MM_TO_M
-    text_z_offset_m = float(config.get("text_z_offset_mm", 0.35) or 0.35) * _MM_TO_M
-    image_z_offset_m = float(config.get("image_z_offset_mm", 0.0) or 0.0) * _MM_TO_M
+    line_z_offset_m = _offset_mm(config, "line_z_offset_mm", 0.10) * _MM_TO_M
+    text_z_offset_m = _offset_mm(config, "text_z_offset_mm", 0.35) * _MM_TO_M
+    image_z_offset_m = _offset_mm(config, "image_z_offset_mm", 0.0) * _MM_TO_M
     auto_focus_view = bool(config.get("auto_focus_view", True))
     keep_selection_after_focus = bool(config.get("keep_selection_after_focus", False))
     auto_hide_default_cube = bool(config.get("auto_hide_default_cube", True))
@@ -3760,6 +3950,12 @@ def iter_import_pdf(
     image_dir = ""
     image_dir_owned = False
     image_cache = _ImportImageCache()
+    from . import audit_mode
+
+    # Heavy self-proofs run only in audit mode (config, BC_PDF_AUDIT, or the
+    # "Audit import (slow self-checks)" preference); default off.
+    audit = audit_mode.resolve_audit_mode(config, _addon_preferences())
+    audit_token = audit_mode.activate(audit)
 
     try:
         # 1. Verify PyMuPDF is available
@@ -3855,6 +4051,12 @@ def iter_import_pdf(
         requested_page_numbers = [index + 1 for index in requested_page_indices]
         resume_state = None
         if bool(config.get("resume")):
+            if not os.path.isfile(checkpoint_path):
+                # Every sheet of the last run was built (or none was started).
+                raise NothingToResumeError(
+                    "Nothing to resume: no import of this PDF with these settings was "
+                    "left unfinished. Turn off Resume Interrupted Import to import it again."
+                )
             resume_state = load_resume_checkpoint(
                 checkpoint_path,
                 source_sha256=source_sha256,
@@ -3951,6 +4153,7 @@ def iter_import_pdf(
             ]
             if prior_delivery:
                 import_cfg._text_delivery_records = prior_delivery
+        total_stats["audit_mode"] = bool(audit)
         raster_pages_imported = int(
             total_stats.get("raster_pages_imported", 0) or 0
         )
@@ -4397,8 +4600,14 @@ def iter_import_pdf(
                         width_mm=page_data.width, height_mm=page_data.height,
                         flip_y=import_cfg.flip_y, pdf_sha256=source_sha256, collection=page_col,
                     )
+                    # The outline provider keeps the original items; only the
+                    # builder sees installed-face copies (each keeps its original).
+                    build_text_items = _with_installed_fonts(
+                        doc, page, page_data.text_items, page_num,
+                        import_cfg.text_mode, total_stats,
+                    )
                     text_count = build_all_text(
-                        page_data.text_items,
+                        build_text_items,
                         page_col,
                         page_num,
                         visual_style=visual_style,
@@ -4436,11 +4645,10 @@ def iter_import_pdf(
                     _discard_page_collection(page_col)
                     break
                 _add_phase_ms("text_ms", t_phase)
-                if not _clip_text_page_guarded(
+                _clip_text_page_guarded(
                     page_col, import_cfg, total_stats, page_number=page_num,
                     width_mm=page_data.width, height_mm=page_data.height,
-                ):
-                    break
+                )
                 # Sub-stages of text_ms, accumulated across pages, reported under
                 # performance.helpers_ms so nothing sums them as phases.
                 for helper_name, helper_ms in text_stage_timings().items():
@@ -4467,6 +4675,7 @@ def iter_import_pdf(
                     break
                 t_phase = time.perf_counter()
                 placements = []
+                embedded_image_failed = False
                 if import_mode == "raster":
                     rendered = _render_page_raster(
                         page,
@@ -4492,15 +4701,17 @@ def iter_import_pdf(
                     try:
                         placements = _extract_image_placements(doc, page, page_num, import_cfg, image_dir)
                     except EmbeddedImageDeliveryError as error:
+                        # The pictures are left out and listed; the sheet's lines
+                        # and text stay and later sheets are still imported.
                         _record_raster_delivery_failure(
                             total_stats["raster_delivery_failures"], page_num=page_num,
                             stage="embedded_image", reason=str(error),
                         )
-                        _add_phase_ms("images_ms", t_phase)
-                        _discard_page_collection(page_col)
-                        break
+                        placements = []
+                        embedded_image_failed = True
                     if (
-                        import_cfg.raster_fallback
+                        not embedded_image_failed
+                        and import_cfg.raster_fallback
                         and not placements
                         and (not page_data.primitives or _looks_like_page_frame_only(page_data))
                     ):
@@ -4654,18 +4865,18 @@ def iter_import_pdf(
             # 9j. Multi-page stacking: shift this page's collection downward
             if len(requested_page_indices) > 1 and _page_stack_offset_m != 0.0:
                 _stack_page_objects(page_col.all_objects, _page_stack_offset_m)
+            final_text_warnings = []
             final_text_failures = _reverify_text_delivery_after_stack(
                 getattr(import_cfg, "_text_delivery_records", ()),
                 page_number=page_num,
                 stack_offset_m=_page_stack_offset_m,
                 provenance_opts=import_cfg,
+                warnings=final_text_warnings,
             )
             total_stats["text_final_state_failures"].extend(final_text_failures)
-            if final_text_failures:
-                _fail_text_page_guarded(
-                    page_col, import_cfg, total_stats, page_number=page_num,
-                    reason="Final stacked text verification failed", stage="stacked_final_state")
-                break
+            if final_text_warnings:
+                total_stats.setdefault("text_final_state_warnings", []).extend(final_text_warnings)
+            # Only the failed items were removed; the sheet and its other items stay.
             text_count = max(0, int(text_count) - len(final_text_failures))
             # Advance offset for the next page (page_data.height is in mm)
             page_height_m = page_data.height * _MM_TO_M
@@ -4733,24 +4944,21 @@ def iter_import_pdf(
             total_stats["resume_checkpoint_path"] = checkpoint_path
             _write_resume_checkpoint_guarded(checkpoint_path, resume_state, total_stats)
 
-        if total_stats.get("text_page_viewport_failures"):
-            _checkpoint_failed_text_page(
-                total_stats, root_col, checkpoint_path, last_completed_resume_state)
-
         phase_timings_ms["pages_import_ms"] = (time.perf_counter() - t_pages_phase) * 1000.0
         t_phase = time.perf_counter()
         doc.close()
 
         elapsed = time.perf_counter() - t_start
+        unfinished_pages = [page for page in requested_page_numbers if page not in completed_pages]
         if total_stats["cancelled"]:
             _progress(
                 min(0.99, 0.10 + 0.75 * (len(completed_pages) / total_page_count)),
                 "Import cancelled safely; completed pages kept and resume checkpoint written.",
             )
-        elif total_stats.get("text_page_viewport_failures"):
+        elif unfinished_pages:
             _progress(
                 min(0.99, 0.10 + 0.75 * (len(completed_pages) / total_page_count)),
-                "Import stopped: page text verification failed; completed pages kept.",
+                "Import stopped early; completed sheets kept.",
             )
         else:
             _progress(1.0, "Import complete.")
@@ -4795,6 +5003,7 @@ def iter_import_pdf(
 
         # Merge extended stats into return dict
         total_stats["pages"] = len(requested_page_indices)
+        total_stats["pages_requested"] = len(requested_page_numbers)
         total_stats["collections"] = collections_created
         # Item-scoped raster text patches are textured planes exactly like
         # raster pages; both need the material/texture viewport handoff.
@@ -4840,6 +5049,14 @@ def iter_import_pdf(
         total_stats["text_delivery_fallback_items"] = int(delivery_summary["fallback_items"])
         total_stats["text_delivery_failed_items"] = int(delivery_summary["failed_items"])
         total_stats["text_delivery_failed_item_ids"] = list(delivery_summary["failed_item_ids"])
+        from .installed_font_route import installed_font_report
+
+        installed_fonts = installed_font_report(
+            total_stats, getattr(import_cfg, "_text_delivery_records", ())
+        )
+        total_stats["installed_font_delivered_items"] = int(
+            (installed_fonts or {}).get("items_delivered_with_installed_font", 0)
+        )
         total_stats["clip_fill_warning"] = _clip_fill_warning_line(
             total_stats.get("clip_fill_delivery")
         )
@@ -4865,6 +5082,7 @@ def iter_import_pdf(
         return total_stats
 
     finally:
+        audit_mode.deactivate(audit_token)
         image_cache.release()
         if doc is not None and not bool(getattr(doc, "is_closed", False)):
             try:

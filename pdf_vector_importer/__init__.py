@@ -15,6 +15,7 @@ bl_info = {
     "blender": (3, 1, 0),
     "location": "File > Import > PDF Vector (.pdf)",
     "description": "Import PDF vector drawings as native Blender geometry",
+    "warning": "Windows 64-bit only",
     "category": "Import-Export",
 }
 
@@ -26,6 +27,7 @@ def register():
         ensure_pymupdf_runtime,
         print_diagnostics,
         report_host_python_floor,
+        runtime_unavailable_message,
     )
 
     import bpy
@@ -36,6 +38,9 @@ def register():
     bpy.utils.register_class(preferences.PDFVectorImporterPreferences)
     bpy.utils.register_class(operators.IMPORT_OT_pdf_vector_cancel)
     bpy.utils.register_class(operators.IMPORT_OT_pdf_vector)
+    # Drag-and-drop import exists only in Blender 4.1+; older versions skip it.
+    if operators.PDFVEC_FH_import is not None:
+        bpy.utils.register_class(operators.PDFVEC_FH_import)
     bpy.types.TOPBAR_MT_file_import.append(operators.menu_func_import)
 
     print_diagnostics()
@@ -43,8 +48,7 @@ def register():
     if not ensure_pymupdf_runtime(auto_install=False):
         print(
             "[PDF Vector Importer] PyMuPDF unavailable at register time. "
-            "Reinstall the official release ZIP; runtime checks do not run pip "
-            "or access the network."
+            + runtime_unavailable_message()
         )
 
 
@@ -55,6 +59,8 @@ def unregister():
     import bpy
 
     bpy.types.TOPBAR_MT_file_import.remove(operators.menu_func_import)
+    if operators.PDFVEC_FH_import is not None:
+        bpy.utils.unregister_class(operators.PDFVEC_FH_import)
     bpy.utils.unregister_class(operators.IMPORT_OT_pdf_vector)
     bpy.utils.unregister_class(operators.IMPORT_OT_pdf_vector_cancel)
     bpy.utils.unregister_class(preferences.PDFVectorImporterPreferences)

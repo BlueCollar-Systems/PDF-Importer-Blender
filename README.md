@@ -23,6 +23,11 @@ Powered by the pdfcadcore shared extraction library and PyMuPDF.
 
 ## Installation
 
+**Windows 64-bit (x64) only for now.** macOS, Linux and Windows on ARM are not
+supported by the release ZIP: the PDF reader it bundles (PyMuPDF) is built for
+Windows x64 only, so the add-on cannot import there and reinstalling will not
+change that.
+
 ### Blender Add-on (Recommended)
 
 1. Download `Blender-PDF-Importer_vX.Y.Z.zip` from Releases, or build it with:
@@ -55,10 +60,9 @@ Install the latest release ZIP via Preferences → Add-ons (disable old version 
 
 ### Manual Install
 
-Copy the `pdf_vector_importer/` directory into your Blender addons path:
-- Windows: `%APPDATA%\Blender Foundation\Blender\<version>\scripts\addons\`
-- macOS: `~/Library/Application Support/Blender/<version>/scripts/addons/`
-- Linux: `~/.config/blender/<version>/scripts/addons/`
+Copy the `pdf_vector_importer/` directory from the release ZIP into your
+Blender add-ons folder (Windows 64-bit only):
+- `%APPDATA%\Blender Foundation\Blender\<version>\scripts\addons\`
 
 ## Usage
 
@@ -68,6 +72,10 @@ After enabling the addon:
 2. Select a PDF file
 3. Choose import mode (Auto, Vector, Raster, or Hybrid) and adjust options in the import panel
 4. Click **Import PDF Vector**
+
+On Blender 4.1 and newer you can also drag a PDF from Windows Explorer onto the
+3D Viewport or the Outliner: the import options open for that file, and
+**Import PDF Vector** imports it. One PDF per drop.
 
 Geometry is grouped into collections by page and (optionally) by source layer or color.
 Page selections such as `1,3-5` import each selected page once. Reversed ranges
@@ -89,6 +97,19 @@ rolled back, completed pages remain, and an atomic source/config-bound checkpoin
 records exactly which pages remain. Enable **Resume Interrupted Import** on the
 same PDF and settings to continue in the existing root collection without
 duplicating completed pages.
+
+One item that cannot be brought in as asked never costs its sheet or the
+sheets after it. A letter whose trim at the sheet edge cannot be proven is
+kept as drawn (untrimmed), a picture that cannot be placed is left out, and
+every sheet is still built. The import finishes with plain lines such as
+"Imported 12 of 12 sheets; 1 item needs a look", one line per sheet that
+needs a look, and the folder that holds the full report.
+
+Everyday imports run the checks that decide how each item is brought in plus
+quick identity, position and colour checks. The slow exact re-proofs of every
+letter shape are off by default; turn on **Audit import (slow self-checks)** in
+the add-on preferences, or set `BC_PDF_AUDIT=1`, for testing and support. Each
+import report records `audit_mode`.
 
 Choose the representation you actually need: **Text** is flat editable Blender
 `FONT`, **3D Text** is extruded editable `FONT`, **Glyphs** is fixed `CURVE`
@@ -121,9 +142,29 @@ FINAL Blender ladder (left rung first):
 | **Raster** | Raster only |
 
 Notes:
-- Text, 3D Text, Glyphs, and Geometry load only the exact embedded PDF font
-  program associated with the source span. The importer does not search the
-  operating system for a similarly named font.
+- Text, 3D Text, Glyphs, and Geometry use the exact font program stored in
+  the PDF for the source span. When the PDF names a font but does not store it
+  (common on CAD and Tekla drawings that use Arial), the installed font of that
+  name is used only if the PDF proves it is the same font: the font uses plain
+  WinAnsi letters and has no ToUnicode letter map of its own, exactly one
+  installed font file has that name and style (font collections such as .ttc
+  files are not read, and a folder search only looks at single .ttf/.otf
+  files), every width the PDF lists matches that installed font to within
+  1/1000 of the text height, that font has every character the page draws with
+  it, and each text item's letters are the letters the page actually draws
+  there (an `/ActualText` replacement keeps that item on the outline route). If
+  any check fails, the text keeps the outline route below. The import report
+  lists each check under `extra.installed_fonts`, and each such text item
+  records `font_source: installed` and `widths_matched`.
+- Text and 3D Text make one editable text object per line of PDF text when the
+  PDF places every letter where the font's own widths put it (within 0.5% of
+  the text height: no extra letter spacing, word spacing or spacing gaps).
+  Otherwise, or if the one-object version fails its placement check, each
+  letter is placed as its own text object as before. The placement check uses
+  the font's own widths, which is how Blender 5.2.2 was measured to lay out a
+  line (it does not kern); on other Blender versions a line whose font kerns
+  two neighbouring letters stays letter by letter. Each text item records
+  `text_object_granularity` (`span_object` or `per_character`) and the reason.
 - Glyphs and Geometry are distinct host types and conversion paths: Glyphs
   verifies a real Blender `CURVE`; Geometry verifies a real Blender `MESH`.
 - A generic exception is a failure, not proof that the requested type is
@@ -147,22 +188,33 @@ Notes:
 
 See **[COMPATIBILITY.md](COMPATIBILITY.md)** for the full matrix. Summary:
 
-| Blender Version | Bundled Python | PyMuPDF | Status |
-|----------------|---------------|---------|--------|
-| 5.2 LTS | 3.13 | >=1.24,<2.0 | ✅ Requested-representation host acceptance |
-| 3.6 LTS | 3.10 | >=1.24,<2.0 | ⚠️ Expected |
-| 4.0–4.2 | 3.11 | >=1.24,<2.0 | ⚠️ Expected |
-| 4.5 LTS | 3.11 | >=1.24,<2.0 | ⚠️ Expected |
-| 2.83–2.93 | 3.9 | legacy pin | ⚠️ Expected only after legacy branch testing |
-| 2.79 and earlier | | | ❌ Not supported |
+Operating system: **Windows 64-bit (x64) only.** macOS, Linux and Windows on
+ARM are not supported.
+
+| Blender Version | Bundled Python | Status |
+|----------------|---------------|--------|
+| 5.2 LTS | 3.13 | ✅ Host acceptance; automatic check passes (Text, 3D Text, Glyphs) |
+| 5.0–5.1 | | ✅ Smoke-tested at v1.0.42; not re-tested since |
+| 4.5 LTS | 3.11 | ✅ Automatic check passes (Text, 3D Text, Glyphs) |
+| 4.0–4.2 | 3.11 | ⚠️ 4.2: Text and 3D Text pass; **Glyphs does not work**. 4.0–4.1 not tested |
+| 3.6 LTS | 3.10 | ⚠️ Text and 3D Text pass; **Glyphs does not work** |
+| 3.1–3.5 | 3.10 | ⚠️ 3.1: Text and 3D Text pass; **Glyphs crashes Blender**. 3.2–3.5 not tested |
+| 3.0 and earlier | 3.9 or older | ❌ Not supported |
 
 Evidence levels:
-- `✅ Verified`: host-run validation evidence captured.
-- `⚠️ Expected`: syntax/runtime compatible but no host-run evidence yet.
-- `❌ Not supported`: outside maintained/tested compatibility scope.
+- `✅`: run inside that Blender and passed.
+- `⚠️`: run inside that Blender, but a text mode fails or part of the range is
+  not tested.
+- `❌ Not supported`: the bundled PDF reader cannot load there.
+
+"Automatic check" is the `blender-host-matrix` GitHub check: it installs the
+release ZIP into real Blender 3.1.2, 3.6.23, 4.2.23, 4.5.14 and 5.2.2 (headless)
+and imports a small made-up two-sheet PDF. The results above are from
+2026-10-10; [COMPATIBILITY.md](COMPATIBILITY.md) has the details.
 
 ## Requirements
 
+- Windows 64-bit (x64) only for now. macOS, Linux and Windows on ARM are not supported by the release ZIP.
 - Blender 3.1 or newer (Blender 3.0 ships Python 3.9; the vendored PyMuPDF wheel requires Python >=3.10)
 - Bundled Blender Python 3.10+
 - PyMuPDF >=1.24,<2.0, bundled in release ZIPs

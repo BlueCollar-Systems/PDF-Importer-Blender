@@ -12,7 +12,9 @@ from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 from fontTools.ttLib import TTFont
 
-from pdf_vector_importer.pdfcadcore.embedded_fonts import EmbeddedFontCatalog, source_control_zero_ink_proof
+from pdf_vector_importer.pdfcadcore.embedded_fonts import (
+    EmbeddedFontCatalog, EmbeddedFontFailure, source_control_zero_ink_proof,
+)
 from pdf_vector_importer.pdfcadcore.primitive_extractor import (
     _raw_text_with_source_quads, _source_character_font_digest,
     _source_font_occurrence_keys, extract_page,
@@ -114,6 +116,48 @@ def subset_pdf(font_path):
     return pdf
 
 
+def test_truncated_hmtx_sidebearings_still_bind(deterministic_exact_font):
+    """A PDF subset that omits the hmtx side-bearing tail must still become text."""
+    import struct
+
+    source = TTFont(deterministic_exact_font)
+    source["hhea"].numberOfHMetrics = 2
+    saved = BytesIO()
+    source.save(saved)
+    source.close()
+    blob = bytearray(saved.getvalue())
+    table_count = struct.unpack_from(">H", blob, 4)[0]
+    for index in range(table_count):
+        offset = 12 + index * 16
+        tag, _checksum, _table_offset, _length = struct.unpack_from(">4sIII", blob, offset)
+        if tag == b"hmtx":
+            struct.pack_into(">I", blob, offset + 12, 8)
+            break
+    else:
+        raise AssertionError("hmtx table missing")
+    broken = bytes(blob)
+    from pdf_vector_importer.pdfcadcore.embedded_fonts import (
+        _fonttools_loadable,
+        _repair_truncated_hmtx,
+    )
+
+    assert _fonttools_loadable(broken) is False
+    repaired = _repair_truncated_hmtx(broken)
+    assert repaired != broken
+    assert _fonttools_loadable(repaired) is True
+
+    pdf = fitz.open()
+    page = pdf.new_page(width=200, height=80)
+    page.insert_font(fontname="F1", fontbuffer=broken)
+    page.insert_text((20, 50), "AB", fontname="F1", fontsize=18)
+    catalog = EmbeddedFontCatalog.from_page(page, 1)
+    assert catalog.failures == ()
+    assert catalog.assets
+    items = extract_page(page, 1, detect_arcs=False).text_items
+    assert any(item.text.strip() == "AB" and item.font_asset is not None for item in items)
+    pdf.close()
+
+
 @pytest.mark.parametrize("in_form", [False, True])
 def test_complementary_subsets_bind_actual_character_programs(deterministic_exact_font, in_form):
     source = subset_pdf(deterministic_exact_font)
@@ -154,6 +198,21 @@ def test_complementary_subsets_bind_actual_character_programs(deterministic_exac
     assert page.get_pixmap().samples == page.get_pixmap().samples
     pdf.close()
     source.close()
+
+
+def test_failed_font_build_is_not_reported_as_missing_from_the_pdf():
+    failure = EmbeddedFontFailure(
+        1, "Nimbus", "embedded_font_asset_build_failed", 4,
+        "ExactFontSourceImpossible", "unsupported embedded font format: pfa",
+        "source_specific_impossibility",
+    )
+    catalog = EmbeddedFontCatalog(1, {}, {"Nimbus": failure})
+    asset, got = catalog.resolve_span("Nimbus", [{
+        "source_font_program_sha256": "ab" * 32,
+        "source_font_binding_verified": True,
+    }])
+    assert asset is None
+    assert got is failure
 
 
 def test_mixed_partial_and_wrong_program_spans_fail_closed(deterministic_exact_font):
@@ -380,6 +439,8 @@ def test_partial_trace_census_never_borrows_another_same_name_program_glyph():
     other = char("A", 0, "b" * 64)
     span = {"font": "Same", "chars": [unresolved, proven, other]}
     raw = {"blocks": [{"type": 0, "lines": [{"spans": [span]}]}]}
+    # Glyphs 3 and 7 at the same origin disagree, so this letter stays
+    # unbound. Glyph 8 belongs to the other program and must not be borrowed.
     trace = {"font": "Same", "chars": [(65, 8, (0, 0)), (65, 3, (10, 0)),
                                              (65, 7, (10, 0)), (66, 4, (20, 0))]}
     page = SimpleNamespace(get_texttrace=lambda: [trace])
@@ -448,6 +509,33 @@ def test_only_native_synthetic_spaces_without_paint_can_retain_font_binding(text
     assert layout.source_synthetic_spacing is expected
     assert layout.source_origin_pdf == (10, 20)
     assert layout.advance_width == 10
+
+
+def test_filled_synthetic_word_space_keeps_its_trace_glyph():
+    """A painted word space can also carry MuPDF's synthetic bit.
+
+    Sheet-edge lines do this. Stripping that space used to fail the whole
+    line as an unverified font binding.
+    """
+    from pdfcadcore.embedded_fonts import _page_program_glyph_maps
+    from pdfcadcore.primitive_extractor import _character_layout, _trace_glyph_queues
+
+    char = {"c": " ", "origin": (10, 20), "bbox": (10, 20, 20, 30),
+            "quad": ((10, 20), (20, 20), (20, 30), (10, 30)),
+            "source_font_program_sha256": "a" * 64,
+            "source_font_binding_verified": True,
+            "source_font_character_codepoint": ord(" "), "source_stext_flags": 20}
+    span = {"font": "Same", "chars": [char]}
+    raw = {"blocks": [{"type": 0, "lines": [{"spans": [span]}]}]}
+    trace = {"font": "Same", "chars": [(ord(" "), 1, (10, 20))]}
+    page = SimpleNamespace(get_texttrace=lambda: [trace])
+    maps, ambiguous = _page_program_glyph_maps(page, raw)
+    assert maps == {"a" * 64: {32: 1}} and not ambiguous
+    assert char["source_font_binding_verified"] is True
+    assert not char.get("source_synthetic_spacing")
+    layout = _character_layout({}, span, "Same", lambda x, y: (x, y), _trace_glyph_queues(page))[0]
+    assert layout.glyph_id == 1 and layout.source_font_binding_verified
+    assert layout.source_synthetic_spacing is False
 
 
 @pytest.mark.parametrize("visible", [False, True])

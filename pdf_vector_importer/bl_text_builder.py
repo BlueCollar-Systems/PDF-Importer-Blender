@@ -18,7 +18,12 @@ from typing import Any, Callable, Dict, Iterator, Optional, Tuple
 
 import bpy
 
-from .visual_style import preview_color
+from .visual_style import preview_color, scene_linear_color
+from .installed_font_route import (
+    installed_font_absence_item,
+    installed_font_evidence,
+    is_installed_font_asset,
+)
 from .packed_assets import PackedAssetError, pack_and_verify_bytes, verify_packed_sha256
 from .pdfcadcore.primitives import NormalizedText
 from .pdfcadcore.text_scale import calibrate_text_size_to_bbox
@@ -102,6 +107,7 @@ _FONT_SIZE_SCALE = 1.0
 _FONT_CACHE: Dict[str, bpy.types.VectorFont] = {}
 _FONT_GLYPH_INK_CACHE: Dict[Tuple[str, int], bool] = {}
 _FONT_GLYPH_INK_PREFETCH_LIMIT = 4096
+_LARGE_FONT_GLYPH_SETS: Dict[str, Tuple[Any, Any, Any]] = {}
 _VERIFIED_FONT_ASSET_BYTES: Dict[int, Tuple[Any, str, bytes]] = {}
 _VERIFIED_PACKED_FONTS: Dict[str, Any] = {}
 _VERIFIED_TEXT_MATERIALS: Dict[Tuple[Any, ...], Tuple[Tuple[str, ...], Dict[str, Any]]] = {}
@@ -258,28 +264,49 @@ def _exact_font_glyph_has_visible_ink(asset, glyph_id: int) -> bool:
     from fontTools.pens.boundsPen import BoundsPen
     from fontTools.ttLib import TTFont
 
-    font = TTFont(BytesIO(font_bytes), lazy=False, recalcTimestamp=False)
+    opened = _LARGE_FONT_GLYPH_SETS.get(digest)
+    keep_open = opened is not None
+    if keep_open:
+        font, glyph_order, glyph_set = opened
+    else:
+        font = TTFont(BytesIO(font_bytes), lazy=False, recalcTimestamp=False)
     try:
-        glyph_order = font.getGlyphOrder()
+        if not keep_open:
+            glyph_order = font.getGlyphOrder()
         if glyph_index >= len(glyph_order):
             raise RuntimeError(
                 f"exact font glyph index {glyph_index} exceeds "
                 f"glyph count {len(glyph_order)}"
             )
-        glyph_set = font.getGlyphSet()
-        indices = (
-            range(len(glyph_order))
-            if len(glyph_order) <= _FONT_GLYPH_INK_PREFETCH_LIMIT
-            else (glyph_index,)
-        )
+        if not keep_open:
+            glyph_set = font.getGlyphSet()
+        large = len(glyph_order) > _FONT_GLYPH_INK_PREFETCH_LIMIT
+        indices = (glyph_index,) if large else range(len(glyph_order))
         for index in indices:
             glyph_name = glyph_order[index]
             pen = BoundsPen(glyph_set)
             glyph_set[glyph_name].draw(pen)
             _FONT_GLYPH_INK_CACHE[(digest, index)] = pen.bounds is not None
+        if large and not keep_open:
+            # A large face (an installed Arial has 4,651 glyphs) is checked one
+            # glyph at a time. Keep its decoded glyphs for this page build
+            # instead of decoding the whole glyph table again for every glyph.
+            _release_large_font_glyph_sets()
+            _LARGE_FONT_GLYPH_SETS[digest] = (font, glyph_order, glyph_set)
+            keep_open = True
     finally:
-        font.close()
+        if not keep_open:
+            font.close()
     return bool(_FONT_GLYPH_INK_CACHE[cache_key])
+
+
+def _release_large_font_glyph_sets() -> None:
+    for font, _order, _glyphs in tuple(_LARGE_FONT_GLYPH_SETS.values()):
+        try:
+            font.close()
+        except Exception:
+            pass
+    _LARGE_FONT_GLYPH_SETS.clear()
 
 
 def _styled_text_color(
@@ -296,6 +323,7 @@ def _get_or_create_text_material(
 ) -> bpy.types.Material:
     style_key = _normalize_style(style)
     r, g, b = _styled_text_color(style_key, source_color=source_color)
+    linear_r, linear_g, linear_b = scene_linear_color((r, g, b))
     if style_key == "source" and source_color is not None:
         mat_name = f"PDF_Text_{round(r * 255):02X}{round(g * 255):02X}{round(b * 255):02X}"
     else:
@@ -304,7 +332,7 @@ def _get_or_create_text_material(
     # can silently inherit the wrong color or node graph.
     material = bpy.data.materials.new(name=mat_name)
     try:
-        material.diffuse_color = (r, g, b, 1.0)
+        material.diffuse_color = (linear_r, linear_g, linear_b, 1.0)
         material.use_nodes = True
         nodes = material.node_tree.nodes
         links = material.node_tree.links
@@ -313,7 +341,7 @@ def _get_or_create_text_material(
         # or add specular halos to their native extruded geometry.
         shader = nodes.new(type="ShaderNodeEmission")
         output = nodes.new(type="ShaderNodeOutputMaterial")
-        shader.inputs["Color"].default_value = (r, g, b, 1.0)
+        shader.inputs["Color"].default_value = (linear_r, linear_g, linear_b, 1.0)
         shader.inputs["Strength"].default_value = 1.0
         links.new(shader.outputs["Emission"], output.inputs["Surface"])
     except Exception as exc:
@@ -865,6 +893,20 @@ def _positioned_font_axis_metrics(obj, text_item) -> Dict[str, Any]:
     if not math.isfinite(source_advance_em) or source_advance_em <= 1e-12:
         raise RuntimeError("original PDF character advance axis is singular")
     local_advance = rendered_unit_m * units_per_em * source_advance_em
+    span_text = str(getattr(layouts[0], "text", "") or "")
+    if len(span_text) > 1:
+        # One FONT object for a whole span: Blender lays the body out at the
+        # font's own advances, so map that whole run onto the PDF span. Small
+        # rounding in the PDF's widths is then spread along the line instead
+        # of piling up at its end.
+        try:
+            span_map = _span_font_tables(asset, with_kerning=False)["cmap"]
+            span_units = sum(int(advances[span_map[ord(char)]]) for char in span_text)
+        except (IndexError, KeyError, RuntimeError, TypeError, ValueError) as exc:
+            raise RuntimeError("exact font advances are unavailable for the span") from exc
+        if span_units <= 0:
+            raise RuntimeError("exact font advances are unavailable for the span")
+        local_advance = rendered_unit_m * float(span_units)
     local_line_height = rendered_unit_m * units_per_em * source_height
     template_reused = bool(obj.get("pdf_converted_template_reused", False))
     target_quad = getattr(text_item, "target_quad_model", None)
@@ -1215,6 +1257,7 @@ def _font_asset_evidence(text_item: NormalizedText) -> Dict[str, Any]:
     asset = getattr(text_item, "font_asset", None)
     if asset is not None:
         return {
+            **installed_font_evidence(text_item),
             "asset_id": str(getattr(asset, "asset_id", "") or ""),
             "source_sha256": str(getattr(asset, "source_sha256", "") or ""),
             "usable_sha256": str(getattr(asset, "usable_sha256", "") or ""),
@@ -1632,6 +1675,8 @@ def _set_object_metadata(
     if asset is not None:
         obj["pdf_exact_font_sha256"] = str(getattr(asset, "usable_sha256", "") or "")
         obj["pdf_exact_font_packed"] = True
+        if is_installed_font_asset(asset):
+            obj["pdf_font_source"] = "installed (PDF widths matched)"
 
 
 def _create_font_candidate(
@@ -1714,7 +1759,9 @@ def _create_font_candidate(
                 visual_style,
                 source_color=text_item.color,
             )
-        expected_rgb = _styled_text_color(visual_style, source_color=text_item.color)
+        expected_rgb = scene_linear_color(
+            _styled_text_color(visual_style, source_color=text_item.color)
+        )
         expected_rgba = (*tuple(float(value) for value in expected_rgb), 1.0)
         obj["pdf_text_material"] = str(getattr(material, "name", "") or "")
         obj["pdf_text_material_owned"] = True
@@ -2373,6 +2420,7 @@ def _attempt_native_font(
     visual_style,
     z_offset_m,
     entity_suffix="",
+    defer_host_update=False,
 ):
     obj, _data, failure = _create_font_candidate(
         text_item,
@@ -2384,11 +2432,217 @@ def _attempt_native_font(
         visual_style=visual_style,
         z_offset_m=z_offset_m,
         entity_suffix=entity_suffix,
+        defer_host_update=defer_host_update,
     )
     if failure is not None:
         return failure
     with _text_stage("verify"):
         return _verify_font_candidate(obj, text_item, delivered=delivered, item_id=item_id)
+
+
+def _transfer_evaluated_curve(source, dest) -> None:
+    """Copy an evaluated font outline onto a real CURVE datablock."""
+    copied_dimensions = False
+    for attr in (
+        "dimensions",
+        "fill_mode",
+        "extrude",
+        "bevel_depth",
+        "bevel_resolution",
+        "resolution_u",
+        "render_resolution_u",
+        "offset",
+        "use_fill_caps",
+    ):
+        try:
+            value = getattr(source, attr)
+        except (AttributeError, ReferenceError):
+            continue
+        try:
+            setattr(dest, attr, value)
+        except (AttributeError, TypeError, ValueError):
+            continue
+        if attr == "dimensions":
+            copied_dimensions = True
+    if not copied_dimensions:
+        try:
+            dest.dimensions = "2D"
+            dest.fill_mode = "BOTH"
+        except (AttributeError, TypeError, ValueError):
+            pass
+    materials = getattr(source, "materials", None)
+    if materials is not None:
+        for material in list(materials):
+            try:
+                dest.materials.append(material)
+            except (AttributeError, TypeError, ReferenceError):
+                pass
+    for src in list(getattr(source, "splines", []) or []):
+        src_type = str(getattr(src, "type", "POLY") or "POLY").upper()
+        if src_type not in {"POLY", "BEZIER", "NURBS"}:
+            src_type = "POLY"
+        dst = dest.splines.new(src_type)
+        if src_type == "BEZIER":
+            points = list(src.bezier_points)
+            if len(points) > 1:
+                dst.bezier_points.add(len(points) - 1)
+            for index, src_point in enumerate(points):
+                dst_point = dst.bezier_points[index]
+                dst_point.co = src_point.co
+                dst_point.handle_left = src_point.handle_left
+                dst_point.handle_right = src_point.handle_right
+                for handle_attr in ("handle_left_type", "handle_right_type"):
+                    try:
+                        setattr(dst_point, handle_attr, getattr(src_point, handle_attr))
+                    except (AttributeError, TypeError, ValueError):
+                        pass
+        else:
+            points = list(src.points)
+            if len(points) > 1:
+                dst.points.add(len(points) - 1)
+            for index, src_point in enumerate(points):
+                dst.points[index].co = src_point.co
+        try:
+            dst.use_cyclic_u = bool(getattr(src, "use_cyclic_u", False))
+        except (AttributeError, TypeError, ValueError):
+            pass
+
+
+def _retarget_evaluated_materials(data) -> None:
+    """Point material slots at original datablocks.
+
+    Blender 3.1's ``to_curve().copy()`` stores the evaluated material. The
+    glyph curve then outlives the source font. The next view-layer update
+    copy-on-writes that evaluated id and crashes. 3.6 and newer already store
+    the original material, so this is a no-op there.
+    """
+    materials = getattr(data, "materials", None)
+    if materials is None:
+        return
+    try:
+        count = len(materials)
+    except TypeError:
+        return
+    for index in range(count):
+        try:
+            material = materials[index]
+        except (AttributeError, IndexError, ReferenceError, TypeError):
+            continue
+        if material is None or not getattr(material, "is_evaluated", False):
+            continue
+        original = getattr(material, "original", None)
+        if original is None or getattr(original, "is_evaluated", False):
+            continue
+        try:
+            materials[index] = original
+        except (AttributeError, IndexError, ReferenceError, TypeError):
+            continue
+
+
+def _discard_curve_datablock(data) -> None:
+    curves = getattr(getattr(bpy, "data", None), "curves", None)
+    remover = getattr(curves, "remove", None)
+    if data is None or not callable(remover):
+        return
+    try:
+        remover(data)
+    except (AttributeError, ReferenceError, RuntimeError, TypeError):
+        pass
+
+
+def _outline_datablock_kind(data) -> str:
+    """Return FONT or CURVE for an evaluated text outline datablock.
+
+    Blender 4.2 and older type the ``to_curve()`` copy as ``TextCurve``. That
+    datablock has no ``.type`` string, and an object using it stays FONT.
+    """
+    try:
+        identifier = str(getattr(getattr(data, "bl_rna", None), "identifier", "") or "")
+    except (AttributeError, ReferenceError, TypeError):
+        identifier = ""
+    class_name = type(data).__name__
+    if identifier == "TextCurve" or class_name == "TextCurve":
+        return "FONT"
+    data_type = str(getattr(data, "type", "") or "").upper()
+    if data_type == "FONT":
+        return "FONT"
+    if identifier == "Curve" or data_type == "CURVE" or class_name in {"Curve", "_CurveData"}:
+        return "CURVE"
+    return data_type
+
+
+def _host_glyph_copy_is_curve() -> bool:
+    """True when ``to_curve().copy()`` is already a CURVE datablock.
+
+    Measured in real Blender: 4.5 and 5.2 copy a CURVE; 4.2, 3.6, and 3.1 copy
+    a TextCurve, so the new object stays text and Glyphs rejects it. Rebuilding
+    splines is only for those older hosts. Doing it on 5.2 crashes while
+    reading the temporary evaluated curve.
+    """
+    version = getattr(getattr(bpy, "app", None), "version", None)
+    try:
+        return tuple(int(part) for part in version[:2]) >= (4, 5)
+    except (TypeError, ValueError):
+        return True
+
+
+def _own_evaluated_glyph_curve(converted, name: str):
+    """Return a caller-owned CURVE of an evaluated font outline."""
+    # 4.5+ copies a real CURVE. Older hosts are handled below. A direct
+    # datablock copy there stays a FONT (TextCurve) on 4.2 and 3.6, so the
+    # new object would still be text. 3.1 copies the same TextCurve; reading
+    # it is safe, but its material slots are evaluated ids.
+    if _host_glyph_copy_is_curve():
+        copied = converted.copy()
+        try:
+            copied.name = name
+        except (AttributeError, TypeError):
+            pass
+        kind = str(getattr(copied, "type", "") or "").upper()
+        if kind not in {"", "CURVE"}:
+            raise RuntimeError("evaluated font outline stayed a FONT datablock")
+        _retarget_evaluated_materials(copied)
+        return copied
+    # Older than 4.5. copy() is safe on 3.6 and 4.2 but the copy stays a FONT
+    # datablock, so assigning it makes another text object. Reading splines off
+    # the temporary to_curve() result segfaults those hosts. The owned copy is
+    # a normal datablock; its splines can be written into a real CURVE.
+    try:
+        copied = converted.copy()
+    except Exception as exc:
+        raise RuntimeError("evaluated font outline could not be copied") from exc
+    kind = _outline_datablock_kind(copied)
+    if kind == "CURVE":
+        try:
+            copied.name = name
+        except (AttributeError, TypeError):
+            pass
+        return copied
+    curves = getattr(getattr(bpy, "data", None), "curves", None)
+    factory = getattr(curves, "new", None)
+    dest = None
+    if callable(factory):
+        try:
+            dest = factory(name, "CURVE")
+        except (AssertionError, AttributeError, RuntimeError, TypeError, ValueError):
+            dest = None
+    if dest is None or str(getattr(dest, "type", "") or "").upper() == "FONT":
+        _discard_curve_datablock(dest)
+        _discard_curve_datablock(copied)
+        raise RuntimeError(f"evaluated font outline stayed a {kind or 'unknown'} datablock")
+    try:
+        _transfer_evaluated_curve(copied, dest)
+        _retarget_evaluated_materials(dest)
+    except Exception:
+        _discard_curve_datablock(dest)
+        _discard_curve_datablock(copied)
+        raise
+    _discard_curve_datablock(copied)
+    try:
+        dest.name = name
+    except (AttributeError, TypeError):
+        pass
+    return dest
 
 
 def _attempt_glyphs(
@@ -2441,7 +2695,7 @@ def _attempt_glyphs(
             )
         converted = to_curve(depsgraph, apply_modifiers=False)
         try:
-            curve_data = converted.copy()
+            curve_data = _own_evaluated_glyph_curve(converted, f"{obj.name}_glyph_curve")
         finally:
             clear = getattr(evaluated, "to_curve_clear", None)
             if callable(clear):
@@ -2872,20 +3126,15 @@ def _attempt_raster_impl(
     shader_nodes = [
         node for node in nodes if str(getattr(node, "type", "")) == "BSDF_PRINCIPLED"
     ]
-    output_nodes = [
-        node for node in nodes if str(getattr(node, "type", "")) == "OUTPUT_MATERIAL"
-    ]
     texture_bound = any(getattr(node, "image", None) is image for node in texture_nodes)
     texture_to_shader = any(
         getattr(link, "from_node", None) in texture_nodes
         and getattr(link, "to_node", None) in shader_nodes
         for link in links
     )
-    shader_to_output = any(
-        getattr(link, "from_node", None) in shader_nodes
-        and getattr(link, "to_node", None) in output_nodes
-        for link in links
-    )
+    from .raster_geometry import shader_reaches_material_output
+
+    shader_to_output = shader_reaches_material_output(nodes, links)
     verification_evidence["raster_texture_image_bound"] = texture_bound
     verification_evidence["raster_texture_to_shader_linked"] = texture_to_shader
     verification_evidence["raster_shader_to_output_linked"] = shader_to_output
@@ -2903,7 +3152,7 @@ def _attempt_raster_impl(
                 and tuple(shader.inputs["Base Color"].default_value) == (0, 0, 0, 1)
                 and float(specular.default_value) == 0
                 and float(shader.inputs["Emission Strength"].default_value) == 1
-                and image.colorspace_settings.name == "Non-Color"
+                and image.colorspace_settings.name == "sRGB"
                 and all(node.extension == "EXTEND" for node in texture_nodes)
                 and any(link.from_node in texture_nodes and link.to_node == shader
                         and link.to_socket == emission
@@ -3544,7 +3793,18 @@ def _prepare_positioned_converted_candidate(
             converted = to_curve(depsgraph, apply_modifiers=False)
             conversion_error = None
             try:
-                if isinstance(converted, getattr(getattr(bpy, "types", None), "TextCurve", ())):
+                text_curve = getattr(getattr(bpy, "types", None), "TextCurve", ())
+                # Blender 3.1–4.2 type to_curve() as TextCurve. copy() stays a
+                # FONT, so Glyphs fails the visual check (3.6/4.2) or crashes
+                # on temporary font materials (3.1). Own a real CURVE from a
+                # datablock copy; reading the temporary curve segfaults those
+                # hosts. A host whose copy is already a CURVE uses the spline
+                # rebuild that drops temporary FONT links.
+                if isinstance(converted, text_curve) and not _host_glyph_copy_is_curve():
+                    final_data = _own_evaluated_glyph_curve(
+                        converted, f"{source.name}_glyph_curve"
+                    )
+                elif isinstance(converted, text_curve):
                     final_data = _copy_evaluated_glyph_curve(
                         converted, f"{source.name}_glyph_curve"
                     )
@@ -4462,6 +4722,474 @@ def _attempt_positioned_converted_characters(
     return work.run_item_scoped()
 
 
+# ── one editable FONT object per span where the PDF's spacing allows ──
+#
+# The extractor marks every span with character positions for per-letter
+# placement. A span whose letters sit exactly where the exact font's own
+# advances put them needs no per-letter objects: one FONT object whose body is
+# the whole span, placed with the same metric affine the per-letter route uses
+# (span quad from its first and last letter), lands every letter in the same
+# place and stays editable as a line. Anything else keeps one object per letter.
+
+# Every letter must land within 0.5 % of the text height of its PDF position.
+_SPAN_POSITION_TOLERANCE_EM = 0.005
+_SPAN_DIRECTION_TOLERANCE = 1e-3
+# Blender lays a text object out at the font's own advances. Measured on
+# Blender 5.2.2 with Arial, whose kern table has A-T = -152 units: "AT" ended
+# exactly where "A" plus "T" without kerning would, and a 53-letter kern-heavy
+# line read back from the evaluated mesh sat within 0.0133 mm of the per-letter
+# placement. Only that measured release is trusted: on any other Blender
+# (older or newer) a span whose neighbouring letters have a kerning pair keeps
+# one object per letter, because the after-build check below models the layout
+# rather than reading Blender's evaluated letters back.
+_HOST_FONT_KERNING_MEASURED_ABSENT = frozenset({(5, 2)})
+_SPAN_FONT_TABLES: Dict[Tuple[str, bool], Dict[str, Any]] = {}
+_SPAN_FONT_TABLE_LIMIT = 8
+
+
+def _host_applies_font_kerning() -> bool:
+    version = tuple(getattr(getattr(bpy, "app", None), "version", ()) or ())
+    try:
+        major, minor = int(version[0]), int(version[1])
+    except (IndexError, TypeError, ValueError):
+        return True
+    return (major, minor) not in _HOST_FONT_KERNING_MEASURED_ABSENT
+
+
+def _gpos_value_moves(value) -> bool:
+    return value is not None and any(
+        getattr(value, name, 0) for name in ("XPlacement", "YPlacement", "XAdvance", "YAdvance")
+    )
+
+
+def _gpos_pair_subtables(font, glyph_ids):
+    """Pair-adjustment subtables reduced to glyph ids (kerning a layout engine could apply)."""
+    rows = []
+    gpos = getattr(font["GPOS"], "table", None)
+    lookups = getattr(getattr(gpos, "LookupList", None), "Lookup", None) or ()
+    for lookup in lookups:
+        for sub in getattr(lookup, "SubTable", None) or ():
+            if lookup.LookupType == 9:
+                if getattr(sub, "ExtensionLookupType", None) != 2:
+                    continue
+                sub = sub.ExtSubTable
+            elif lookup.LookupType != 2:
+                continue
+            coverage = {
+                glyph_ids[name]: index
+                for index, name in enumerate(sub.Coverage.glyphs)
+                if name in glyph_ids
+            }
+            if sub.Format == 1:
+                seconds = [
+                    {
+                        glyph_ids[record.SecondGlyph]
+                        for record in pair_set.PairValueRecord
+                        if record.SecondGlyph in glyph_ids
+                        and (_gpos_value_moves(getattr(record, "Value1", None))
+                             or _gpos_value_moves(getattr(record, "Value2", None)))
+                    }
+                    for pair_set in sub.PairSet
+                ]
+                rows.append((coverage, 1, seconds))
+            elif sub.Format == 2:
+                first_classes = {
+                    glyph_ids[name]: value
+                    for name, value in (sub.ClassDef1.classDefs or {}).items()
+                    if name in glyph_ids
+                }
+                second_classes = {
+                    glyph_ids[name]: value
+                    for name, value in (sub.ClassDef2.classDefs or {}).items()
+                    if name in glyph_ids
+                }
+                moves = [
+                    [
+                        _gpos_value_moves(getattr(record, "Value1", None))
+                        or _gpos_value_moves(getattr(record, "Value2", None))
+                        for record in first.Class2Record
+                    ]
+                    for first in sub.Class1Record
+                ]
+                rows.append((coverage, 2, (first_classes, second_classes, moves)))
+    return tuple(rows)
+
+
+def _span_font_tables(asset, *, with_kerning: bool) -> Dict[str, Any]:
+    """Character map (and, when asked, kerning pairs) of the exact usable font."""
+    digest = str(getattr(asset, "usable_sha256", "") or "")
+    key = (digest, bool(with_kerning))
+    cached = _SPAN_FONT_TABLES.get(key)
+    if cached is not None:
+        return cached
+    data = bytes(getattr(asset, "usable_bytes", b"") or b"")
+    if not data or not digest or sha256(data).hexdigest() != digest:
+        raise RuntimeError("exact font bytes are unavailable")
+    from fontTools.ttLib import TTFont
+
+    font = TTFont(BytesIO(data), lazy=not with_kerning, recalcTimestamp=False)
+    try:
+        glyph_ids = {name: index for index, name in enumerate(font.getGlyphOrder())}
+        cmap = {
+            int(codepoint): glyph_ids[name]
+            for codepoint, name in (font.getBestCmap() or {}).items()
+            if name in glyph_ids
+        }
+        kern_pairs = set()
+        gpos_pairs = ()
+        if with_kerning:
+            if "kern" in font:
+                for table in getattr(font["kern"], "kernTables", None) or ():
+                    for (left, right), value in (getattr(table, "kernTable", None) or {}).items():
+                        if value and left in glyph_ids and right in glyph_ids:
+                            kern_pairs.add((glyph_ids[left], glyph_ids[right]))
+            if "GPOS" in font:
+                gpos_pairs = _gpos_pair_subtables(font, glyph_ids)
+    finally:
+        font.close()
+    tables = {"cmap": cmap, "kern_pairs": kern_pairs, "gpos_pairs": gpos_pairs}
+    while len(_SPAN_FONT_TABLES) >= _SPAN_FONT_TABLE_LIMIT:
+        _SPAN_FONT_TABLES.pop(next(iter(_SPAN_FONT_TABLES)))
+    _SPAN_FONT_TABLES[key] = tables
+    return tables
+
+
+def _font_pair_is_kerned(tables, left: int, right: int) -> bool:
+    if (left, right) in tables["kern_pairs"]:
+        return True
+    for coverage, table_format, data in tables["gpos_pairs"]:
+        index = coverage.get(left)
+        if index is None:
+            continue
+        if table_format == 1:
+            if index < len(data) and right in data[index]:
+                return True
+            continue
+        first_classes, second_classes, moves = data
+        first = first_classes.get(left, 0)
+        second = second_classes.get(right, 0)
+        if first < len(moves) and second < len(moves[first]) and moves[first][second]:
+            return True
+    return False
+
+
+def _points(quad):
+    return tuple((float(point[0]), float(point[1])) for point in quad)
+
+
+def span_uses_natural_advances(text_item, *, host_applies_font_kerning=None) -> Tuple[bool, str]:
+    """Decide whether one FONT object can carry this whole span.
+
+    True only when the span is horizontal or uniformly rotated with no skew,
+    every letter has the span's size and direction, the exact font maps every
+    character to the glyph the PDF draws, and laying the span out with that
+    font's own advances puts every letter within 0.5 % of the text height of
+    its PDF position (so the PDF adds no letter or word spacing and no TJ
+    gaps). Where the host may apply font kerning, a kerned neighbouring pair
+    also keeps one object per letter. Returns (decision, plain reason).
+    """
+    asset = getattr(text_item, "font_asset", None)
+    if asset is None:
+        return False, "no exact font program for this text"
+    layouts = tuple(getattr(text_item, "source_char_layout", ()) or ())
+    text = str(getattr(text_item, "text", "") or "")
+    if len(layouts) < 2:
+        return False, "a single letter is one object either way"
+    if "".join(str(getattr(layout, "text", "") or "") for layout in layouts) != text:
+        return False, "the letters do not spell the text exactly"
+    if not text.strip():
+        return False, "the text is only spaces"
+    try:
+        units_per_em = int(asset.units_per_em)
+        advances = tuple(asset.glyph_advances)
+    except (AttributeError, TypeError, ValueError):
+        return False, "the font's own widths are unavailable"
+    if units_per_em <= 0 or not advances:
+        return False, "the font's own widths are unavailable"
+    if host_applies_font_kerning is None:
+        host_applies_font_kerning = _host_applies_font_kerning()
+    try:
+        tables = _span_font_tables(asset, with_kerning=bool(host_applies_font_kerning))
+    except Exception:
+        return False, "the font's character map cannot be read"
+    first, last = layouts[0], layouts[-1]
+    try:
+        height_em = _source_character_font_height(first)
+        size = float(first.source_font_size_pdf)
+        ul, _ur0, _lr0, ll = _points(first.source_quad_pdf)
+        last_ur = _points(last.source_quad_pdf)[1]
+        origin = tuple(float(value) for value in first.source_origin_pdf)
+    except (AttributeError, IndexError, RuntimeError, TypeError, ValueError):
+        return False, "the first letter's position cannot be read"
+    up = ((ul[0] - ll[0]) / height_em, (ul[1] - ll[1]) / height_em)
+    em = math.hypot(*up)
+    span = (last_ur[0] - ul[0], last_ur[1] - ul[1])
+    span_length = math.hypot(*span)
+    if not math.isfinite(em) or em <= 1e-9 or not math.isfinite(span_length) or span_length <= 1e-9:
+        return False, "the line has no length or height"
+    tolerance = _SPAN_POSITION_TOLERANCE_EM * em
+    direction = (span[0] / span_length, span[1] / span_length)
+    if abs((up[0] * direction[0] + up[1] * direction[1]) / em) > _SPAN_DIRECTION_TOLERANCE:
+        return False, "the PDF slants this text (skewed letters)"
+    span_em = abs(span[0] * up[1] - span[1] * up[0]) / (size * size)
+    if not math.isfinite(span_em) or span_em <= 1e-9:
+        return False, "the line has no length or height"
+    first_height = (ul[0] - ll[0], ul[1] - ll[1])
+    descriptor = (
+        float(first.source_font_size_pdf),
+        float(first.source_font_ascender),
+        float(first.source_font_descender),
+    )
+    letters = []
+    previous_glyph = None
+    for index, layout in enumerate(layouts):
+        char = str(layout.text)
+        glyph_id = getattr(layout, "glyph_id", None)
+        try:
+            quad = _points(layout.source_quad_pdf)
+            char_origin = tuple(float(value) for value in layout.source_origin_pdf)
+            char_descriptor = (
+                float(layout.source_font_size_pdf),
+                float(layout.source_font_ascender),
+                float(layout.source_font_descender),
+            )
+        except (AttributeError, IndexError, TypeError, ValueError):
+            return False, f"letter {index + 1} has no readable position"
+        if (
+            len(char) != 1
+            or type(glyph_id) is not int
+            or not 0 <= glyph_id < len(advances)
+            or getattr(layout, "source_writing_mode", None) != 0
+        ):
+            return False, f"letter {index + 1} ({char!r}) has no single exact glyph"
+        if any(
+            abs(mine - theirs) > 1e-6 * max(1.0, abs(theirs))
+            for mine, theirs in zip(char_descriptor, descriptor, strict=True)
+        ):
+            return False, "the letters of this line differ in size or font metrics"
+        height = (quad[0][0] - quad[3][0], quad[0][1] - quad[3][1])
+        if math.hypot(height[0] - first_height[0], height[1] - first_height[1]) > tolerance:
+            return False, "the letters of this line differ in size or slant"
+        advance = (quad[1][0] - quad[0][0], quad[1][1] - quad[0][1])
+        advance_length = math.hypot(*advance)
+        if advance_length > tolerance and abs(
+            (advance[0] * direction[1] - advance[1] * direction[0]) / advance_length
+        ) > _SPAN_DIRECTION_TOLERANCE:
+            return False, "the letters do not share one baseline direction"
+        if tables["cmap"].get(ord(char)) != glyph_id:
+            return False, f"the font maps {char!r} to a different glyph than the PDF draws"
+        if (
+            host_applies_font_kerning
+            and previous_glyph is not None
+            and _font_pair_is_kerned(tables, previous_glyph, glyph_id)
+        ):
+            return False, "the font kerns two neighbouring letters and this Blender may apply it"
+        # The PDF's own width for this letter (its quad) must be the font's.
+        pdf_width_em = abs(advance[0] * up[1] - advance[1] * up[0]) / (size * size)
+        font_width_em = int(advances[glyph_id]) / float(units_per_em)
+        if not math.isfinite(pdf_width_em) or abs(pdf_width_em - font_width_em) > (
+            _SPAN_POSITION_TOLERANCE_EM
+        ):
+            return False, (
+                f"letter {index + 1} ({char!r}) is drawn {pdf_width_em:.3f} em wide but the "
+                f"font's own width is {font_width_em:.3f} em"
+            )
+        letters.append((index, char, char_origin, int(advances[glyph_id])))
+        previous_glyph = glyph_id
+    # The body laid out at the font's own widths (as Blender lays it out,
+    # measured on 5.2.2), mapped onto the PDF line from the first letter's
+    # origin to the last letter's far edge, must put every letter where the
+    # PDF does. Letter or word spacing (Tc, Tw) and TJ gaps fail here.
+    total_units = sum(units for *_rest, units in letters)
+    if total_units <= 0:
+        return False, "the font's own widths are unavailable"
+    cumulative_units = 0
+    worst = 0.0
+    for index, char, char_origin, units in letters:
+        fraction = cumulative_units / float(total_units)
+        predicted = (origin[0] + span[0] * fraction, origin[1] + span[1] * fraction)
+        offset = math.hypot(predicted[0] - char_origin[0], predicted[1] - char_origin[1])
+        if not math.isfinite(offset) or offset > tolerance:
+            return False, (
+                f"letter {index + 1} ({char!r}) is {offset / em:.1%} of the text height "
+                "from where the font's own widths put it (the PDF adds spacing)"
+            )
+        worst = max(worst, offset)
+        cumulative_units += units
+    return True, (
+        "every letter sits where the font's own widths put it "
+        f"(largest difference {worst / em:.2%} of the text height)"
+    )
+
+
+def _span_object_text_item(text_item):
+    """The span as one positioned item: first letter's frame, last letter's end."""
+    layouts = tuple(text_item.source_char_layout)
+    first, last = layouts[0], layouts[-1]
+    ul, _ur, _lr, ll = _points(first.source_quad_pdf)
+    ur = _points(last.source_quad_pdf)[1]
+    source_quad = (ul, ur, (ll[0] + ur[0] - ul[0], ll[1] + ur[1] - ul[1]), ll)
+    tul, _tur, _tlr, tll = _points(first.target_quad)
+    tur = _points(last.target_quad)[1]
+    target_quad = (tul, tur, (tll[0] + tur[0] - tul[0], tll[1] + tur[1] - tul[1]), tll)
+    source_xs = [point[0] for point in source_quad]
+    source_ys = [point[1] for point in source_quad]
+    target_xs = [point[0] for point in target_quad]
+    target_ys = [point[1] for point in target_quad]
+    source_bbox = (min(source_xs), min(source_ys), max(source_xs), max(source_ys))
+    advance_width = math.dist(tul, tur)
+    glyph_height = math.dist(tul, tll)
+    span_layout = replace(
+        first,
+        text=str(text_item.text),
+        source_bbox_pdf=source_bbox,
+        source_quad_pdf=source_quad,
+        target_quad=target_quad,
+        advance_width=advance_width,
+        glyph_height=glyph_height,
+    )
+    return replace(
+        text_item,
+        insertion=(float(first.target_origin[0]), float(first.target_origin[1])),
+        bbox=(min(target_xs), min(target_ys), max(target_xs), max(target_ys)),
+        source_bbox_pdf=source_bbox,
+        source_quad_pdf=source_quad,
+        target_quad_model=target_quad,
+        advance_width=advance_width,
+        glyph_height=glyph_height,
+        rotation=math.degrees(math.atan2(tur[1] - tul[1], tur[0] - tul[0])),
+        source_char_layout=(span_layout,),
+        requires_individual_positioning=False,
+        positioned_character=True,
+        source_glyph_id=int(first.glyph_id),
+    )
+
+
+def _span_last_letter_offset_m(obj, text_item) -> float:
+    """Distance between the built object's last letter origin and the PDF's.
+
+    Reads the affine actually recorded on the object and lays the span out at
+    the font's own advances (how Blender 5.2.2 was measured to lay it out), so
+    a placement that drifts along the line is caught even though the
+    whole-span check passed. It models the host layout rather than reading
+    Blender's evaluated letters back, which is why an unmeasured Blender keeps
+    kerned lines letter by letter (see _host_applies_font_kerning).
+    """
+    layouts = tuple(text_item.source_char_layout)
+    asset = text_item.font_asset
+    matrix = [float(value) for value in obj.get("pdf_affine_matrix", [])]
+    local_advance = float(obj.get("pdf_metric_local_advance"))
+    baseline_y = float(obj.get("pdf_metric_local_baseline_y", 0.0) or 0.0)
+    if len(matrix) != 16 or not math.isfinite(local_advance) or local_advance <= 0.0:
+        raise ValueError("the span object's placement was not recorded")
+    advances = tuple(asset.glyph_advances)
+    units = [int(advances[int(layout.glyph_id)]) for layout in layouts]
+    local_x = local_advance * sum(units[:-1]) / float(sum(units))
+    actual = _apply_recorded_affine(matrix, local_x, baseline_y)
+    expected = (
+        float(layouts[-1].target_origin[0]) * MM_TO_M,
+        float(layouts[-1].target_origin[1]) * MM_TO_M,
+    )
+    return math.hypot(actual[0] - expected[0], actual[1] - expected[1])
+
+
+def _attempt_positioned_text(
+    text_item,
+    collection,
+    *,
+    page_number,
+    requested,
+    delivered,
+    item_id,
+    visual_style,
+    z_offset_m,
+):
+    """Text / 3D Text: one FONT object for the span where spacing allows, else one per letter."""
+    use_span, reason = span_uses_natural_advances(text_item)
+    span_attempt = None
+    span_item = None
+    if use_span:
+        try:
+            span_item = _span_object_text_item(text_item)
+        except (AttributeError, IndexError, TypeError, ValueError):
+            reason = "the line's outline could not be built from its letters"
+    if span_item is not None:
+        layouts = tuple(text_item.source_char_layout)
+        outcome = _attempt_native_font(
+            span_item,
+            collection,
+            page_number=page_number,
+            requested=requested,
+            delivered=delivered,
+            item_id=item_id,
+            visual_style=visual_style,
+            z_offset_m=z_offset_m,
+            defer_host_update=True,
+        )
+        failures = list((outcome.evidence or {}).get("failures") or ())
+        last_offset = None
+        if outcome.status == "delivered":
+            try:
+                last_offset = _span_last_letter_offset_m(outcome.entity, text_item)
+                height_m = float(layouts[0].glyph_height) * MM_TO_M
+            except (AttributeError, IndexError, KeyError, ReferenceError, TypeError, ValueError):
+                failures.append("span_last_letter_position_unverifiable")
+            else:
+                if not math.isfinite(last_offset) or last_offset > max(
+                    1e-7, _SPAN_POSITION_TOLERANCE_EM * height_m
+                ):
+                    failures.append("span_last_letter_position_mismatch")
+            if not failures:
+                outcome.evidence = {
+                    **dict(outcome.evidence or {}),
+                    "text_object_granularity": "span_object",
+                    "text_object_granularity_reason": reason,
+                    "span_character_count": len(layouts),
+                    "span_last_letter_offset_m": last_offset,
+                }
+                return outcome
+        with _text_stage("cleanup"):
+            cleanup = _cleanup_attempt(outcome, collection)
+        span_attempt = {
+            "status": outcome.status,
+            "reason": outcome.reason,
+            "failures": failures,
+            "last_letter_offset_m": last_offset,
+            "cleanup": cleanup,
+        }
+        if cleanup.get("status") != "complete":
+            return AttemptOutcome.failed(
+                "span_object_cleanup_failed",
+                evidence={
+                    **dict(outcome.evidence or {}),
+                    "item_id": item_id,
+                    "text_object_granularity": "span_object",
+                    "span_object_attempt": span_attempt,
+                },
+                owned_artifacts=outcome.owned_artifacts,
+                owned_objects=outcome.owned_objects,
+                owned_datablocks=outcome.owned_datablocks,
+            )
+        reason = "the one-object version did not pass the placement check"
+    outcome = _attempt_positioned_characters(
+        text_item,
+        collection,
+        page_number=page_number,
+        requested=requested,
+        delivered=delivered,
+        item_id=item_id,
+        visual_style=visual_style,
+        z_offset_m=z_offset_m,
+    )
+    outcome.evidence = {
+        **dict(outcome.evidence or {}),
+        "text_object_granularity": "per_character",
+        "text_object_granularity_reason": reason,
+        **({"span_object_attempt": span_attempt} if span_attempt else {}),
+    }
+    return outcome
+
+
 def _attempt_positioned_characters(
     text_item,
     collection,
@@ -4515,7 +5243,93 @@ def _attempt_positioned_characters(
     raise ValueError(f"unsupported positioned representation: {delivered}")
 
 
+# Rungs that draw with a font program. On these an installed face (proved by
+# the PDF's own widths, see installed_font_route) is tried first; every other
+# rung, and any retry, uses the original item exactly as before.
+_INSTALLED_FONT_REPRESENTATIONS = frozenset({"text", "3d_text", "glyphs", "geometry"})
+
+
+def _installed_font_outcome(outcome, representation, collection, *, retry):
+    """Keep a verified installed-face result; otherwise clean it up and retry.
+
+    The retry runs the same rung on the original item (font absence proof
+    intact), so a span whose installed-face attempt does not verify gets
+    exactly the result it got before the installed-font route existed.
+    """
+    if outcome.status == "delivered":
+        return outcome
+    evidence = dict(outcome.evidence or {})
+    with _text_stage("cleanup"):
+        cleanup = _cleanup_attempt(outcome, collection)
+    summary = {
+        "attempted_representation": representation,
+        "status": outcome.status,
+        "reason": outcome.reason,
+        "failures": list(evidence.get("failures") or ()),
+        "cleanup": cleanup,
+        "font_source": "installed",
+    }
+    if cleanup.get("status") != "complete":
+        return AttemptOutcome.failed(
+            outcome.reason or "installed_font_attempt_failed",
+            evidence={**evidence, "installed_font_attempt": summary},
+            owned_artifacts=outcome.owned_artifacts,
+            owned_objects=outcome.owned_objects,
+            owned_datablocks=outcome.owned_datablocks,
+        )
+    fallback = retry()
+    fallback.evidence = {
+        **dict(fallback.evidence or {}),
+        "installed_font_attempt": summary,
+    }
+    return fallback
+
+
 def _attempt_one_representation(
+    representation,
+    text_item,
+    collection,
+    *,
+    effective_page,
+    requested,
+    item_id,
+    visual_style,
+    z_offset_m,
+    terminal_raster_callback,
+    source_outline_callback=None,
+):
+    absence_item = installed_font_absence_item(text_item)
+    options = dict(
+        effective_page=effective_page,
+        requested=requested,
+        item_id=item_id,
+        visual_style=visual_style,
+        z_offset_m=z_offset_m,
+        terminal_raster_callback=terminal_raster_callback,
+        source_outline_callback=source_outline_callback,
+    )
+    if absence_item is None:
+        return _attempt_one_representation_once(
+            representation, text_item, collection, **options
+        )
+    if representation not in _INSTALLED_FONT_REPRESENTATIONS:
+        return _attempt_one_representation_once(
+            representation, absence_item, collection, **options
+        )
+    outcome = _attempt_one_representation_once(
+        representation, text_item, collection, **options
+    )
+    return _installed_font_outcome(
+        outcome,
+        representation,
+        collection,
+        retry=lambda: _attempt_one_representation_once(
+            representation, absence_item, collection, **options
+        ),
+    )
+
+
+def _attempt_one_representation_once(
     representation,
     text_item,
     collection,
@@ -4569,7 +5383,12 @@ def _attempt_one_representation(
         representation in {"text", "3d_text", "glyphs", "geometry"}
         and bool(getattr(text_item, "requires_individual_positioning", False))
     ):
-        return _attempt_positioned_characters(
+        positioned = (
+            _attempt_positioned_text
+            if representation in {"text", "3d_text"}
+            else _attempt_positioned_characters
+        )
+        return positioned(
             text_item,
             collection,
             page_number=effective_page,
@@ -4834,6 +5653,53 @@ def _progress_or_cancel(progress_callback, fraction, *, during):
             pass
 
 
+def _converted_item_attempt(
+    work,
+    requested_outcome,
+    collection,
+    *,
+    requested,
+    visual_style,
+    z_offset_m,
+    terminal_raster_callback,
+    source_outline_callback=None,
+):
+    """Ladder callback for one batched glyphs/geometry item.
+
+    The requested rung's outcome was already built by the page batch. An
+    installed-face item whose batch outcome did not verify is cleaned up and
+    retried on its original item, like every other font-drawing rung.
+    """
+    options = dict(
+        effective_page=work.page_number,
+        requested=requested,
+        item_id=work.item_id,
+        visual_style=visual_style,
+        z_offset_m=z_offset_m,
+        terminal_raster_callback=terminal_raster_callback,
+        source_outline_callback=source_outline_callback,
+    )
+
+    def attempt(representation):
+        if representation != requested:
+            return _attempt_one_representation(
+                representation, work.text_item, collection, **options
+            )
+        absence_item = installed_font_absence_item(work.text_item)
+        if absence_item is None:
+            return requested_outcome
+        return _installed_font_outcome(
+            requested_outcome,
+            representation,
+            collection,
+            retry=lambda: _attempt_one_representation_once(
+                representation, absence_item, collection, **options
+            ),
+        )
+
+    return attempt
+
+
 def _flush_converted_page_jobs(
     pending,
     collection,
@@ -4845,6 +5711,7 @@ def _flush_converted_page_jobs(
     terminal_raster_callback,
     progress_callback,
     total,
+    source_outline_callback=None,
 ):
     count = 0
     if not pending:
@@ -4856,20 +5723,16 @@ def _flush_converted_page_jobs(
         for work in pending:
             page_fail = work.aggregate_failure(failure)
 
-            def attempt(representation, _work=work, _fail=page_fail):
-                if representation == requested:
-                    return _fail
-                return _attempt_one_representation(
-                    representation,
-                    _work.text_item,
-                    collection,
-                    effective_page=_work.page_number,
-                    requested=requested,
-                    item_id=_work.item_id,
-                    visual_style=visual_style,
-                    z_offset_m=z_offset_m,
-                    terminal_raster_callback=terminal_raster_callback,
-                )
+            attempt = _converted_item_attempt(
+                work,
+                page_fail,
+                collection,
+                requested=requested,
+                visual_style=visual_style,
+                z_offset_m=z_offset_m,
+                terminal_raster_callback=terminal_raster_callback,
+                source_outline_callback=source_outline_callback,
+            )
 
             obj = _deliver_text_item(
                 work.text_item,
@@ -4897,20 +5760,16 @@ def _flush_converted_page_jobs(
         for work in pending:
             page_fail = work.aggregate_failure(graph_fail)
 
-            def attempt(representation, _work=work, _fail=page_fail):
-                if representation == requested:
-                    return _fail
-                return _attempt_one_representation(
-                    representation,
-                    _work.text_item,
-                    collection,
-                    effective_page=_work.page_number,
-                    requested=requested,
-                    item_id=_work.item_id,
-                    visual_style=visual_style,
-                    z_offset_m=z_offset_m,
-                    terminal_raster_callback=terminal_raster_callback,
-                )
+            attempt = _converted_item_attempt(
+                work,
+                page_fail,
+                collection,
+                requested=requested,
+                visual_style=visual_style,
+                z_offset_m=z_offset_m,
+                terminal_raster_callback=terminal_raster_callback,
+                source_outline_callback=source_outline_callback,
+            )
 
             obj = _deliver_text_item(
                 work.text_item,
@@ -4964,20 +5823,16 @@ def _flush_converted_page_jobs(
                 page_shared=True,
             )
 
-        def attempt(representation, _work=work, _outcome=outcome):
-            if representation == requested:
-                return _outcome
-            return _attempt_one_representation(
-                representation,
-                _work.text_item,
-                collection,
-                effective_page=_work.page_number,
-                requested=requested,
-                item_id=_work.item_id,
-                visual_style=visual_style,
-                z_offset_m=z_offset_m,
-                terminal_raster_callback=terminal_raster_callback,
-            )
+        attempt = _converted_item_attempt(
+            work,
+            outcome,
+            collection,
+            requested=requested,
+            visual_style=visual_style,
+            z_offset_m=z_offset_m,
+            terminal_raster_callback=terminal_raster_callback,
+            source_outline_callback=source_outline_callback,
+        )
 
         obj = _deliver_text_item(
             work.text_item,
@@ -5013,6 +5868,7 @@ def build_all_text(
     _VERIFIED_PACKED_FONTS.clear()
     _DISK_FONT_SHA_MEMO.clear()
     _VERIFIED_TEXT_MATERIALS.clear()
+    _release_large_font_glyph_sets()
     reset_text_stage_timings()
     count = 0
     total = max(1, len(text_items or []))
@@ -5063,21 +5919,25 @@ def build_all_text(
                 with _text_stage("converted_create_sources"):
                     early = work.create_sources()
                 if early is not None:
-                    def attempt(representation, _work=work, _early=early):
-                        if representation == requested:
-                            return _early
-                        return _attempt_one_representation(
-                            representation,
-                            _work.text_item,
-                            collection,
-                            effective_page=_work.page_number,
-                            requested=requested,
-                            item_id=_work.item_id,
-                            visual_style=visual_style,
-                            z_offset_m=z_offset_m,
-                            terminal_raster_callback=terminal_raster_callback,
-                        )
-
+                    if installed_font_absence_item(item) is not None:
+                        # Retry this installed-face item on its own after the
+                        # batch, outside this unevaluated scope, so a step back
+                        # to the original item's outline route can evaluate.
+                        with _text_stage("cleanup"):
+                            early_cleanup = _cleanup_attempt(early, collection)
+                        if early_cleanup.get("status") == "complete":
+                            deferred_plain.append(item)
+                            continue
+                    attempt = _converted_item_attempt(
+                        work,
+                        early,
+                        collection,
+                        requested=requested,
+                        visual_style=visual_style,
+                        z_offset_m=z_offset_m,
+                        terminal_raster_callback=terminal_raster_callback,
+                        source_outline_callback=source_outline_callback,
+                    )
                     obj = _deliver_text_item(
                         work.text_item,
                         collection,
@@ -5135,7 +5995,9 @@ def build_all_text(
             terminal_raster_callback=terminal_raster_callback,
             progress_callback=progress_callback,
             total=total,
+            source_outline_callback=source_outline_callback,
         )
+    _release_large_font_glyph_sets()
     if progress_callback:
         _progress_or_cancel(
             progress_callback,

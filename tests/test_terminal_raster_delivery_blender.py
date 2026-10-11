@@ -1092,8 +1092,29 @@ def test_image_plane_constructor_never_mutates_or_reuses_existing_resources(
                 "ShaderNodeOutputMaterial": "OUTPUT_MATERIAL",
             }.get(node_type, node_type)
             self.image = None
-            self.outputs = {"Color": _Socket(self), "Alpha": _Socket(self), "BSDF": _Socket(self)}
-            self.inputs = {name: _Socket(self) for name in ("Base Color", "Alpha", "Surface", "Roughness", "Specular" if legacy_sockets else "Specular IOR Level", "Emission Strength", "Emission" if legacy_sockets else "Emission Color")}
+            self.outputs = {
+                "Color": _Socket(self),
+                "Alpha": _Socket(self),
+                "BSDF": _Socket(self),
+                "Shader": _Socket(self),
+            }
+            self.inputs = {
+                name: _Socket(self)
+                for name in (
+                    "Base Color",
+                    "Alpha",
+                    "Surface",
+                    "Roughness",
+                    "Specular" if legacy_sockets else "Specular IOR Level",
+                    "Emission Strength",
+                    "Emission" if legacy_sockets else "Emission Color",
+                    "Fac",
+                    "Shader",
+                )
+            }
+            self.inputs[0] = self.inputs["Fac"]
+            self.inputs[1] = _Socket(self)
+            self.inputs[2] = _Socket(self)
 
     class _Nodes(list):
         def clear(self):
@@ -1314,7 +1335,31 @@ def test_image_plane_constructor_never_mutates_or_reuses_existing_resources(
         emission = shader.inputs["Emission" if legacy_sockets else "Emission Color"]
         assert specular.default_value == 0.0
         assert shader.inputs["Emission Strength"].default_value == 1.0
+        assert texture.image.colorspace_settings.name == "sRGB"
+        assert [node.type for node in nodes] == [
+            "TEX_IMAGE",
+            "BSDF_PRINCIPLED",
+            "OUTPUT_MATERIAL",
+        ]
         assert any(link.from_socket is texture.outputs["Color"] and link.to_socket is emission for link in material.node_tree.links)
+
+
+def test_png_alpha_channel_is_detected_from_ihdr_color_type():
+    import struct
+
+    def png(color_type: int) -> bytes:
+        return (
+            b"\x89PNG\r\n\x1a\n"
+            + struct.pack(">I", 13)
+            + b"IHDR"
+            + struct.pack(">IIBB", 1, 1, 8, color_type)
+            + b"\x00\x00\x00"
+        )
+
+    assert bl_import_engine._png_has_alpha(png(6)) is True
+    assert bl_import_engine._png_has_alpha(png(4)) is True
+    assert bl_import_engine._png_has_alpha(png(2)) is False
+    assert bl_import_engine._png_has_alpha(b"png-bytes") is False
 
 
 def test_remove_created_image_plane_removes_all_owned_datablocks(monkeypatch):
@@ -2130,7 +2175,8 @@ def test_import_stats_exclude_post_stack_failed_text(monkeypatch, tmp_path):
         )
     stats = caught.value.stats
     assert stats["text_items"] == 0
-    assert stats["pages_imported"] == 0
+    # Only the failed item is removed; the sheet itself is kept and counted.
+    assert stats["pages_imported"] == 1
     assert stats["text_final_state_failures"] == [{"item_id": "page:1:text:1"}]
 
 
@@ -2678,8 +2724,10 @@ def test_embedded_soft_mask_delivery_accounting_and_failure_report(monkeypatch, 
         with pytest.raises(bl_import_engine.IncompleteImportError) as raised:
             bl_import_engine.import_pdf(str(input_pdf), config=config)
         stats = raised.value.stats
-        assert stats["pages_imported"] == stats["images"] == stats["image_source_instances"] == 0
-        assert len(discarded) == 1 and not planes
+        # The pictures are left out and listed; the sheet (lines, text) is kept.
+        assert stats["pages_imported"] == 1
+        assert stats["images"] == stats["image_source_instances"] == 0
+        assert not discarded and not planes
         assert stats["raster_delivery_failures"] == [{
             "page": 1, "stage": "embedded_image", "reason": "page 1 image xref 17 unsupported soft mask",
         }]
@@ -2690,3 +2738,26 @@ def test_embedded_soft_mask_delivery_accounting_and_failure_report(monkeypatch, 
         assert planes == [placement] and not discarded
         assert stats["image_soft_mask_alignments"] == [{"page": 1, "xref": 17, **alignment}]
     assert reports == [stats]
+
+
+def test_alpha_image_mix_shader_still_counts_as_placed():
+    from pdf_vector_importer.raster_geometry import shader_reaches_material_output
+
+    class Node:
+        def __init__(self, kind):
+            self.type = kind
+
+    class Link:
+        def __init__(self, source, target):
+            self.from_node = source
+            self.to_node = target
+
+    shader = Node("BSDF_PRINCIPLED")
+    output = Node("OUTPUT_MATERIAL")
+    assert shader_reaches_material_output([shader, output], [Link(shader, output)])
+    mix = Node("MIX_SHADER")
+    assert shader_reaches_material_output(
+        [shader, mix, output],
+        [Link(shader, mix), Link(mix, output)],
+    )
+    assert not shader_reaches_material_output([shader, output], [])

@@ -539,7 +539,11 @@ def plan_terminal_triangles(page, page_data, source_sha256, *, user_scale=1., fl
         _source_group_declarations(page)
     except ValueError:
         return [], []
-    svg = page.get_svg_image(text_as_path=False)
+    from .pdf_paint_proof import optional_page_svg
+
+    svg = optional_page_svg(page, text_as_path=False)
+    if svg is None:
+        return [], []
     svg_rows = _svg_triangles(svg)
     drawings = page.get_drawings()
     raw = {row['seqno']: row for row in drawings}
@@ -760,7 +764,7 @@ def _validate_following_stroke(obj, proof, members, style, graph):
     from mathutils import Vector
     from .fill_paint_order import same_native_object
     from .image_paint_order import _verify_native_stroke, _world_corners, _local_geometry
-    from .visual_style import preview_color
+    from .visual_style import preview_color, scene_linear_color
 
     if (obj.type != 'CURVE' or not any(same_native_object(obj, member) for member in members)
             or obj.get('pdf_image_order_primitive_id') != proof['primitive_id']
@@ -771,7 +775,7 @@ def _validate_following_stroke(obj, proof, members, style, graph):
     centerline = [obj.matrix_world @ Vector(tuple(p.co)[:3]) for p in obj.data.splines[0].points]
     if not _close([p.z for p in centerline], [centerline[0].z]*len(centerline)):
         raise ValueError('Later triangle stroke source plane is tilted')
-    color = preview_color(proof['rgb'], style)
+    color = scene_linear_color(preview_color(proof['rgb'], style))
     if len(obj.data.materials) != 1:
         raise ValueError('Later triangle stroke material ownership changed')
     material = obj.data.materials[0]
@@ -875,7 +879,7 @@ def apply_terminal_triangles(plans, collection, config):
     import bpy
     from .fill_paint_order import same_native_object, validate_source_fill
     from .image_paint_order import _world_corners, _local_geometry, _move_display_z, _verify_native_stroke
-    from .visual_style import preview_color
+    from .visual_style import preview_color, scene_linear_color
 
     bpy.context.view_layer.update()
     graph = bpy.context.evaluated_depsgraph_get()
@@ -931,7 +935,7 @@ def apply_terminal_triangles(plans, collection, config):
                           for p in outline.data.splines[0].points]
             if not _close([p.z for p in centerline], [centerline[0].z]*len(centerline)):
                 raise ValueError('Native triangle outline source plane is tilted')
-            color = preview_color(plan['outline']['rgb'], spec['visual_style'])
+            color = scene_linear_color(preview_color(plan['outline']['rgb'], spec['visual_style']))
             if len(outline.data.materials) != 1:
                 raise ValueError('Native triangle outline material ownership changed')
             material = outline.data.materials[0]
@@ -1033,7 +1037,7 @@ def apply_terminal_triangles(plans, collection, config):
             if len(obj.data.materials) != 1:
                 raise ValueError('Native compound material ownership changed')
             material = obj.data.materials[0]
-            color = preview_color(compound['fill_rgb'], compound['visual_style'])
+            color = scene_linear_color(preview_color(compound['fill_rgb'], compound['visual_style']))
             if not _close(material.diffuse_color, (*color, 1.)) or not material.use_nodes:
                 raise ValueError('Native compound opaque source material changed')
             nodes = {node.type: node for node in material.node_tree.nodes}
