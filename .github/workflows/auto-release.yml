@@ -3,17 +3,36 @@ name: auto-release
 on:
   # Publishing is explicit after source and native acceptance finish.
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish verified releases after all current work is complete
+        type: boolean
+        required: true
+        default: false
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   release:
     if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      action: ${{ steps.release_plan.outputs.action }}
+      tag: ${{ steps.release_plan.outputs.tag }}
+      release_target: ${{ steps.release_plan.outputs.release_target }}
+      release_id: ${{ steps.release_plan.outputs.release_id }}
+      build_ref: ${{ steps.release_plan.outputs.build_ref }}
+      candidate_artifact: ${{ steps.candidate.outputs.artifact_name }}
+      candidate_run_attempt: ${{ steps.candidate.outputs.run_attempt }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -127,17 +146,176 @@ jobs:
       - name: Smoke shipped add-on ZIP
         run: python scripts/smoke_release_zip.py "dist/Blender-PDF-Importer_*.zip"
 
+      - name: Record exact release candidate
+        id: candidate
+        env:
+          BUILD_REF: ${{ steps.release_plan.outputs.build_ref }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+
+          actual = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          if actual != os.environ["BUILD_REF"]:
+              raise SystemExit("Candidate checkout does not match selected source")
+          archives = list(Path("dist").glob("Blender-PDF-Importer_*.zip"))
+          if len(archives) != 1:
+              raise SystemExit("Expected exactly one candidate ZIP")
+          archive = archives[0]
+          record = {
+              "schema": "bcs.blender_release_candidate/1.0",
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "source_sha": actual,
+              "workflow_sha": os.environ["GITHUB_SHA"],
+              "workflow_ref": os.environ["GITHUB_WORKFLOW_REF"],
+              "run_id": int(os.environ["GITHUB_RUN_ID"]),
+              "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
+              "version": os.environ["RELEASE_VERSION"],
+              "artifact": {
+                  "name": archive.name,
+                  "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+                  "size_bytes": archive.stat().st_size,
+              },
+          }
+          Path("dist/release-candidate-provenance.json").write_text(
+              json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
+              output.write(f"run_attempt={record['run_attempt']}\n")
+              output.write(f"artifact_name=attested-release-candidate-{record['run_id']}-{record['run_attempt']}\n")
+          PY
+
+      - name: Attest exact release candidate
+        uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4
+        with:
+          subject-path: |
+            dist/Blender-PDF-Importer_*.zip
+            dist/release-candidate-provenance.json
+
+      - name: Retain attested release candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.candidate.outputs.artifact_name }}
+          path: |
+            dist/Blender-PDF-Importer_*.zip
+            dist/release-candidate-provenance.json
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: release
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_release == true && needs.release.result == 'success'
+    permissions:
+      actions: read
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout immutable release source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release.outputs.build_ref }}
+          fetch-depth: 0
+          fetch-tags: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Download and verify exact attested candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_REF: ${{ needs.release.outputs.build_ref }}
+          RELEASE_VERSION: ${{ needs.release.outputs.version }}
+          CANDIDATE_ARTIFACT: ${{ needs.release.outputs.candidate_artifact }}
+          CANDIDATE_ATTEMPT: ${{ needs.release.outputs.candidate_run_attempt }}
+        run: |
+          set -euo pipefail
+          cp scripts/release_safety.py "$RUNNER_TEMP/release_safety.py"
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "$CANDIDATE_ARTIFACT" --dir dist
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+
+          def strict_pairs(pairs):
+              result = {}
+              for key, value in pairs:
+                  if key in result:
+                      raise ValueError("Duplicate candidate JSON key: " + key)
+                  result[key] = value
+              return result
+
+          def reject_constant(value):
+              raise ValueError("Non-finite candidate JSON: " + value)
+
+          record = json.loads(
+              Path("dist/release-candidate-provenance.json").read_text(encoding="utf-8"),
+              object_pairs_hook=strict_pairs,
+              parse_constant=reject_constant,
+          )
+          expected = {
+              "schema": "bcs.blender_release_candidate/1.0",
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "source_sha": os.environ["BUILD_REF"],
+              "workflow_sha": os.environ["GITHUB_SHA"],
+              "workflow_ref": os.environ["GITHUB_WORKFLOW_REF"],
+              "run_id": int(os.environ["GITHUB_RUN_ID"]),
+              "run_attempt": int(os.environ["CANDIDATE_ATTEMPT"]),
+              "version": os.environ["RELEASE_VERSION"],
+          }
+          if set(record) != set(expected) | {"artifact"}:
+              raise SystemExit("Candidate provenance shape mismatch")
+          if any(record[key] != value or type(record[key]) is not type(value)
+                 for key, value in expected.items()):
+              raise SystemExit("Candidate origin/version mismatch")
+          actual = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          if actual != expected["source_sha"]:
+              raise SystemExit("Publisher checkout does not match candidate")
+          archives = list(Path("dist").glob("*.zip"))
+          if len(archives) != 1:
+              raise SystemExit("Expected exactly one transferred ZIP")
+          archive = archives[0]
+          if archive.is_symlink() or not archive.is_file():
+              raise SystemExit("Transferred ZIP is not an ordinary file")
+          observed = {
+              "name": archive.name,
+              "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+              "size_bytes": archive.stat().st_size,
+          }
+          artifact = record["artifact"]
+          if not isinstance(artifact, dict) or set(artifact) != set(observed):
+              raise SystemExit("Candidate artifact shape mismatch")
+          if any(artifact[key] != value or type(artifact[key]) is not type(value)
+                 for key, value in observed.items()):
+              raise SystemExit("Transferred ZIP bytes differ from attested candidate")
+          PY
+          for candidate in dist/*.zip dist/release-candidate-provenance.json; do
+            gh attestation verify "$candidate" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/auto-release.yml" \
+              --signer-digest "$GITHUB_SHA" --source-digest "$GITHUB_SHA" \
+              --source-ref "$GITHUB_REF" --deny-self-hosted-runners
+          done
+
       - name: Complete or verify immutable release
         id: mint
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          ACTION="${{ steps.release_plan.outputs.action }}"
-          TAG="${{ steps.release_plan.outputs.tag }}"
-          RELEASE_TARGET="${{ steps.release_plan.outputs.release_target }}"
-          RELEASE_ID="${{ steps.release_plan.outputs.release_id }}"
-          TITLE="v${{ steps.version.outputs.version }} — PDF Vector Importer for Blender"
+          ACTION="${{ needs.release.outputs.action }}"
+          TAG="${{ needs.release.outputs.tag }}"
+          RELEASE_TARGET="${{ needs.release.outputs.release_target }}"
+          RELEASE_ID="${{ needs.release.outputs.release_id }}"
+          TITLE="v${{ needs.release.outputs.version }} — PDF Vector Importer for Blender"
           RELEASE_JSON="$RUNNER_TEMP/release.json"
           refresh_release() {
             local attempt discovery
@@ -262,7 +440,7 @@ jobs:
         with:
           github-token: ${{ secrets.WEBSITE_DISPATCH_TOKEN || secrets.BLUECOLLAR_WEBSITE_DISPATCH_TOKEN || secrets.REPO_DISPATCH_TOKEN }}
           script: |
-            const tag = 'v${{ steps.version.outputs.version }}';
+            const tag = 'v${{ needs.release.outputs.version }}';
             const payload = {
               source_repo: context.repo.owner + '/' + context.repo.repo,
               source_event: 'auto-release',
