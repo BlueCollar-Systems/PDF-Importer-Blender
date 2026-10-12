@@ -7,6 +7,7 @@ import pytest
 
 from pdf_vector_importer.capsule_nurbs import (
     capsule_controls,
+    cubic_capsule_controls,
     cyclic_quadratic_knots,
     native_float_close,
 )
@@ -45,7 +46,8 @@ def point_at(controls, knots, u):
 
 @pytest.mark.parametrize(
     "end,width",
-    [((0.0, 0.0), 12.0), ((0.013, 0.0), 12.0), ((3.0, 4.0), 5.0), ((-4.0, 3.0), 8.0)],
+    [((0.0, 0.0), 12.0), ((0.013, 0.0), 12.0), ((3.0, 4.0), 5.0), ((-4.0, 3.0), 8.0),
+     ((75.0, 0.0), 6.0), ((0.0, 75.0), 6.0), ((65.0, 60.0), 6.0)],
 )
 def test_blender_periodic_basis_lies_on_exact_capsule(end, width):
     start = (1e6, -2e6)
@@ -85,3 +87,23 @@ def test_malformed_or_unbounded_capsule_rejects(change):
     capsule.update(change)
     with pytest.raises(ValueError):
         capsule_controls(capsule)
+
+
+@pytest.mark.parametrize("end", [(0,0),(75,0),(0,75),(65,60),(.01,0)])
+def test_cubic_legacy_boundary_has_exact_sides_and_bounded_radial_excess(end):
+    length=math.hypot(*end)
+    radius=3
+    capsule=dict(start=(0,0),end=end,width=2*radius,length=length)
+    origin,nodes=cubic_capsule_controls(capsule)
+    assert origin==(0,0)
+    assert len(nodes)==(6 if length else 4)
+    ux,uy=(end[0]/length,end[1]/length) if length else (1,0)
+    for index,(co,_left,right) in enumerate(nodes):
+        next_co,next_left,_=nodes[(index+1)%len(nodes)]
+        for step in range(51):
+            t=step/50
+            point=tuple((1-t)**3*co[a]+3*(1-t)**2*t*right[a]
+                        +3*(1-t)*t*t*next_left[a]+t**3*next_co[a] for a in (0,1))
+            along=min(length,max(0,point[0]*ux+point[1]*uy))
+            distance=math.hypot(point[0]-along*ux,point[1]-along*uy)
+            assert radius-1e-12<=distance<=radius*(1+.000273)+1e-12

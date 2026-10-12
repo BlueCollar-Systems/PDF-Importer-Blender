@@ -1,6 +1,6 @@
 # PDF Vector Importer for Blender
 
-[![Version](https://img.shields.io/badge/Version-1.0.108-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-1.0.109-blue.svg)]()
 
 **BUILT. NOT BOUGHT.** -- BlueCollar-Systems
 
@@ -34,9 +34,12 @@ change that.
    ```bash
    python build_release.py
    ```
-2. In Blender: **Edit > Preferences > Add-ons > Install...**
-3. Choose `Blender-PDF-Importer_vX.Y.Z.zip`
-4. Enable **PDF Vector Importer**
+2. If upgrading, disable **PDF Vector Importer**, save Preferences if needed,
+   and close every Blender window. Reopen Blender with the add-on still disabled.
+3. In **Edit > Preferences > Add-ons**, choose **Install...** on older Blender,
+   or the menu's **Install from Disk...** on newer Blender, then select the ZIP.
+4. Enable **PDF Vector Importer**. If the list still shows an older version,
+   refresh the local add-on list or restart Blender before importing.
 
 Release ZIPs include a private PyMuPDF runtime under `pdf_vector_importer/lib`,
 so users do not need system Python, pip, or operating-system packages. Import
@@ -56,7 +59,12 @@ or newer. The bundled `extra.py` and its repair copy remain byte-identical.
 
 ## Upgrading / skipping versions
 
-Install the latest release ZIP via Preferences → Add-ons (disable old version first if Blender keeps both). Skipping versions is supported — run `--preflight` or import one of your own representative PDFs after a major jump.
+Disable the existing add-on and restart Blender before installing an upgrade.
+Disabling alone leaves its PDF reader DLL loaded on Windows, so a hot update can
+leave files from two versions. Install the ZIP before re-enabling the add-on.
+If an import reports an installed-content hash mismatch, repeat that cold
+installation sequence. Skipping versions is supported; import a representative
+PDF after a major jump.
 
 ### Manual Install
 
@@ -78,6 +86,22 @@ On Blender 4.1 and newer you can also drag a PDF from Windows Explorer onto the
 **Import PDF Vector** imports it. One PDF per drop.
 
 Geometry is grouped into collections by page and (optionally) by source layer or color.
+Ordinary even-odd fills retain their counters in one editable curve. Proper
+self-crossings are divided into edge-equivalent simple loops so Blender does
+not fill the entire crossing's box, including a single crossing contour.
+Simple nested or disjoint nonzero fills use their original directed source
+paths to preserve holes and same-winding solid interiors. Unknown source
+winding, crossing nonzero contours or excessive topology work keep the original
+editable paths and report incomplete fill delivery. Choose Raster mode when
+full-page appearance is needed for an unsupported fill. The source topology
+work is bounded and remains cancellable. Isolated opaque round-ended straight lines
+keep their editable centerline and gain a filled editable stroke boundary;
+moving the centerline object moves that boundary with it. Their exact rational
+curve is checked against the actual host fill. Hosts that evaluate it differently
+use an explicitly reported cubic approximation, with radial error below
+0.000273 times the pen radius, plus native coordinate storage error. Overlapping
+or unproven clipped/blended round strokes retain their lines and are reported
+for review. This route does not change butt or projecting-square strokes.
 Page selections such as `1,3-5` import each selected page once. Reversed ranges
 are accepted; invalid entries and pages outside the PDF are rejected before
 scene creation, so a typo cannot unexpectedly import the whole document.
@@ -204,7 +228,7 @@ ARM are not supported.
 | 4.5 LTS | 3.11 | ✅ Automatic check passes (Text, 3D Text, Glyphs) |
 | 4.0–4.2 | 3.11 | ⚠️ 4.2: Text and 3D Text pass; **Glyphs does not work**. 4.0–4.1 not tested |
 | 3.6 LTS | 3.10 | ⚠️ Text and 3D Text pass; **Glyphs does not work** |
-| 3.1–3.5 | 3.10 | ⚠️ 3.1: Text and 3D Text pass; **Glyphs crashes Blender**. 3.2–3.5 not tested |
+| 3.1–3.5 | 3.10 | 3.1.2: six text modes passed the r8 neutral fixture; earlier matrix crash remains historical evidence. 3.2–3.5 not re-tested |
 | 3.0 and earlier | 3.9 or older | ❌ Not supported |
 
 Evidence levels:

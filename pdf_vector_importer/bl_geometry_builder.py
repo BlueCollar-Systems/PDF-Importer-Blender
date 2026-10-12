@@ -1085,11 +1085,30 @@ def build_page(
         "model3d_solids": 0,
         "compound_clip_fills": 0,
         "compound_clip_contours": 0,
+        "ordinary_compound_fills": 0,
+        "ordinary_compound_contours": 0,
         "clip_fill_build_drops": [],
         "geometry_delivery_issues": [],
     }
     page_area = max(float(page_data.width or 0.0) * float(page_data.height or 0.0), 1e-9)
-    prims = page_data.primitives or []
+    from .bl_compound_fills import grouped_fill_primitives
+
+    topology_limits = {
+        name: int(config.get(f"compound_fill_{name}", default))
+        for name, default in (("point_budget", 65536), ("work_budget", 131072),
+                              ("candidate_budget", 32768), ("split_budget", 1024))
+    }
+    topology_cache = {}
+
+    def _topology_checkpoint():
+        # Splitting one large source fill must remain cancellable between the
+        # ordinary per-primitive geometry heartbeats, before native allocation.
+        return progress_callback(0.0) if progress_callback else None
+
+    prims = grouped_fill_primitives(
+        page_data, progress_callback=_topology_checkpoint,
+        limits=topology_limits, topology_cache=topology_cache,
+        nonzero_windings=config.get("_source_nonzero_windings"))
     clip_groups = {}
     for primitive in prims:
         if primitive.clip_fill_group_id:
@@ -1235,11 +1254,38 @@ def build_page(
                     raise ValueError("Clip fill contours disagree about their source fill")
                 target_col = _resolve_collection(collection, prim, group_by_color, collection_cache=collection_cache)
                 material = _get_or_create_material(prim.fill_color, material_cache, style=visual_style)
+                fill_kind = "pdf_fill" if group_id.startswith("pdf-fill:") else "clip_fill"
+                fill_contours=[p.points for p in members]
+                if fill_kind == "pdf_fill":
+                    from .bl_compound_fills import nonzero_fill_contours, split_self_crossing_contours
+                    fill_contours = topology_cache.get(group_id)
+                    if fill_contours is None:
+                        topology = split_self_crossing_contours if prim.clip_fill_even_odd else nonzero_fill_contours
+                        winding_args = {}
+                        if not prim.clip_fill_even_odd:
+                            windings = topology_cache.get(group_id+":winding")
+                            if windings is None:
+                                raise ValueError("Nonzero fill has unproven source contour winding; "
+                                                 "original source paths retained")
+                            winding_args["source_windings"] = windings
+                        fill_contours = topology(
+                            [p.points for p in members], progress_callback=_topology_checkpoint,
+                            **winding_args, **topology_limits)
                 obj = _create_compound_clip_fill(
-                    f"P{page_data.page_number}_clip_fill_{prim.id}",
-                    [p.points for p in members], target_col, material, prim.clip_fill_even_odd,
+                    f"P{page_data.page_number}_{fill_kind}_{prim.id}",
+                    fill_contours, target_col, material,
+                    True if fill_kind == "pdf_fill" else prim.clip_fill_even_odd,
                 )
                 obj["bcs_clip_fill_group_id"] = group_id
+                if fill_kind == "pdf_fill":
+                    obj["bcs_ordinary_pdf_fill"] = True
+                    obj["pdf_source_fill_rule"] = "evenodd" if prim.clip_fill_even_odd else "nonzero"
+                    if not prim.clip_fill_even_odd:
+                        obj["pdf_source_winding_proof"] = "unique_directed_source_svg"
+                    if len(fill_contours) != len(members):
+                        import json
+
+                        obj["pdf_original_fill_contours_mm"] = json.dumps([p.points for p in members])
             except Exception as error:
                 from .import_session import ImportCancelledError
 
@@ -1249,9 +1295,34 @@ def build_page(
                 # it never costs the page or the document.
                 if obj is not None:
                     _discard_partial_clip_fill(obj, getattr(obj, "data", None))
-                stats["clip_fill_build_drops"].append(
-                    _clip_fill_build_drop(page_data, group_id, prim, error)
-                )
+                if group_id.startswith("pdf-fill:"):
+                    # Never leave a false outer face behind. Original paths
+                    # remain editable, but an unproven fill is a delivery
+                    # failure, not a claimed visual or raster approximation.
+                    target_col = _resolve_collection(collection, prim, group_by_color,
+                                                     collection_cache=collection_cache)
+                    material = _get_or_create_material(prim.fill_color, material_cache, style=visual_style)
+                    source_obj = _create_compound_clip_fill(
+                        f"P{page_data.page_number}_unsupported_source_fill_{prim.id}",
+                        [p.points for p in members], target_col, material, True)
+                    source_obj.data.fill_mode = "NONE"
+                    source_obj["pdf_unsupported_fill_source_paths"] = True
+                    source_obj["pdf_source_fill_reason"] = str(error)
+                    stats["curves"] += 1
+                    stats["geometry_delivery_issues"].append({
+                        "page": page_data.page_number, "primitive_id": prim.id,
+                        "primitive_ids": [p.id for p in members],
+                        "source_draw_order": prim.source_draw_order,
+                        "status": "failed", "stage": "ordinary_compound_topology",
+                        "reason": str(error), "source_paths_retained": True,
+                        "native_object": source_obj.name,
+                        "raster_fallback": "Select Raster import mode for full-page appearance; "
+                                           "an unproven crop could cover unrelated editable text",
+                    })
+                else:
+                    stats["clip_fill_build_drops"].append(
+                        _clip_fill_build_drop(page_data, group_id, prim, error)
+                    )
                 continue
             # Register only successfully built source paint; ownership errors
             # remain failures rather than reported geometric omissions.
@@ -1259,15 +1330,20 @@ def build_page(
             source_opacities = {p.fill_opacity for p in members}
             config.setdefault('_source_compound_fill_objects', []).append({
                 'object': obj, 'primitive_ids': [p.id for p in members],
-                'contours_mm': [[tuple(point) for point in p.points] for p in members],
+                'contours_mm': [[tuple(point) for point in contour] for contour in fill_contours],
+                'original_contours_mm': [[tuple(point) for point in p.points] for p in members],
                 'source_draw_order': next(iter(source_orders)) if len(source_orders) == 1 else None,
                 'fill_opacity': next(iter(source_opacities)) if len(source_opacities) == 1 else None,
                 'fill_rgb': tuple(prim.fill_color), 'visual_style': visual_style,
                 'even_odd': prim.clip_fill_even_odd,
             })
             stats["curves"] += 1
-            stats["compound_clip_fills"] += 1
-            stats["compound_clip_contours"] += len(members)
+            if group_id.startswith("pdf-fill:"):
+                stats["ordinary_compound_fills"] += 1
+                stats["ordinary_compound_contours"] += len(members)
+            else:
+                stats["compound_clip_fills"] += 1
+                stats["compound_clip_contours"] += len(members)
             continue
 
         has_fill_any = prim.fill_color is not None

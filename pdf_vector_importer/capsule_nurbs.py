@@ -39,7 +39,7 @@ def capsule_controls(capsule):
     ):
         raise ValueError("Invalid source capsule")
     length = math.hypot(end[0] - start[0], end[1] - start[1])
-    if length > width or length != capsule["length"]:
+    if length != capsule["length"]:
         raise ValueError("Source capsule length disagrees with its endpoints")
     ux, uy = (
         ((end[0] - start[0]) / length, (end[1] - start[1]) / length)
@@ -92,3 +92,30 @@ def cyclic_quadratic_knots(control_count):
             "Cyclic quadratic controls must contain endpoint/control pairs"
         )
     return tuple(float(i // 2) for i in range(control_count + 5))
+
+
+def cubic_capsule_controls(capsule):
+    """Editable cubic boundary when a host cannot fill the rational basis correctly.
+
+    Straight sides and source extents remain exact. A circular quarter uses the
+    standard tangent cubic; its maximum radial excess is below 0.000273*r.
+    """
+    origin, _rational = capsule_controls(capsule)  # Validate the same source geometry.
+    start, end = capsule["start"], capsule["end"]
+    length = capsule["length"]
+    radius = capsule["width"] / 2
+    ux, uy = ((end[0]-start[0])/length, (end[1]-start[1])/length) if length else (1.,0.)
+    k = 4/3*math.tan(math.pi/8)*radius
+    if length:
+        nodes = [((0,radius),(-k,radius),(length/3,radius)),
+                 ((length,radius),(2*length/3,radius),(length+k,radius)),
+                 ((length+radius,0),(length+radius,k),(length+radius,-k)),
+                 ((length,-radius),(length+k,-radius),(2*length/3,-radius)),
+                 ((0,-radius),(length/3,-radius),(-k,-radius)),
+                 ((-radius,0),(-radius,-k),(-radius,k))]
+    else:
+        nodes = [((0,radius),(-k,radius),(k,radius)),
+                 ((radius,0),(radius,k),(radius,-k)),
+                 ((0,-radius),(k,-radius),(-k,-radius)),
+                 ((-radius,0),(-radius,-k),(-radius,k))]
+    return origin, [[(ux*x-uy*y, uy*x+ux*y) for x,y in node] for node in nodes]

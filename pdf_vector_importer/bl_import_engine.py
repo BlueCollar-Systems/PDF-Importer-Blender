@@ -1012,6 +1012,7 @@ def write_import_report(
         "resolved_scale": stats.get("resolved_scale"),
         "final_transparent_annotations": stats.get("final_transparent_annotations", []),
         "source_capsule_footprints": stats.get("source_capsule_footprints", []),
+        "source_round_stroke_footprints": stats.get("source_round_stroke_footprints", []),
         "opaque_image_paint_order": stats.get("opaque_image_paint_order", []),
         "image_soft_mask_alignments": stats.get("image_soft_mask_alignments", []),
         "opaque_fill_depth_order": stats.get("opaque_fill_depth_order", []),
@@ -4768,6 +4769,7 @@ def iter_import_pdf(
             )
 
             prepared_capsules = []
+            prepared_round_strokes = []
             if import_mode != "raster":
                 t_capsule_plan = time.perf_counter()
                 prepared_capsules, unresolved_capsules = prepare_capsules(
@@ -4777,12 +4779,19 @@ def iter_import_pdf(
                 )
                 total_stats.setdefault('source_capsule_footprints', []).extend(unresolved_capsules)
                 _add_phase_ms('source_capsule_plan_ms', t_capsule_plan)
+                from .bl_round_strokes import prepare_round_strokes
+
+                prepared_round_strokes, unresolved_round_strokes = prepare_round_strokes(
+                    page, page_data, source_sha256=source_sha256, page_number=page_num,
+                    user_scale=import_cfg.user_scale, flip_y=import_cfg.flip_y,
+                )
+                total_stats.setdefault('source_round_stroke_footprints', []).extend(unresolved_round_strokes)
 
             # 9c. Geometry cleanup (remove micro-segments)
             if import_cfg.cleanup_level != "conservative" or import_cfg.min_seg_len > 0:
                 t_phase = time.perf_counter()
                 cleanup_stats = cleanup_preserving_capsules(
-                    page_data.primitives, prepared_capsules, cleanup_primitives,
+                    page_data.primitives, prepared_capsules + prepared_round_strokes, cleanup_primitives,
                     cleanup_level=import_cfg.cleanup_level,
                 )
                 _add_phase_ms("cleanup_ms", t_phase)
@@ -4898,6 +4907,20 @@ def iter_import_pdf(
             if import_mode != "raster":
                 page_builder_config = dict(builder_config)
                 page_builder_config["visual_style"] = page_visual_style
+                from .bl_compound_fills import bind_nonzero_windings
+                from .pdf_paint_proof import optional_page_svg
+
+                if any(row.get("type") == "f" and row.get("even_odd") is False
+                       for row in getattr(page_data, "_source_drawings", ())):
+                    try:
+                        page_builder_config["_source_nonzero_windings"] = bind_nonzero_windings(
+                            page_data, optional_page_svg(page, text_as_path=False),
+                            progress_callback=lambda _i=i, _pn=page_num: _progress(_page_progress(_i, 0.72),
+                                                               f"Verifying source fill winding for page {_pn}..."))
+                    except ImportCancelledError:
+                        cancelled_page = page_num
+                        _discard_page_collection(page_col)
+                        break
                 from .opaque_rectangle_proof import plan_opaque_rectangles
                 from .opaque_rectangle_order import bind_rectangle_plans
 
@@ -4945,6 +4968,9 @@ def iter_import_pdf(
                     spec['primitive_id'] for spec in prepared_capsules
                 )
                 page_builder_config['_image_order_isolated_stroke_ids'].update(
+                    spec['primitive_id'] for spec in prepared_round_strokes
+                )
+                page_builder_config['_image_order_isolated_stroke_ids'].update(
                     plan['primitive_id'] for plan in rectangle_order_plans if plan['has_border']
                 )
                 page_builder_config['_image_order_isolated_stroke_ids'].update(
@@ -4983,6 +5009,14 @@ def iter_import_pdf(
                     cancelled_page = page_num
                     _discard_page_collection(page_col)
                     break
+                if prepared_round_strokes and not page_stats.get('model3d_solids'):
+                    from .bl_round_strokes import apply_round_strokes
+
+                    records = apply_round_strokes(
+                        prepared_round_strokes, page_col, page_builder_config, source_path=filepath,
+                    )
+                    total_stats.setdefault('source_round_stroke_footprints', []).extend(records)
+                    page_stats['curves'] = int(page_stats.get('curves', 0)) + len(records)
                 if not page_stats.get('model3d_solids'):
                     from .fill_paint_order import apply_fill_depths
 
@@ -5558,6 +5592,11 @@ def iter_import_pdf(
         )
         total_stats["clip_fill_warning"] = _clip_fill_warning_line(
             total_stats.get("clip_fill_delivery")
+        )
+        from .bl_round_strokes import round_stroke_warning
+
+        total_stats["round_stroke_warning"] = round_stroke_warning(
+            total_stats.get("source_round_stroke_footprints", ())
         )
         total_stats["text_glyph_code_warning"] = summarize_glyph_code_block(
             _glyph_code_delivery(total_stats),
