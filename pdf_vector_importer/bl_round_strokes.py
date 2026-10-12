@@ -14,6 +14,29 @@ from .image_paint_order import _close, _verify_native_stroke
 from .capsule_nurbs import cubic_capsule_controls, native_float_close
 from .stroke_footprint import bind_similarity_strokes, round_stroke, unclipped_capsules
 
+# Each native round end evaluates the open sheet twice. A 48x36 foundation
+# sheet qualified about 4,500 isolated round lines; building a footprint for
+# each one does not finish. At or under this count every qualified line still
+# gets its round end. Above it, the lines stay editable centerlines.
+MAX_NATIVE_ROUND_FOOTPRINTS = 64
+
+
+def defer_native_round_footprints(prepared):
+    """Report one page when separate round ends would stall the import."""
+    count = len(prepared or ())
+    if count <= MAX_NATIVE_ROUND_FOOTPRINTS:
+        return None
+    page = None
+    if prepared:
+        page = (prepared[0].get("recipe") or {}).get("page")
+    return {
+        "page": page,
+        "status": "deferred",
+        "reason": "round_stroke_native_footprint_budget",
+        "prepared_count": count,
+        "budget": MAX_NATIVE_ROUND_FOOTPRINTS,
+    }
+
 
 class _PaintBoundsIndex:
     """Balanced two-dimensional boxes avoid a page scan for every round stroke."""
@@ -127,12 +150,25 @@ def prepare_round_strokes(page, page_data, *, source_sha256, page_number,
     return prepared, unresolved
 
 
-def apply_round_strokes(prepared, collection, config, *, source_path):
+def apply_round_strokes(prepared, collection, config, *, source_path, progress_callback=None):
     if not prepared:
         return []
+    deferred = defer_native_round_footprints(prepared)
+    if deferred is not None:
+        if progress_callback is not None:
+            progress_callback(1.0)
+        return [deferred]
+    from .import_session import ImportCancelledError, cancel_heartbeat_interval
+
     digest = _file_sha(source_path)
     records = []
-    for spec in prepared:
+    total = len(prepared)
+    heartbeat_every = cancel_heartbeat_interval(total)
+    for index, spec in enumerate(prepared):
+        if progress_callback is not None and index % heartbeat_every == 0:
+            progress_result = progress_callback((index + 1) / float(total))
+            if progress_result is False:
+                raise ImportCancelledError("PDF import cancelled during round line ends")
         if digest != spec["recipe"]["source_sha256"]:
             raise ValueError("Round stroke source PDF changed before native construction")
         owned = config.get("_image_order_stroke_objects", {}).get(spec["primitive_id"], ())
@@ -255,7 +291,17 @@ def _cubic_footprint(spec, collection, material):
 def round_stroke_warning(records):
     unqualified = sum(record.get("status") == "unqualified" for record in records)
     approximated = sum(record.get("status") == "approximated" for record in records)
+    deferred = sum(
+        int(record.get("prepared_count") or 0)
+        for record in records
+        if record.get("status") == "deferred"
+    )
     messages=[]
+    if deferred:
+        messages.append(
+            f"{deferred} round-ended lines kept their editable centerlines. "
+            "Separate round ends were skipped so a dense sheet can finish."
+        )
     if unqualified:
         messages.append(f"{unqualified} round-ended line(s) need review; their original editable lines are retained.")
     if approximated:
