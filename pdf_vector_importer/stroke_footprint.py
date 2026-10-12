@@ -12,11 +12,17 @@ import xml.etree.ElementTree as ET
 
 _NUMBER = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?"
 _LINE = re.compile(r"\s*M\s*(" + _NUMBER + r")[ ,]+(" + _NUMBER
-                   + r")\s*([LHV])\s*(" + _NUMBER + r")(?:[ ,]+(" + _NUMBER + r"))?\s*")
+                   + r")\s*([LHV]?)\s*(" + _NUMBER + r")(?:[ ,]+(" + _NUMBER + r"))?\s*")
 
 
 def short_round_stroke(row):
     """Return a source capsule, or None for a path outside this exact case."""
+    capsule = round_stroke(row)
+    return capsule if capsule is not None and capsule["length"] <= capsule["width"] else None
+
+
+def round_stroke(row):
+    """Physical capsule of an opaque, solid, single straight round-cap stroke."""
     items = row.get("items") or ()
     caps = row.get("lineCap")
     if (row.get("type") != "s" or row.get("closePath")
@@ -37,8 +43,6 @@ def short_round_stroke(row):
             or width <= 0 or alpha != 1):
         return None
     length = math.hypot(end[0] - start[0], end[1] - start[1])
-    if length > width:
-        return None
     return {"start": start, "end": end, "width": width,
             "length": length, "area": width * length + math.pi * (width / 2) ** 2}
 
@@ -71,7 +75,7 @@ def _box(value):
     return result if result[0] <= result[2] and result[1] <= result[3] else None
 
 
-def unclipped_capsules(rows, page_bounds):
+def unclipped_capsules(rows, page_bounds, *, allow_long=False):
     """Prove full physical cap coverage inside page and rectangular clips.
 
     Nonrectangular and partially intersecting masks remain outside this helper.
@@ -92,7 +96,8 @@ def unclipped_capsules(rows, page_bounds):
         if row.get("type") == "group":
             groups.append(row)
             continue
-        capsule, seq = short_round_stroke(row), row.get("seqno")
+        capsule = round_stroke(row) if allow_long else short_round_stroke(row)
+        seq = row.get("seqno")
         if capsule is None or type(seq) is not int or any(group.get("opacity", 1) != 1 for group in groups):
             continue
         if seq in seen:
@@ -117,11 +122,12 @@ def unclipped_capsules(rows, page_bounds):
                 or box[2] < bounds[2] or box[3] < bounds[3] for box in masks):
             continue
         result[seq] = {"capsule": capsule, "clip_bounds": masks,
+                       "source_knockout": any(group.get("knockout", False) for group in groups),
                        "source_blend_modes": [group.get("blendmode", "Normal") for group in groups]}
     return result
 
 
-def bind_similarity_strokes(proofs, rows, svg):
+def bind_similarity_strokes(proofs, rows, svg, *, allow_long=False):
     """Reject circular-cap inference unless the renderer proves a similarity CTM.
 
     MuPDF's flattened drawing width alone is insufficient: a nonuniform source
@@ -159,7 +165,7 @@ def bind_similarity_strokes(proofs, rows, svg):
             a, b, c, d, e, f = map(float, re.split(r"[ ,]+", matrix[7:-1].strip()))
             width = float(node.get("stroke-width", "nan"))
             x, y = float(match[1]), float(match[2])
-            if match[3] == "L" and match[5] is not None:
+            if match[3] in ("", "L") and match[5] is not None:
                 end = (float(match[4]), float(match[5]))
             elif match[3] == "H" and match[5] is None:
                 end = (float(match[4]), y)
@@ -185,7 +191,7 @@ def bind_similarity_strokes(proofs, rows, svg):
     # with different CTMs (a circle can otherwise falsely certify an ellipse).
     bindings, use_count = {}, {}
     for row in rows:
-        capsule = short_round_stroke(row)
+        capsule = round_stroke(row) if allow_long else short_round_stroke(row)
         if capsule is None:
             continue
         seq = row.get("seqno")

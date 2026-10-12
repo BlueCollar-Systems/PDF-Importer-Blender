@@ -563,6 +563,9 @@ class IMPORT_OT_pdf_vector(bpy.types.Operator, ImportHelper):
         failed_text = int(stats.get("text_delivery_failed_items", 0) or 0)
         fallback_text = int(stats.get("text_delivery_fallback_items", 0) or 0)
         report_path = str(stats.get("import_report_path") or "")
+        round_stroke_warning = str(stats.get("round_stroke_warning") or "").strip()
+        if round_stroke_warning:
+            self.report({"WARNING"}, round_stroke_warning)
         if failed_text > 0:
             self.report(
                 {"ERROR"},

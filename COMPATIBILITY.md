@@ -25,8 +25,10 @@ warning "Windows 64-bit only" before the add-on is enabled.
 ## Minimum host version
 
 **Blender 3.1** (`bl_info["blender"]` minimum). **Recommended: Blender 5.2 LTS**
-(4.5 LTS also passes the automatic check). On 3.6 LTS and 4.2 LTS, Text and
-3D Text work but the Glyphs text mode does not yet.
+(4.5 LTS also passed the earlier automatic check). The 2026-10-10 matrix found
+Glyphs failures on 3.6 LTS and 4.2 LTS; those hosts have not been re-tested with
+the subsequent r8 fixes. The r8 neutral fixture passed all six text modes on
+3.1.2 and 5.2.2; that does not certify every PDF.
 
 Blender 3.0 is **not supported**: it bundles CPython 3.9.7, and the release ZIP
 ships a cp310-abi3 PyMuPDF wheel (`Requires-Python: >=3.10`) with no cp39
@@ -42,7 +44,7 @@ bundles Python 3.10+).
 | Blender 4.5 LTS | ✅ Automatic check on 4.5.14 passes Text, 3D Text, Glyphs (2026-10-10) |
 | Blender 4.0–4.2 | ⚠️ 4.2.23: Text and 3D Text pass; **Glyphs fails** (no text delivered). 4.0–4.1 not tested |
 | Blender 3.6 LTS | ⚠️ 3.6.23: Text and 3D Text pass; **Glyphs fails** (no text delivered) |
-| Blender 3.1–3.5 | ⚠️ 3.1.2: Text and 3D Text pass; **Glyphs crashes Blender**. 3.2–3.5 not tested |
+| Blender 3.1–3.5 | 3.1.2: r8 six-mode neutral-fixture acceptance passed (2026-10-11); earlier matrix crash is historical. 3.2–3.5 not re-tested |
 | Blender 3.0.x | ❌ Not supported (Python 3.9; wheel ABI floor) |
 | Blender 2.83–2.93 | ❌ Not supported |
 | Blender 2.79 and earlier | ❌ Not supported |
@@ -54,12 +56,16 @@ runs headless (`blender -b --factory-startup`), confirms every import option
 registers, and imports a made-up two-sheet PDF (Letter + Tabloid, one picture,
 non-embedded Helvetica, one text line crossing the sheet edge) as Text, 3D Text
 and Glyphs, requiring both sheets with no failed text. Results above are from
-the 2026-10-10 runs. What was seen:
+the 2026-10-10 runs, before the later r8 acceptance documented in
+[the r8 record](docs/validation/2026-10-11-r8-native-and-release-acceptance.md).
+What was seen in those earlier runs:
 
 - Glyphs on 3.6.23 and 4.2.23: every text item fails its check because the
   converted outline comes back as a `FONT` object instead of a `CURVE`
   (`actual_object_type_not_CURVE`); the import is reported incomplete.
-- Glyphs on 3.1.2: Blender itself stops with an access violation.
+- Glyphs on 3.1.2: that earlier fixture/build stopped Blender with an access
+  violation. The later r8 neutral fixture passed Glyphs and the other five modes;
+  the historical failing run remains preserved.
 - All five versions, before fix-list item BL-1010-keep-every-sheet: a sheet
   with edge-crossing text that ends up several metres down the stack was
   rolled back. With that fix both sheets come in on all five versions
@@ -131,7 +137,7 @@ blender --background --python-expr "import addon_utils; addon_utils.enable('pdf_
 | 4.5 LTS | 3.11 | >=1.24,<2.0 | ✅ Automatic check passes (Text, 3D Text, Glyphs) |
 | 4.0–4.2 | 3.11 | >=1.24,<2.0 | ⚠️ 4.2: Glyphs fails; Text and 3D Text pass. 4.0–4.1 not tested |
 | 3.6 LTS | 3.10 | >=1.24,<2.0 | ⚠️ Glyphs fails; Text and 3D Text pass |
-| 3.1–3.5 | 3.10 | >=1.24,<2.0 | ⚠️ 3.1: Glyphs crashes Blender; Text and 3D Text pass. 3.2–3.5 not tested |
+| 3.1–3.5 | 3.10 | >=1.24,<2.0 | 3.1.2: r8 neutral fixture passed all six modes. Earlier crash is historical; 3.2–3.5 not re-tested |
 | 3.0.x | 3.9.7 | (none packaged) | ❌ Not supported |
 
 All rows: Windows 64-bit (x64) only.
@@ -146,7 +152,40 @@ Unmanifested source/development trees may deliberately use the separately
 labelled Preferences installer after accepting its network/package-mutation
 confirmation.
 
-### Text rendering
+### Shape reconstruction
+
+The optional shape-extrusion interface remains disabled. **3D Text** continues
+to make editable extruded font objects; this does not promise a complete 3D
+model reconstructed from a print.
+
+### Source fill and stroke checks
+
+The v1.0.109 candidate corrects ordinary even-odd counters, proper self-crossing
+polygon loops (including a lone contour), simple nested/disjoint nonzero fills,
+and isolated opaque Normal round-ended straight strokes. Nonzero winding is
+bound to a unique original directed SVG paint; rectangle orientation flags
+alone are insufficient. Actual
+Blender 3.1.2 and 5.2.2 geometry probes cover nested, overlapping, adjacent and
+self-crossing contours, plus horizontal, vertical, slanted, short and dot
+strokes. A rational stroke boundary is retained only when actual native fill
+area agrees. Otherwise an editable cubic approximation is reported with its
+radial bound. Original centerlines remain editable and carry their footprints
+when the objects move. These are bounded headless checks; desktop clicks,
+all winding/clip/blend cases, and fresh-process source-unavailable reopening
+require separate acceptance. Nonzero touching/crossing contours, unavailable
+or ambiguous original direction and topology over the checked budgets retain
+editable unfilled source paths and fail delivery with a report. Full-page
+Raster is the explicit appearance fallback for those cases; an automatic crop
+could cover unrelated editable text. Projecting-square stroke extents remain
+outside this repair's scope.
+
+For an upgrade on Windows, disable the add-on, save Preferences if needed,
+close all Blender windows, and reopen before choosing **Install from Disk**.
+Install before re-enabling the add-on so its loaded PDF reader cannot interrupt
+replacement of the runtime. The installed-content verifier rejects a mixture
+of old and new files.
+
+### Text rendering results
 
 | Option | Blender result |
 |--------|----------------|
