@@ -108,6 +108,12 @@ scene creation, so a typo cannot unexpectedly import the whole document.
 Source Accurate is the initial visual style and preserves PDF colors against a
 separately hideable white sheet. Blueprint and High Contrast are optional previews;
 any previously saved default visual style is respected.
+Automatic focus opens ordinary opaque Source Accurate drawings in flat Solid
+Texture view so embedded images and material-colored vectors appear together.
+Images with alpha or an unproven shader graph, and existing transparent/composite
+paint, retain the real material preview route. Scene color-management settings
+remain unchanged; this viewport aid is not a calibrated PDF color proof. Turning
+off automatic focus leaves the current viewport alone.
 
 Python callers can pass `user_scale` in the `config` dictionary to
 `pdf_vector_importer.bl_import_engine.import_pdf`. It must be a finite positive
