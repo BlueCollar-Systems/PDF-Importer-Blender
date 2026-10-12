@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import copy
+from contextlib import contextmanager
 import hashlib
 import json
 import math
@@ -1851,6 +1852,31 @@ def _configure_sheet_view_shading(
     # remains the user's choice, so this is not a calibrated PDF color preview.
 
 
+@contextmanager
+def _sheet_view_context(window, screen, area, region, view_layer):
+    """Use modern scoped context, or the supported legacy operator dictionary."""
+    context = bpy.context
+    values = dict(window=window, screen=screen, area=area, region=region,
+                  scene=context.scene, view_layer=view_layer)
+    temporary = getattr(context, "temp_override", None)
+    if callable(temporary):
+        with temporary(**values):
+            yield None
+    else:
+        override = context.copy()
+        override.update(values)
+        override["space_data"] = area.spaces.active
+        override["region_data"] = area.spaces.active.region_3d
+        yield override
+
+
+def _sheet_view_operator(operator, override, **kwargs):
+    """Only legacy operators receive a positional dictionary; RNA needs none."""
+    if override is None:
+        return operator(**kwargs)
+    return operator(override, **kwargs)
+
+
 def _focus_view_on_import(
     root_collection: bpy.types.Collection,
     keep_selected: bool = False,
@@ -1996,14 +2022,7 @@ def _focus_view_on_import(
             if region is None:
                 continue
             try:
-                with bpy.context.temp_override(
-                    window=window,
-                    screen=screen,
-                    area=area,
-                    region=region,
-                    scene=bpy.context.scene,
-                    view_layer=view_layer,
-                ):
+                with _sheet_view_context(window, screen, area, region, view_layer) as override:
                     # If viewport is in Local View isolation, imported objects can
                     # exist in outliner but remain invisible. Exit isolation first.
                     try:
@@ -2013,7 +2032,7 @@ def _focus_view_on_import(
                         if hasattr(space, "use_local_collections"):
                             space.use_local_collections = False
                         if getattr(space, "local_view", None) is not None:
-                            bpy.ops.view3d.localview(frame_selected=False)
+                            _sheet_view_operator(bpy.ops.view3d.localview, override, frame_selected=False)
                         # Expand clip range so large drawings cannot disappear.
                         if min_v is not None and max_v is not None:
                             radius = _sheet_view_radius(min_v, max_v)
@@ -2040,7 +2059,7 @@ def _focus_view_on_import(
                     # would undo that using the stale box and zoom to infinity.
                     if min_v is None or max_v is None:
                         try:
-                            bpy.ops.view3d.view_selected(use_all_regions=False)
+                            _sheet_view_operator(bpy.ops.view3d.view_selected, override, use_all_regions=False)
                             frame_ready = True
                         except Exception:
                             pass
@@ -2060,20 +2079,13 @@ def _focus_view_on_import(
                 if region is None:
                     continue
                 try:
-                    with bpy.context.temp_override(
-                        window=window,
-                        screen=screen,
-                        area=area,
-                        region=region,
-                        scene=bpy.context.scene,
-                        view_layer=view_layer,
-                    ):
+                    with _sheet_view_context(window, screen, area, region, view_layer) as override:
                         try:
                             space = area.spaces.active
                             if hasattr(space, "use_local_collections"):
                                 space.use_local_collections = False
                             if getattr(space, "local_view", None) is not None:
-                                bpy.ops.view3d.localview(frame_selected=False)
+                                _sheet_view_operator(bpy.ops.view3d.localview, override, frame_selected=False)
                         except Exception:
                             pass
                         frame_ready = False
@@ -2091,7 +2103,7 @@ def _focus_view_on_import(
                             pass
                         if min_v is None or max_v is None:
                             try:
-                                bpy.ops.view3d.view_all(center=False)
+                                _sheet_view_operator(bpy.ops.view3d.view_all, override, center=False)
                                 frame_ready = True
                             except Exception:
                                 pass
