@@ -25,10 +25,10 @@ warning "Windows 64-bit only" before the add-on is enabled.
 ## Minimum host version
 
 **Blender 3.1** (`bl_info["blender"]` minimum). **Recommended: Blender 5.2 LTS**
-(4.5 LTS also passed the earlier automatic check). The 2026-10-10 matrix found
-Glyphs failures on 3.6 LTS and 4.2 LTS; those hosts have not been re-tested with
-the subsequent r8 fixes. The r8 neutral fixture passed all six text modes on
-3.1.2 and 5.2.2; that does not certify every PDF.
+(4.5 LTS also passed the automatic check). The v1.0.109 source passed the
+five-host automatic matrix on 2026-10-11 (America/Chicago), including Glyphs
+on 3.6.23 and 4.2.23. The older r8 neutral fixture passed all six text modes
+on 3.1.2 and 5.2.2; that separate historical check does not certify every PDF.
 
 Blender 3.0 is **not supported**: it bundles CPython 3.9.7, and the release ZIP
 ships a cp310-abi3 PyMuPDF wheel (`Requires-Python: >=3.10`) with no cp39
@@ -39,12 +39,12 @@ bundles Python 3.10+).
 
 | Host | Status |
 |------|--------|
-| Blender 5.2 LTS | ✅ Requested-representation host acceptance (2026-07-16); automatic check on 5.2.2 passes Text, 3D Text, Glyphs (2026-10-10) |
+| Blender 5.2 LTS | ✅ Requested-representation host acceptance (2026-07-16); automatic check on 5.2.2 passes Text, 3D Text, Glyphs (2026-10-11) |
 | Blender 5.0–5.1 | ✅ Smoke-tested at v1.0.42 (cp310-abi3 wheel); not re-tested since |
-| Blender 4.5 LTS | ✅ Automatic check on 4.5.14 passes Text, 3D Text, Glyphs (2026-10-10) |
-| Blender 4.0–4.2 | ⚠️ 4.2.23: Text and 3D Text pass; **Glyphs fails** (no text delivered). 4.0–4.1 not tested |
-| Blender 3.6 LTS | ⚠️ 3.6.23: Text and 3D Text pass; **Glyphs fails** (no text delivered) |
-| Blender 3.1–3.5 | 3.1.2: r8 six-mode neutral-fixture acceptance passed (2026-10-11); earlier matrix crash is historical. 3.2–3.5 not re-tested |
+| Blender 4.5 LTS | ✅ Automatic check on 4.5.14 passes Text, 3D Text, Glyphs (2026-10-11) |
+| Blender 4.0–4.2 | 4.2.23: automatic check passes Text, 3D Text, Glyphs (2026-10-11). 4.0–4.1 not tested |
+| Blender 3.6 LTS | ✅ Automatic check on 3.6.23 passes Text, 3D Text, Glyphs (2026-10-11) |
+| Blender 3.1–3.5 | 3.1.2: current automatic check passes Text, 3D Text, Glyphs; separate r8 six-mode fixture passed (2026-10-11). 3.2–3.5 not re-tested |
 | Blender 3.0.x | ❌ Not supported (Python 3.9; wheel ABI floor) |
 | Blender 2.83–2.93 | ❌ Not supported |
 | Blender 2.79 and earlier | ❌ Not supported |
@@ -55,10 +55,15 @@ from the commit into portable Blender 3.1.2, 3.6.23, 4.2.23, 4.5.14 and 5.2.2,
 runs headless (`blender -b --factory-startup`), confirms every import option
 registers, and imports a made-up two-sheet PDF (Letter + Tabloid, one picture,
 non-embedded Helvetica, one text line crossing the sheet edge) as Text, 3D Text
-and Glyphs, requiring both sheets with no failed text. Results above are from
-the 2026-10-10 runs, before the later r8 acceptance documented in
-[the r8 record](docs/validation/2026-10-11-r8-native-and-release-acceptance.md).
-What was seen in those earlier runs:
+and Glyphs, requiring both sheets with no failed text. The current
+[five-host run](https://github.com/BlueCollar-Systems/PDF-Importer-Blender/actions/runs/38196670910)
+passed the v1.0.109 add-on source at `c6339283c9904c7a30c71e9cffd0f55fc646ea1e`
+on 2026-10-12 UTC (2026-10-11 America/Chicago), before its merge as
+`66ebf1940b610b9c7711505e416e62a7bfd855c4`.
+See [the current evidence record](docs/validation/2026-10-12-compatibility-evidence.md)
+for the bounded desktop checks and source identities.
+
+Historical 2026-10-10 findings, superseded for the checked fixtures:
 
 - Glyphs on 3.6.23 and 4.2.23: every text item fails its check because the
   converted outline comes back as a `FONT` object instead of a `CURVE`
@@ -104,7 +109,9 @@ copy already shipped inside the release.
   import one page first when fixed outlines are required.
 - Blender has no persistent, model-scaled, renderable Label entity. A Labels
   request records that item-specific host limitation before trying Text.
-- Headless import validated; interactive UI still needs human confirmation (T-01).
+- Default import/save/reopen desktop journeys passed the r11 mixed and vector
+  fixtures on 3.1.2 and 5.2.2. Other desktop modes, arbitrary shop PDFs and
+  hardware still need separate human confirmation (T-01).
 - Glyphs produces real Blender `CURVE` outline data; Geometry produces real
   Blender `MESH` data. They are not aliases.
 
@@ -135,8 +142,8 @@ blender --background --python-expr "import addon_utils; addon_utils.enable('pdf_
 | 5.2 LTS | 3.13 | >=1.24,<2.0 | ✅ Text/3D/Glyphs/Geometry/Raster host acceptance; automatic check passes |
 | 5.0–5.1 | 3.12–3.13 | >=1.24,<2.0 | ✅ Smoke-tested at v1.0.42; not re-tested since |
 | 4.5 LTS | 3.11 | >=1.24,<2.0 | ✅ Automatic check passes (Text, 3D Text, Glyphs) |
-| 4.0–4.2 | 3.11 | >=1.24,<2.0 | ⚠️ 4.2: Glyphs fails; Text and 3D Text pass. 4.0–4.1 not tested |
-| 3.6 LTS | 3.10 | >=1.24,<2.0 | ⚠️ Glyphs fails; Text and 3D Text pass |
+| 4.0–4.2 | 3.11 | >=1.24,<2.0 | 4.2.23 automatic check passes Text, 3D Text and Glyphs; 4.0–4.1 not tested |
+| 3.6 LTS | 3.10 | >=1.24,<2.0 | ✅ 3.6.23 automatic check passes Text, 3D Text and Glyphs |
 | 3.1–3.5 | 3.10 | >=1.24,<2.0 | 3.1.2: r8 neutral fixture passed all six modes. Earlier crash is historical; 3.2–3.5 not re-tested |
 | 3.0.x | 3.9.7 | (none packaged) | ❌ Not supported |
 
@@ -160,7 +167,7 @@ model reconstructed from a print.
 
 ### Source fill and stroke checks
 
-The v1.0.109 candidate corrects ordinary even-odd counters, proper self-crossing
+The v1.0.109 release corrects ordinary even-odd counters, proper self-crossing
 polygon loops (including a lone contour), simple nested/disjoint nonzero fills,
 and isolated opaque Normal round-ended straight strokes. Nonzero winding is
 bound to a unique original directed SVG paint; rectangle orientation flags
