@@ -578,7 +578,8 @@ def _import_and_capture_focus(monkeypatch, tmp_path, sizes, arrangement, style):
     engine = _engine(monkeypatch)
     focus_roots = []
 
-    def capture(root, keep_selected=False, prefer_material_preview=False):
+    def capture(root, keep_selected=False, prefer_material_preview=False, source_texture_view=False):
+        assert source_texture_view is (style == "source")
         focus_roots.append(root)
         return True
 

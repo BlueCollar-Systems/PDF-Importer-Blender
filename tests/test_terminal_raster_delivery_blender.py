@@ -2566,10 +2566,12 @@ def test_hybrid_sparse_shell_raster_success_is_reported_as_fallback(monkeypatch,
     }
 
 
-def _run_text_import_and_capture_focus(monkeypatch, tmp_path, *, final_representation):
+def _run_text_import_and_capture_focus(
+    monkeypatch, tmp_path, *, final_representation, visual_style="source", auto_focus=True,
+):
     """Import one vector page whose single text item ends at ``final_representation``.
 
-    Returns the ``prefer_material_preview`` value handed to the view handoff.
+    Returns the complete view handoff, or None when automatic focus is off.
     """
     input_pdf = tmp_path / "input.pdf"
     input_pdf.write_bytes(b"%PDF-1.7\n")
@@ -2648,33 +2650,50 @@ def _run_text_import_and_capture_focus(monkeypatch, tmp_path, *, final_represent
             "import_text": True,
             "text_mode": "raster",
             "ignore_images": True,
-            "auto_focus_view": True,
+            "auto_focus_view": auto_focus,
+            "visual_style": visual_style,
             "auto_hide_default_cube": False,
         },
     )
     assert stats["raster_pages_imported"] == 0
     assert stats["text_final_state_failures"] == []
     assert stats["text_delivery_delivered_items"] == 1
-    assert stats["focused"] == 1
-    assert len(focus_calls) == 1
-    return focus_calls[0]["prefer_material_preview"]
+    assert stats["focused"] == int(auto_focus)
+    assert len(focus_calls) == int(auto_focus)
+    return focus_calls[0] if focus_calls else None
 
 
 def test_item_raster_patches_switch_the_viewport_like_raster_pages(monkeypatch, tmp_path):
-    # 1011 visual oracle, Blender raster text mode: item-scoped raster patches
-    # are image-textured planes (HASHED node material, no viewport display
-    # colour), so in the default Solid shading they paint as flat grey boxes.
-    # The view handoff only asked for material/texture shading when whole
-    # raster PAGES were imported; delivered item patches must ask for it too.
-    assert _run_text_import_and_capture_focus(
+    # Opaque item raster patches need the same flat texture view as page
+    # rasters; alpha/unproven material graphs are guarded inside the focus path.
+    handoff = _run_text_import_and_capture_focus(
         monkeypatch, tmp_path, final_representation="raster"
-    ) is True
+    )
+    assert handoff["prefer_material_preview"] is False
+    assert handoff["source_texture_view"] is True
 
 
 def test_vector_text_delivery_keeps_the_solid_viewport(monkeypatch, tmp_path):
-    assert _run_text_import_and_capture_focus(
+    handoff = _run_text_import_and_capture_focus(
         monkeypatch, tmp_path, final_representation="text"
-    ) is False
+    )
+    assert handoff["prefer_material_preview"] is False
+    assert handoff["source_texture_view"] is True
+
+
+@pytest.mark.parametrize("style", ["blueprint", "high_contrast"])
+def test_optional_palette_raster_handoff_is_unchanged(monkeypatch, tmp_path, style):
+    handoff = _run_text_import_and_capture_focus(
+        monkeypatch, tmp_path, final_representation="raster", visual_style=style,
+    )
+    assert handoff["prefer_material_preview"] is True
+    assert handoff["source_texture_view"] is False
+
+
+def test_source_texture_view_does_not_override_disabled_auto_focus(monkeypatch, tmp_path):
+    assert _run_text_import_and_capture_focus(
+        monkeypatch, tmp_path, final_representation="raster", auto_focus=False,
+    ) is None
 
 
 @pytest.mark.parametrize("fail_extraction", [False, True])

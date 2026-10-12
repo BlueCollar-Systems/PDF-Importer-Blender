@@ -1784,7 +1784,46 @@ def _looks_like_page_frame_only(page_data) -> bool:
     return big_frames >= 1
 
 
-def _configure_sheet_view_shading(space, prefer_material_preview: bool) -> None:
+def _source_images_need_material_preview(objects) -> bool:
+    """Keep alpha or unproven owned image shaders out of opaque Workbench."""
+    for obj in objects:
+        if not getattr(obj, "get", lambda *_args: None)("pdf_image_path"):
+            continue
+        try:
+            nodes = list(obj.active_material.node_tree.nodes)
+            if sorted(node.type for node in nodes) != [
+                "BSDF_PRINCIPLED", "OUTPUT_MATERIAL", "TEX_IMAGE",
+            ]:
+                return True
+            by_type = {node.type: node for node in nodes}
+            tex, bsdf = by_type["TEX_IMAGE"], by_type["BSDF_PRINCIPLED"]
+            image = tex.image
+            if (not obj.get("pdf_image_workbench_opaque", False)
+                    or obj.active_material.node_tree.nodes.active != tex
+                    or image is None or image.name != obj.get("pdf_image_datablock")
+                    or image.packed_file is None or image.packed_file.size <= 0
+                    or float(bsdf.inputs["Alpha"].default_value) != 1.0):
+                return True
+            from .image_materials import source_image_sockets
+            _, emission = source_image_sockets(bsdf)
+            expected = {
+                ("TEX_IMAGE", "Color", "BSDF_PRINCIPLED", emission.name),
+                ("TEX_IMAGE", "Alpha", "BSDF_PRINCIPLED", "Alpha"),
+                ("BSDF_PRINCIPLED", "BSDF", "OUTPUT_MATERIAL", "Surface"),
+            }
+            links = list(obj.active_material.node_tree.links)
+            actual = {(link.from_node.type, link.from_socket.name,
+                       link.to_node.type, link.to_socket.name) for link in links}
+            if len(links) != 3 or actual != expected:
+                return True
+        except (AttributeError, KeyError, ReferenceError, TypeError, ValueError):
+            return True
+    return False
+
+
+def _configure_sheet_view_shading(
+    space, prefer_material_preview: bool, source_texture_view: bool = False,
+) -> None:
     """Show source paint without adding Workbench mask silhouettes or lighting."""
     shading = space.shading
     if prefer_material_preview:
@@ -1795,7 +1834,15 @@ def _configure_sheet_view_shading(space, prefer_material_preview: bool) -> None:
         return
     shading.type = "SOLID"
     shading.light = "FLAT"
-    shading.color_type = "MATERIAL"
+    if hasattr(shading, "color_type"):
+        shading.color_type = "MATERIAL"
+        if source_texture_view:
+            # Workbench draws active image textures/UVs and falls back to each
+            # material's display color on the source curves and white sheet.
+            try:
+                shading.color_type = "TEXTURE"
+            except (AttributeError, TypeError, ValueError):
+                pass  # Older APIs still get the existing flat material view.
     for name in ("show_shadows", "show_cavity", "show_object_outline",
                  "show_specular_highlight"):
         if hasattr(shading, name):
@@ -1808,6 +1855,7 @@ def _focus_view_on_import(
     root_collection: bpy.types.Collection,
     keep_selected: bool = False,
     prefer_material_preview: bool = False,
+    source_texture_view: bool = False,
 ) -> bool:
     """
     Select imported objects and frame them in all visible VIEW_3D areas.
@@ -1841,6 +1889,9 @@ def _focus_view_on_import(
 
     if not objects:
         return False
+
+    if source_texture_view and _source_images_need_material_preview(objects):
+        prefer_material_preview = True
 
     # Transform carriers are support objects, not drawing content. Include
     # older imports by following their owned FONT-to-carrier references too.
@@ -1977,7 +2028,9 @@ def _focus_view_on_import(
                         if rv3d is not None:
                             frame_ready = _frame_sheet_view(rv3d, min_v, max_v)
                         try:
-                            _configure_sheet_view_shading(space, prefer_material_preview)
+                            _configure_sheet_view_shading(
+                                space, prefer_material_preview, source_texture_view,
+                            )
                         except Exception:
                             pass
                     except Exception:
@@ -2029,7 +2082,9 @@ def _focus_view_on_import(
                             if rv3d is not None:
                                 frame_ready = _frame_sheet_view(rv3d, min_v, max_v)
                             try:
-                                _configure_sheet_view_shading(space, prefer_material_preview)
+                                _configure_sheet_view_shading(
+                                    space, prefer_material_preview, source_texture_view,
+                                )
                             except Exception:
                                 pass
                         except Exception:
@@ -3208,6 +3263,29 @@ def _png_has_alpha(image_bytes: bytes) -> bool:
     return image_bytes[25] in (4, 6)
 
 
+def _png_proven_opaque(image_bytes: bytes) -> bool:
+    """Prove non-alpha PNG source cheaply, including palette tRNS exclusion."""
+    if (len(image_bytes) < 33 or image_bytes[:8] != b"\x89PNG\r\n\x1a\n"
+            or image_bytes[8:16] != b"\x00\x00\x00\rIHDR"
+            or image_bytes[25] not in (0, 2, 3)):
+        return False
+    offset = 8
+    chunks = 0
+    while offset + 12 <= len(image_bytes):
+        chunks += 1
+        if chunks > 4096:
+            return False  # Only the viewport proof falls back; import is kept.
+        length = int.from_bytes(image_bytes[offset:offset + 4], "big")
+        kind = image_bytes[offset + 4:offset + 8]
+        end = offset + length + 12
+        if end > len(image_bytes) or kind == b"tRNS":
+            return False
+        if kind == b"IEND":
+            return length == 0 and end == len(image_bytes)
+        offset = end
+    return False
+
+
 def _assign_source_image_colorspace(image) -> None:
     """Tag PDF image bytes as sRGB so Blender linearizes them on sample.
 
@@ -3364,6 +3442,7 @@ def _create_uncached_image_plane(
         _connect_image_shader(
             nodes, links, tex, bsdf, out, has_alpha=_png_has_alpha(image_bytes)
         )
+        nodes.active = tex
         material.blend_method = "HASHED"
         if mesh.materials:
             mesh.materials[0] = material
@@ -3382,6 +3461,7 @@ def _create_uncached_image_plane(
             mesh_owned=True,
             image_sha256=image_sha256,
         )
+        obj["pdf_image_workbench_opaque"] = _png_proven_opaque(image_bytes)
         return obj
     except Exception:
         if obj is not None:
@@ -3500,6 +3580,7 @@ def _create_image_plane(
             _connect_image_shader(
                 nodes, links, tex, bsdf, out, has_alpha=_png_has_alpha(image_bytes)
             )
+            nodes.active = tex
             created.blend_method = "HASHED"
             return created
 
@@ -3563,6 +3644,7 @@ def _create_image_plane(
             mesh_owned=False,
             image_sha256=image_sha256,
         )
+        obj["pdf_image_workbench_opaque"] = _png_proven_opaque(image_bytes)
         return obj
     except Exception as exc:
         cleanup_errors = []
@@ -5538,8 +5620,9 @@ def iter_import_pdf(
         total_stats["pages"] = len(requested_page_indices)
         total_stats["pages_requested"] = len(requested_page_numbers)
         total_stats["collections"] = collections_created
-        # Item-scoped raster text patches are textured planes exactly like
-        # raster pages; both need the material/texture viewport handoff.
+        # Source Accurate uses lightweight flat textures for ordinary images
+        # and opaque raster planes. Alpha/composite shaders keep their existing
+        # material route; optional preview palettes retain their prior handoff.
         item_raster_patches = _delivered_item_raster_count(import_cfg)
         total_stats["text_raster_patches_delivered"] = int(item_raster_patches)
         try:
@@ -5552,10 +5635,13 @@ def iter_import_pdf(
                         root_col,
                         keep_selected=keep_selection_after_focus,
                         prefer_material_preview=(
-                            raster_pages_imported > 0 or item_raster_patches > 0
+                            (visual_style != "source" and (
+                                raster_pages_imported > 0 or item_raster_patches > 0
+                            ))
                             or bool(total_stats.get("final_transparent_annotations"))
                             or bool(total_stats.get("nontext_composite_pixels"))
                         ),
+                        source_texture_view=visual_style == "source",
                     )
                 )
                 else 0
