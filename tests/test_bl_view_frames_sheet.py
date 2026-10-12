@@ -472,7 +472,7 @@ class _Region3D:
         )
 
 
-def _focus(engine, monkeypatch, root, projections):
+def _focus(engine, monkeypatch, root, projections, *, legacy_context=False, source_texture_view=False):
     regions = [_Region3D(projection) for projection in projections]
     areas = [types.SimpleNamespace(
         type="VIEW_3D", regions=[types.SimpleNamespace(type="WINDOW")],
@@ -495,10 +495,17 @@ def _focus(engine, monkeypatch, root, projections):
         ),
         types=sys.modules["bpy"].types,
     )
+    if legacy_context:
+        del fake_bpy.context.temp_override
+        fake_bpy.context.copy = lambda: {"scene": fake_bpy.context.scene}
     monkeypatch.setattr(engine, "bpy", fake_bpy)
     monkeypatch.setattr(engine, "_unhide_collection_tree", lambda _root: None)
     # No ops API is provided: framing must finish without view_selected/view_all.
-    assert engine._focus_view_on_import(root) is True
+    assert engine._focus_view_on_import(root, source_texture_view=source_texture_view) is True
+    if legacy_context and source_texture_view:
+        assert all((area.spaces.active.shading.type, area.spaces.active.shading.light,
+                    area.spaces.active.shading.color_type) == ("SOLID", "FLAT", "TEXTURE")
+                   for area in areas)
     return regions
 
 
@@ -568,6 +575,16 @@ def test_focus_without_page_rects_frames_the_objects_as_before(monkeypatch) -> N
     (region,) = _focus(engine, monkeypatch, root, [(1.0, 1.65)])
 
     _assert_straight_on_fit(region, CORNER_INK)
+
+
+def test_legacy_context_frames_and_shades_the_sheet_without_operators(monkeypatch) -> None:
+    engine = _engine(monkeypatch)
+    root = _root(_placed_page(engine, 1, PORTRAIT, ink=CORNER_INK))
+    (region,) = _focus(engine, monkeypatch, root, [(1.0, 1.65)],
+                      legacy_context=True, source_texture_view=True)
+    _assert_straight_on_fit(region, (0.0, 0.0,
+        _size_mm(PORTRAIT)[0] * MM_TO_M, _size_mm(PORTRAIT)[1] * MM_TO_M))
+    assert all(not obj.selected for obj in root.all_objects)
 
 
 # --------------------------------------------------------------------------
