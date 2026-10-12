@@ -95,7 +95,7 @@ are not part of the automatic check.
 
 | Dependency | Release ZIP | Fallback |
 |------------|-------------|----------|
-| PyMuPDF (>=1.24, &lt;2.0) | ✅ Vendored under `pdf_vector_importer/lib/` | Reinstall the official release ZIP; explicit source/dev installs may use Preferences → **Install PyMuPDF** |
+| PyMuPDF 1.28.2 (source installs: >=1.28.2, &lt;2.0) | ✅ Vendored under `pdf_vector_importer/lib/` | Reinstall the official release ZIP; explicit source/dev installs may use Preferences → **Install PyMuPDF** |
 | pdfcadcore | ✅ In add-on | Same |
 
 No system Python or pip is required. Import-time checks never run pip or contact
@@ -139,12 +139,12 @@ blender --background --python-expr "import addon_utils; addon_utils.enable('pdf_
 
 | Blender | Bundled Python | PyMuPDF | Status |
 |---------|----------------|---------|--------|
-| 5.2 LTS | 3.13 | >=1.24,<2.0 | ✅ Text/3D/Glyphs/Geometry/Raster host acceptance; automatic check passes |
-| 5.0–5.1 | 3.12–3.13 | >=1.24,<2.0 | ✅ Smoke-tested at v1.0.42; not re-tested since |
-| 4.5 LTS | 3.11 | >=1.24,<2.0 | ✅ Automatic check passes (Text, 3D Text, Glyphs) |
-| 4.0–4.2 | 3.11 | >=1.24,<2.0 | 4.2.23 automatic check passes Text, 3D Text and Glyphs; 4.0–4.1 not tested |
-| 3.6 LTS | 3.10 | >=1.24,<2.0 | ✅ 3.6.23 automatic check passes Text, 3D Text and Glyphs |
-| 3.1–3.5 | 3.10 | >=1.24,<2.0 | 3.1.2: r8 neutral fixture passed all six modes. Earlier crash is historical; 3.2–3.5 not re-tested |
+| 5.2 LTS | 3.13 | 1.28.2 current bundle | ✅ Text/3D/Glyphs/Geometry/Raster host acceptance; automatic check passes |
+| 5.0–5.1 | 3.12–3.13 | Historical v1.0.42 bundle | ✅ Smoke-tested at v1.0.42; not re-tested since |
+| 4.5 LTS | 3.11 | 1.28.2 current bundle | ✅ Automatic check passes (Text, 3D Text, Glyphs) |
+| 4.0–4.2 | 3.11 | 1.28.2 current bundle | 4.2.23 automatic check passes Text, 3D Text and Glyphs; 4.0–4.1 not tested |
+| 3.6 LTS | 3.10 | 1.28.2 current bundle | ✅ 3.6.23 automatic check passes Text, 3D Text and Glyphs |
+| 3.1–3.5 | 3.10 | 1.28.2 current bundle | 3.1.2: r8 neutral fixture passed all six modes. Earlier crash is historical; 3.2–3.5 not re-tested |
 | 3.0.x | 3.9.7 | (none packaged) | ❌ Not supported |
 
 All rows: Windows 64-bit (x64) only.

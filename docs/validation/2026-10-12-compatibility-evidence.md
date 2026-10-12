@@ -35,3 +35,7 @@ The fresh source sweep passed 2,034 Python tests and 22 subtests, with five
 optional checks skipped. Ruff and the shared-core manifest check passed.
 The sweep found stale compatibility tables and corrected their evidence
 labels; it did not change import code, runtime payloads or existing releases.
+Dependency help also now agrees with the implemented source-install minimum
+of PyMuPDF 1.28.2 and the current bundled runtime. Earlier 5.0–5.1 smoke
+coverage still names the historical v1.0.42 bundle, rather than claiming
+current-runtime acceptance on those untested hosts.

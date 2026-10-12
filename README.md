@@ -255,7 +255,7 @@ desktop interaction; [COMPATIBILITY.md](COMPATIBILITY.md) has the details.
 - Windows 64-bit (x64) only for now. macOS, Linux and Windows on ARM are not supported by the release ZIP.
 - Blender 3.1 or newer (Blender 3.0 ships Python 3.9; the vendored PyMuPDF wheel requires Python >=3.10)
 - Bundled Blender Python 3.10+
-- PyMuPDF >=1.24,<2.0, bundled in release ZIPs
+- PyMuPDF >=1.28.2,<2.0, bundled in release ZIPs
 
 ## Development
 
