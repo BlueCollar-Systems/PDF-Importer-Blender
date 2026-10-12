@@ -232,8 +232,8 @@ ARM are not supported.
 | 5.2 LTS | 3.13 | ✅ Host acceptance; automatic check passes (Text, 3D Text, Glyphs) |
 | 5.0–5.1 | | ✅ Smoke-tested at v1.0.42; not re-tested since |
 | 4.5 LTS | 3.11 | ✅ Automatic check passes (Text, 3D Text, Glyphs) |
-| 4.0–4.2 | 3.11 | ⚠️ 4.2: Text and 3D Text pass; **Glyphs does not work**. 4.0–4.1 not tested |
-| 3.6 LTS | 3.10 | ⚠️ Text and 3D Text pass; **Glyphs does not work** |
+| 4.0–4.2 | 3.11 | 4.2.23: automatic check passes Text, 3D Text and Glyphs; 4.0–4.1 not tested |
+| 3.6 LTS | 3.10 | ✅ 3.6.23 automatic check passes Text, 3D Text and Glyphs |
 | 3.1–3.5 | 3.10 | 3.1.2: six text modes passed the r8 neutral fixture; earlier matrix crash remains historical evidence. 3.2–3.5 not re-tested |
 | 3.0 and earlier | 3.9 or older | ❌ Not supported |
 
@@ -245,15 +245,17 @@ Evidence levels:
 
 "Automatic check" is the `blender-host-matrix` GitHub check: it installs the
 release ZIP into real Blender 3.1.2, 3.6.23, 4.2.23, 4.5.14 and 5.2.2 (headless)
-and imports a small made-up two-sheet PDF. The results above are from
-2026-10-10; [COMPATIBILITY.md](COMPATIBILITY.md) has the details.
+and imports a small made-up two-sheet PDF. The current matrix passed all five
+hosts for the v1.0.109 source on 2026-10-11 (America/Chicago), including the
+previously failing Glyphs cases. These checks do not certify every PDF or
+desktop interaction; [COMPATIBILITY.md](COMPATIBILITY.md) has the details.
 
 ## Requirements
 
 - Windows 64-bit (x64) only for now. macOS, Linux and Windows on ARM are not supported by the release ZIP.
 - Blender 3.1 or newer (Blender 3.0 ships Python 3.9; the vendored PyMuPDF wheel requires Python >=3.10)
 - Bundled Blender Python 3.10+
-- PyMuPDF >=1.24,<2.0, bundled in release ZIPs
+- PyMuPDF >=1.28.2,<2.0, bundled in release ZIPs
 
 ## Development
 
