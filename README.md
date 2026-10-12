@@ -1,6 +1,6 @@
 # PDF Vector Importer for Blender
 
-[![Version](https://img.shields.io/badge/Version-1.0.109-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-1.0.110-blue.svg)]()
 
 **BUILT. NOT BOUGHT.** -- BlueCollar-Systems
 
@@ -20,6 +20,10 @@ Powered by the pdfcadcore shared extraction library and PyMuPDF.
 - **Face Generation** -- Convert closed loops and rectangles to mesh faces
 - **Line Width Mapping** -- PDF stroke widths mapped to curve bevel depth
 - **Dash Pattern Preservation** -- Retain PDF dash styling information
+
+## Candidate update (v1.0.110)
+
+Inferred word gaps in symbolic subset fonts can use an empty space glyph observed in the PDF's original font program, preserving editable text instead of an unnecessary image fallback. Visible, unobserved, ambiguous or changed source glyphs remain unverified and follow the existing reported fallback. Source and synthetic font checks cover this proof; native desktop import, save and reopen checks remain pending for this candidate.
 
 ## Installation
 
