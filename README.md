@@ -27,6 +27,8 @@ Inferred word gaps in symbolic subset fonts can use an empty space glyph observe
 
 Opaque-fill ownership checks now use a temporary native-pointer index when every collection member has a readable nonzero pointer. Each selected object still passes the original native-identity, geometry and material checks; collections that cannot be indexed retain the ordered scan. A final pointer readback rejects changed ownership before fill-depth placement. A synthetic 200-fill regression reduces native-identity comparisons from 20,100 to 200 while retaining all 200 source validations. Native import performance and save/reopen acceptance remain pending; this comparison is not a desktop timing result.
 
+Qualified round-stroke footprints now share one scene update before their existing filled-surface and measured-area checks. Older-host cubic fallback uses one additional update and rechecks every retained footprint. Cancellation remains available during construction, validation and linking; rejected batches verify removal of private geometry and restoration of original line widths and references. Final source, ownership, material and local/world placement readbacks run after the last progress callback. Synthetic tests reduce 128 rational footprints from 256 scene updates to one while retaining all 256 surface/area checks; this is not a native timing result. Real desktop performance, import completion, save and reopen remain pending.
+
 ## Installation
 
 **Windows 64-bit (x64) only for now.** macOS, Linux and Windows on ARM are not
