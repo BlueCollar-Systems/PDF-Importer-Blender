@@ -29,6 +29,8 @@ Opaque-fill ownership checks now use a temporary native-pointer index when every
 
 Qualified round-stroke footprints now share one scene update before their existing filled-surface and measured-area checks. Older-host cubic fallback uses one additional update and rechecks every retained footprint. Cancellation remains available during construction, validation and linking; rejected batches verify removal of private geometry and restoration of original line widths and references. Final source, ownership, material and local/world placement readbacks run after the last progress callback. Synthetic tests reduce 128 rational footprints from 256 scene updates to one while retaining all 256 surface/area checks; this is not a native timing result. Real desktop performance, import completion, save and reopen remain pending.
 
+Single convex linear fills under convex linear PDF clips now retain their original commands when wholly contained, or use exact rational intersections when cut. Their implicit fill closure reaches the existing filled-curve route, with original closure, style, paint order and cut-area provenance preserved. Exactly collinear source fills are recorded as nonpainting; unsupported curved, compound or uncertain intersections remain reported. Source and mocked-host surface checks are separate from the pending native area, appearance and persistence checks.
+
 ## Installation
 
 **Windows 64-bit (x64) only for now.** macOS, Linux and Windows on ARM are not
