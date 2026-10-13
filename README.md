@@ -21,6 +21,18 @@ Powered by the pdfcadcore shared extraction library and PyMuPDF.
 - **Line Width Mapping** -- PDF stroke widths mapped to curve bevel depth
 - **Dash Pattern Preservation** -- Retain PDF dash styling information
 
+## Candidate update (v1.0.110)
+
+Inferred word gaps in symbolic subset fonts can use an empty space glyph observed in the PDF's original font program, preserving editable text instead of an unnecessary image fallback. Visible, unobserved, ambiguous or changed source glyphs remain unverified and follow the existing reported fallback.
+
+Opaque-fill ownership checks now use a temporary native-pointer index when every collection member has a readable nonzero pointer. Each selected object still passes the original native-identity, geometry and material checks; collections that cannot be indexed retain the ordered scan. A final pointer readback rejects changed ownership before fill-depth placement. Source capsule cleanup also indexes primitive IDs once while retaining the original uniqueness and unchanged-point checks.
+
+Qualified round-stroke footprints now share one scene update before their existing filled-surface and measured-area checks, including on dense sheets. Older-host cubic fallback uses one additional update and rechecks every retained footprint. Cancellation remains available during construction, validation and linking; rejected batches verify removal of private geometry and restoration of original line widths and references. Final source, ownership, material and local/world placement readbacks run after the last progress callback. Density alone no longer discards qualified round ends.
+
+Single convex linear fills under convex linear PDF clips now retain their original commands when wholly contained, or use exact rational intersections when cut. Their implicit fill closure reaches the existing filled-curve route, with original closure, style, paint order and cut-area provenance preserved. Exactly collinear source fills are recorded as nonpainting; unsupported curved, compound or uncertain intersections remain reported.
+
+The preceding v1.0.110 test candidate completed an actual Blender 5.2.2 import of a dense foundation sheet with 4,485 qualified round footprints, 1,309 filled surfaces and editable text, then saved and reopened in a fresh process. Geometry, source bindings, materials, packed assets and placement passed persistence comparisons. On that instrumented PC the import took about 211 seconds, versus 408 seconds for the preceding candidate. This is one file and one PC; rendered visual comparison and broader desktop compatibility checks remain pending. The additional cleanup indexing optimization is covered by source tests.
+
 ## Installation
 
 **Windows 64-bit (x64) only for now.** macOS, Linux and Windows on ARM are not

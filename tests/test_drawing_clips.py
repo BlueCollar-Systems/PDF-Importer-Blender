@@ -114,8 +114,11 @@ def test_filled_path_fully_inside_a_rectangular_clip_stays_exact():
         "items": [("l", (1, 1), (4, 1)), ("l", (4, 1), (4, 4)), ("l", (4, 4), (1, 1))],
     }
     result = resolve_covered_clip_fills([mask, path])
-    assert result[0] is path
-    assert clip_fill_issues(result) == []
+    assert all(result[0][key] == value for key, value in path.items())
+    assert result[0]["bcs_compound_clip_fill"] is True
+    assert result[0]["bcs_clip_fill_source_proof"]["source_items"] == tuple(path["items"])
+    issue, = clip_fill_issues(result)
+    assert issue["action"] == "path-convex-clip-contained" and issue["exact"]
 
 
 def test_filled_path_through_a_nonrectangular_clip_is_left_out():

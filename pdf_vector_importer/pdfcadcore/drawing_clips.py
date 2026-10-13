@@ -18,6 +18,9 @@ The rule here is per fill:
   not express (text, stroke, image mask)    -> that ONE fill is dropped
 * filled path through rectangular clips     -> the path cut to those rectangles
                                                (curves flattened only for the cut)
+* one convex linear fill through convex
+  linear clips                             -> exact rational intersections, with
+                                               original commands kept as proof
 * filled path through a clip that is not a
   rectangle, or through an unexpressed clip -> that ONE fill is dropped
 * anything that cannot be proven            -> that ONE fill is dropped
@@ -34,6 +37,7 @@ axis-aligned rectangles; otherwise that fill is reported and dropped.
 """
 from __future__ import annotations
 
+from fractions import Fraction
 import math
 
 
@@ -934,14 +938,217 @@ def _resolve_one(row, active, seqno):
     return replacement, _issue(row, seqno, reason, action, not curved and not crossing, detail)
 
 
+_MAX_CONVEX_CLIP_VERTICES = 256
+_MAX_CONVEX_CLIP_WORK = 200_000
+_MAX_CONVEX_CLIP_BITS = 2048
+
+
+def _exact_clip_point(point):
+    values = _xy(point)
+    if not all(math.isfinite(v) for v in values):
+        raise ValueError("Nonfinite convex clip point")
+    result = tuple(Fraction(v) for v in values)
+    _check_clip_fraction_bits(result)
+    return result
+
+
+def _check_clip_fraction_bits(values):
+    if any(max(v.numerator.bit_length(), v.denominator.bit_length()) > _MAX_CONVEX_CLIP_BITS
+           for v in values):
+        raise ValueError("Convex clip coordinate precision budget exceeded")
+
+
+def _exact_linear_loop(items, *, clip=False):
+    """One source contour; PDF fills/clips implicitly close its last edge."""
+    if not items or len(items) > _MAX_CONVEX_CLIP_VERTICES:
+        raise ValueError("Convex clip vertex budget exceeded")
+    if clip and len(items) == 1 and items[0][0] in ("re", "qu"):
+        if items[0][0] == "re":
+            box = _rect(items[0][1])
+            if box is None:
+                raise ValueError("Invalid convex clip rectangle")
+            points = [(box[0], box[1]), (box[2], box[1]),
+                      (box[2], box[3]), (box[0], box[3])]
+        else:
+            points = _quad_corners(items[0][1])
+        return [_exact_clip_point(p) for p in points]
+    points = []
+    for index, item in enumerate(items):
+        if len(item) != 3 or item[0] != "l":
+            raise ValueError("Convex clip needs one connected linear contour")
+        start, end = _exact_clip_point(item[1]), _exact_clip_point(item[2])
+        if points and points[-1] != start:
+            raise ValueError("Disconnected convex clip contour")
+        if not points:
+            points.append(start)
+        points.append(end)
+        if end == points[0] and index != len(items) - 1:
+            raise ValueError("Multiple convex clip contours")
+    if len(points) > 1 and points[-1] == points[0]:
+        points.pop()
+    if len(points) > _MAX_CONVEX_CLIP_VERTICES:
+        raise ValueError("Convex clip vertex budget exceeded")
+    return points
+
+
+def _exact_clip_cross(a, b, p):
+    value = (b[0]-a[0])*(p[1]-a[1]) - (b[1]-a[1])*(p[0]-a[0])
+    _check_clip_fraction_bits((value,))
+    return value
+
+
+def _convex_clip_sign(points):
+    """All supporting edges prove convexity; local turn signs admit stars."""
+    if len(points) < 3 or len(set(points)) != len(points):
+        raise ValueError("Convex clip is degenerate or repeated")
+    sign = 0
+    for index, a in enumerate(points):
+        b = points[(index+1) % len(points)]
+        sides = {_exact_clip_cross(a, b, p) for p in points}
+        directions = {(value > 0) - (value < 0) for value in sides if value}
+        if len(directions) != 1:
+            raise ValueError("Clip is not a simple convex polygon")
+        direction = directions.pop()
+        if sign and sign != direction:
+            raise ValueError("Convex clip supporting directions disagree")
+        sign = direction
+    return sign
+
+
+def _exact_clip_area(points):
+    total = Fraction(0)
+    for a, b in zip(points, points[1:]+points[:1], strict=True):
+        total += a[0]*b[1]-b[0]*a[1]
+        _check_clip_fraction_bits((total,))
+    return abs(total) / 2
+
+
+def _cut_exact_convex_loop(points, clip, sign):
+    for index, a in enumerate(clip):
+        b = clip[(index+1) % len(clip)]
+        cut = []
+        if not points:
+            break
+        start = points[-1]
+        first_side = _exact_clip_cross(a, b, start) * sign
+        for end in points:
+            second_side = _exact_clip_cross(a, b, end) * sign
+            if (first_side >= 0) != (second_side >= 0):
+                ratio = first_side / (first_side-second_side)
+                _check_clip_fraction_bits((ratio,))
+                intersection = tuple(start[axis]+ratio*(end[axis]-start[axis]) for axis in (0, 1))
+                _check_clip_fraction_bits(intersection)
+                if not cut or intersection != cut[-1]:
+                    cut.append(intersection)
+            if second_side >= 0 and (not cut or end != cut[-1]):
+                cut.append(end)
+            start, first_side = end, second_side
+        if len(cut) > 1 and cut[0] == cut[-1]:
+            cut.pop()
+        points = cut
+    return points
+
+
+def _resolve_convex_line_fill(row, active, seqno):
+    """Exact source-line intersections, with original commands kept as proof."""
+    try:
+        subject = _exact_linear_loop(row.get("items") or ())
+        if (type(row.get("even_odd", False)) is not bool or not subject
+                or len(active) > _MAX_CONVEX_CLIP_VERTICES):
+            return None
+        clips = []
+        for clip in active:
+            if type(clip.get("even_odd", False)) is not bool:
+                return None
+            polygon = _exact_linear_loop(clip.get("items") or (), clip=True)
+            box = _rect(clip.get("scissor"))
+            if box is None:
+                return None
+            scissor = [_exact_clip_point(p) for p in
+                       [(box[0], box[1]), (box[2], box[1]), (box[2], box[3]), (box[0], box[3])]]
+            clips.extend((polygon, scissor))
+        # Bound all supporting-edge tests AND every possible cut BEFORE those
+        # loops start. Convex intersections add at most one vertex per clip edge.
+        vertex_bound = len(subject) + sum(len(polygon) for polygon in clips)
+        work = len(subject)**2 + sum(len(polygon)**2 for polygon in clips)
+        work += 2 * vertex_bound * sum(len(polygon) for polygon in clips) + len(subject)
+        if work > _MAX_CONVEX_CLIP_WORK:
+            return None
+        signs = [_convex_clip_sign(polygon) for polygon in clips]
+        # Zero shoelace area alone is unsafe for a crossing path. Every source
+        # vertex on one exact line proves this connected f contour paints nothing.
+        distinct = list(dict.fromkeys(subject))
+        if len(distinct) < 3 or all(_exact_clip_cross(distinct[0], distinct[1], p) == 0
+                                    for p in distinct[2:]):
+            return None, _issue(row, seqno, "path-in-path-clip", "dropped-invisible", True,
+                                "the connected original fill contour is exactly collinear; "
+                                "implicit fill closure paints no area")
+        _convex_clip_sign(subject)
+        source_area = _exact_clip_area(subject)
+        points = list(subject)
+        for polygon, sign in zip(clips, signs, strict=True):
+            points = _cut_exact_convex_loop(points, polygon, sign)
+        area = _exact_clip_area(points) if points else Fraction(0)
+        if not area:
+            return None, _issue(row, seqno, "path-in-path-clip", "dropped-invisible", True,
+                                "the exact convex fill intersection paints no area")
+        contained = area == source_area
+        replacement = dict(row)
+        errors = []
+        if not contained:
+            sample = _sample_point(row["items"], row)
+            emitted = []
+            for p in points:
+                value = _like_point(sample, float(p[0]), float(p[1]))
+                readback = _exact_clip_point(value)
+                for actual, expected in zip(readback, p, strict=True):
+                    error = abs(actual-expected)
+                    bound = Fraction(math.ulp(float(expected)))
+                    if error > bound:
+                        raise ValueError("Convex clip point serialization exceeded its ULP bound")
+                    errors.append(error)
+                emitted.append(value)
+            replacement["items"] = [("l", p, emitted[(i+1) % len(emitted)])
+                                    for i, p in enumerate(emitted)]
+            replacement["rect"] = _like_rect(row.get("rect"), _bounds([_xy(p) for p in emitted]))
+        # Existing clip-fill extraction closes only the normalized filled
+        # contour, with zero cleanup tolerance. Original closePath is untouched;
+        # no stroked fs path acquires a closing stroke or different cap/join.
+        action = "path-convex-clip-contained" if contained else "path-convex-clip-intersection"
+        replacement.update(bcs_compound_clip_fill=True,
+                           bcs_clip_fill_group_id=f"clip-fill:{seqno}",
+                           bcs_clip_fill_resolution=action)
+        replacement["bcs_clip_fill_source_proof"] = {
+            "method": "exact_binary_float_convex_line_intersection",
+            "source_items": tuple(("l", _xy(item[1]), _xy(item[2])) for item in row["items"]),
+            "source_closePath_present": "closePath" in row,
+            "source_closePath": row.get("closePath"),
+            "source_even_odd": row.get("even_odd", False),
+            "source_draw_order": seqno,
+            "implicit_fill_closure": True,
+            "source_vertices_exact": tuple(tuple(str(v) for v in p) for p in subject),
+            "clip_vertices_exact": tuple(tuple(tuple(str(v) for v in p) for p in polygon)
+                                          for polygon in clips),
+            "normalized_vertices_exact": tuple(tuple(str(v) for v in p) for p in points),
+            "source_area_pt2_exact": str(source_area),
+            "normalized_area_pt2_exact": str(area),
+            "point_serialization_error_pt_exact": str(max(errors, default=Fraction(0))),
+        }
+        return replacement, _issue(row, seqno, "path-in-path-clip", action, True,
+                                   "original linear fill preserved under proven convex clips" if contained
+                                   else "linear fill cut by exact convex intersections; "
+                                        "original commands retained with bounded point serialization")
+    except (ValueError, TypeError, IndexError, OverflowError, ZeroDivisionError):
+        return None
+
+
 def _resolve_path_fill(row, active, seqno):
     """Cut a non-rectangular fill to the rectangular clips around it.
 
-    A circle or other filled path painted inside a clip used to be kept whole,
-    so ink showed outside the clip. Rectangular clips are cut exactly for line
-    paths and within ``_FLATTEN_TOLERANCE`` for curves. A non-rectangular clip
-    of a non-rectangular fill is not computed; that fill is left out instead of
-    flooding the sheet.
+    Rectangular clips are cut exactly for line paths and within
+    ``_FLATTEN_TOLERANCE`` for curves. One connected convex LINE fill can also
+    be intersected with convex LINE clips using exact original binary-float
+    rationals. Other path intersections remain refused and reported.
     """
     rectangles = []
     path_clips = []
@@ -960,6 +1167,9 @@ def _resolve_path_fill(row, active, seqno):
         else:
             path_clips.append(clip)
     if path_clips:
+        convex = _resolve_convex_line_fill(row, active, seqno)
+        if convex is not None:
+            return convex
         return None, _issue(
             row, seqno, "path-in-path-clip", "dropped-unsupported", False,
             "a filled path is painted through a non-rectangular clip; "
@@ -970,6 +1180,10 @@ def _resolve_path_fill(row, active, seqno):
             row, seqno, "no-finite-bounds", "dropped-unsupported", False,
             "the filled path has no finite bounds")
     if not rectangles or all(_contains(box, paint) for box in rectangles):
+        if rectangles:
+            convex = _resolve_convex_line_fill(row, active, seqno)
+            if convex is not None:
+                return convex
         return row, None
     visible = paint
     for box in rectangles:

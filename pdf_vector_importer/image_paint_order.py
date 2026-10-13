@@ -633,17 +633,30 @@ def _world_corners(obj, depsgraph):
             raise ValueError("Native display geometry could not be evaluated")
         if not mesh.vertices:
             return []
-        low = [math.inf] * 3
-        high = [-math.inf] * 3
+        low_x = low_y = low_z = math.inf
+        high_x = high_y = high_z = -math.inf
+        finite = math.isfinite
         for vertex in mesh.vertices:
             point = matrix @ vertex.co
-            if not all(math.isfinite(v) for v in point):
+            x, y, z = point.x, point.y, point.z
+            if not (finite(x) and finite(y) and finite(z)):
                 raise ValueError("Native display geometry has nonfinite coordinates")
-            for axis in range(3):
-                low[axis] = min(low[axis], point[axis])
-                high[axis] = max(high[axis], point[axis])
-        return [Vector((x, y, z)) for x in (low[0], high[0])
-                for y in (low[1], high[1]) for z in (low[2], high[2])]
+            # Keep the first equal value, including its signed zero, as min/max
+            # did. Repeated paint-order checks still read every evaluated vertex.
+            if x < low_x:
+                low_x = x
+            if y < low_y:
+                low_y = y
+            if z < low_z:
+                low_z = z
+            if x > high_x:
+                high_x = x
+            if y > high_y:
+                high_y = y
+            if z > high_z:
+                high_z = z
+        return [Vector((x, y, z)) for x in (low_x, high_x)
+                for y in (low_y, high_y) for z in (low_z, high_z)]
     finally:
         evaluated.to_mesh_clear()
 

@@ -121,6 +121,17 @@ cleanup targets. The next rung cannot start when rollback is incomplete.
 
 ## Loud reporting
 
+Clipped filled paths that were left out or approximated keep the useful partial
+drawing and the host's completed import. They prevent
+`extra.import_contract_ready.ready` from being true: the human summary names
+the missing or approximate path count, and `diagnostics.quality_level` becomes
+`incomplete` for missing ink or `approximate` for an approximation. A present
+malformed clipping tally is `unverified`. Exact clipping and source-proved
+invisible or zero-ink paths remain ready; unrelated informational or cleanup
+warnings do not imply missing geometry. Older reports without the optional
+`clip_fill_delivery` tally retain their prior readiness contract. These report
+signals describe known delivery limits; they are not a pixel matching proof.
+
 `import_report.json` uses `bcs.import_report/1.1`. Its
 `extra.text_delivery` payload uses `bcs.text_delivery/1.0` and records:
 

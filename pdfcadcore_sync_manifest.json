@@ -6,7 +6,8 @@
   "cli_error_copy.py": "cc656dbe2518bd267204513a30580af8f8332e889921f97a757c898585bedb28",
   "dimension_parser.py": "a8a5b53d5a10a07b3fafe6683d832f7d0bfbbff74e11ba7d31b9fb3581066989",
   "document_profiler.py": "3f6d00d442c4a9a60103db2d15a082b85c44e840ce0614d9452869373a76962a",
-  "embedded_fonts.py": "258e80e4b60efe48551f79149e1d2e578daceb08a011083753411d0811dc47de",
+  "drawing_clips.py": "7b13698500ca6d0c9c0e0242a136c61333c6a9c9b26bc198b41e29425af14e6b",
+  "embedded_fonts.py": "df9968449da9e3f6809c8951f582bfbd2d5299978d922effb96e279bfccb3bb9",
   "fitz_loader.py": "32274c459d595051dfb279d00f773f008149e170537aa5a476130de2a92e7998",
   "generic_classifier.py": "fa2a97506db43b13ef60bab4244a05ab3dd0263f9ab90807e503bd962972d2cc",
   "generic_recognizer.py": "5be71ca54023f7c049932c83453dc842a390509e23972762e3a37c4f7d134501",
@@ -15,9 +16,10 @@
   "hatch_detector.py": "132b4e77c9b40beb906d7d87a5be3a4222f958c6cbb9ee3142170c4e04820d1f",
   "import_bounds.py": "0683f2377c2bd264fea6a9bc08dde528900723f607212c64e256f721223bccb3",
   "import_config.py": "e42fd14e282885678655b0ad1f69040280a7c58b728166756277f21f6c5dd304",
-  "import_report.py": "38f9b09ac44ca91ec439b09ef05e91fa830dd255c783d9b64fdfe3ab28d5f682",
+  "import_report.py": "90c0c0b5d109131befc4e97eb52db9ca6615f834e8d0d0d10fbe733b6d34c9d1",
   "model3d_intent.py": "fd16ac11b3a2e54d2c971f31de8a5bcaeff008033245d108740c5f11ba9112ff",
   "outcome_accounting.py": "4be33dbed8fe942d6a00699141df10771e7ec0de8989e2e459b08df038ea1773",
+  "page_paint_bounds.py": "f093bf2477c17b9838ae2cda285b487e63353cf0751f973cacab62aa9fb794ea",
   "parts_bootstrap.py": "90e4735d2392aa39652d5da581f68dcbc9431433d42c552dd73e1f8e522c9775",
   "preflight_copy.py": "27bfc1ac56ea8f618f3ffb9b289cfe308e9d198295e20f8901f82ba417c6e282",
   "primitive_extractor.py": "4c6ce01b197cedff5a42b3905a6da01322651e3f1af8538d419df4dbd2bcbed5",
@@ -35,7 +37,5 @@
   "validation.py": "0510e4367e8fd4214e2ea3d42e933e60e8b33961eeb1ecda5125728e80fd7142",
   "visual_semantics.py": "d57393c2e6a2cdc932c9ba19e2f810d9bbbd46b6192699742c1036e35bf01344",
   "repo_context_builder_core.py": "f3c6d5abbfa8d422a2562c1a645548fee9330290307edf02c7f10deb38daceb4",
-  "pdfcadcore_sync_check.py": "a05f681585a44f981e1a2adadc12a5c07dacbf1405a266f49ec75f8f60e70002",
-  "drawing_clips.py": "ce8da0e0cd68f5497f095b6a5c43380deadc0ffe95730521bf16e6678a8b7ecb",
-  "page_paint_bounds.py": "f093bf2477c17b9838ae2cda285b487e63353cf0751f973cacab62aa9fb794ea"
+  "pdfcadcore_sync_check.py": "a05f681585a44f981e1a2adadc12a5c07dacbf1405a266f49ec75f8f60e70002"
 }

@@ -529,6 +529,132 @@ def build_model_3d_extra(
     }
 
 
+def _clip_fill_completeness(extra: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Separate known missing/approximate ink from exact or invisible INFO.
+
+    Older report producers did not write this optional tally. Preserve that
+    compatibility, but a present malformed tally cannot certify completeness.
+    The issue list is bounded; the typed aggregate counts remain authoritative.
+    """
+    if "clip_fill_delivery" not in extra:
+        return None
+    block = extra["clip_fill_delivery"]
+    if not isinstance(block, dict):
+        return {"valid": False, "complete": False, "dropped": None, "approximated": None}
+    names = ("resolved_exactly", "dropped_invisible", "dropped", "approximated")
+    counts = {name: block.get(name) for name in names}
+    valid = all(type(value) is int and value >= 0 for value in counts.values())
+    issues = block.get("issues")
+    truncated = block.get("issues_truncated")
+    actions = block.get("by_action")
+    valid = valid and isinstance(issues, list) and type(truncated) is bool
+    valid = valid and isinstance(actions, dict) and all(
+        isinstance(action, str) and type(count) is int and count >= 0
+        for action, count in (actions.items() if isinstance(actions, dict) else ())
+    )
+    listed = {"dropped": 0, "approximated": 0}
+    if isinstance(issues, list):
+        for issue in issues:
+            if (not isinstance(issue, dict) or issue.get("severity") != "warning"
+                    or type(issue.get("dropped")) is not bool):
+                valid = False
+                continue
+            listed["dropped" if issue["dropped"] else "approximated"] += 1
+    if valid:
+        valid = sum(actions.values()) == sum(counts.values())
+        valid = valid and all(listed[name] <= counts[name] for name in listed)
+        affected = counts["dropped"] + counts["approximated"]
+        valid = valid and (
+            affected > len(issues) if truncated else affected == len(issues)
+        )
+        if "warning_pages" in block:
+            pages = block["warning_pages"]
+            valid = valid and isinstance(pages, list) and all(
+                type(page) is int and page > 0 for page in pages
+            )
+            if valid:
+                listed_page_values = [issue.get("page") for issue in issues]
+                valid = all(type(page) is int and page > 0 for page in listed_page_values)
+                listed_pages = set(listed_page_values) if valid else set()
+                valid = valid and len(set(pages)) == len(pages)
+                valid = valid and (bool(pages) == bool(affected))
+                valid = valid and (
+                    listed_pages <= set(pages) if truncated else listed_pages == set(pages)
+                )
+    return {
+        "valid": valid,
+        "complete": valid and counts["dropped"] == counts["approximated"] == 0,
+        "dropped": counts["dropped"] if type(counts["dropped"]) is int and counts["dropped"] >= 0 else None,
+        "approximated": counts["approximated"] if type(counts["approximated"]) is int and counts["approximated"] >= 0 else None,
+    }
+
+
+def _clip_fill_quality(delivery: Optional[Dict[str, Any]]) -> str:
+    if delivery is None or delivery["complete"]:
+        return ""
+    if not delivery["valid"]:
+        return "unverified"
+    return "incomplete" if delivery["dropped"] else "approximate"
+
+
+def _clip_fill_summary(delivery: Optional[Dict[str, Any]]) -> List[str]:
+    if delivery is None or delivery["complete"]:
+        return []
+    parts = []
+    for key, verb in (("dropped", "left out"), ("approximated", "approximated")):
+        count = delivery[key]
+        if count:
+            parts.append(f"{count} clipped filled path{'s were' if count != 1 else ' was'} {verb}")
+    if not delivery["valid"]:
+        parts.append("Clipped-fill delivery records are invalid or incomplete; drawing completeness is unverified")
+    return parts
+
+
+_CLIP_FILL_REVIEW_ACTION = (
+    "Review extra.clip_fill_delivery for missing or approximate filled paths; "
+    "the retained editable drawing is not certified as complete."
+)
+_CLIP_FILL_QUALITY_LEVELS = ("incomplete", "approximate", "unverified")
+
+
+def _refresh_clip_fill_diagnostics(report: "ImportReport", delivery: Optional[Dict[str, Any]]) -> None:
+    """Refresh only this producer's derived quality, signal and review action."""
+    quality = _clip_fill_quality(delivery)
+    diagnostics = report.extra.get("diagnostics")
+    if not isinstance(diagnostics, dict):
+        if not quality:
+            return
+        diagnostics = report.extra["diagnostics"] = {}
+    signals = list(diagnostics.get("signals") or [])
+    owned_levels = {level for level in _CLIP_FILL_QUALITY_LEVELS
+                    if f"clipped_fill_delivery_{level}" in signals}
+    if not quality and not owned_levels and "clip_fill_quality_before" not in diagnostics:
+        return
+    signals = [signal for signal in signals
+               if signal not in {f"clipped_fill_delivery_{level}" for level in _CLIP_FILL_QUALITY_LEVELS}]
+    actions = [action for action in list(diagnostics.get("recommended_actions") or [])
+               if action != _CLIP_FILL_REVIEW_ACTION]
+    current_quality = diagnostics.get("quality_level")
+    if quality:
+        if not owned_levels or not isinstance(current_quality, str) or current_quality not in owned_levels:
+            diagnostics["clip_fill_quality_before"] = current_quality
+        diagnostics["quality_level"] = quality
+        signals.append(f"clipped_fill_delivery_{quality}")
+        actions.append(_CLIP_FILL_REVIEW_ACTION)
+    else:
+        previous = diagnostics.pop("clip_fill_quality_before", None)
+        if isinstance(current_quality, str) and current_quality in owned_levels:
+            # Older report enrichments had the owned signal but no saved base
+            # level. Recompute the same vector-content level, leaving unrelated
+            # signals/actions, counts, failure diagnostics and warnings intact.
+            diagnostics["quality_level"] = previous if isinstance(previous, str) else build_fidelity_diagnostics(
+                primitive_count=int(report.result.get("primitives") or 0),
+                image_count=int(report.result.get("images") or 0),
+            )["quality_level"]
+    diagnostics["signals"] = signals
+    diagnostics["recommended_actions"] = actions
+
+
 def build_import_contract_ready(report: "ImportReport") -> Dict[str, Any]:
     """Aggregate report-contract readiness for app/Report Doctor gates."""
 
@@ -572,6 +698,8 @@ def build_import_contract_ready(report: "ImportReport") -> Dict[str, Any]:
             )
         )
     )
+    clip_delivery = _clip_fill_completeness(extra)
+    clip_delivery_ok = clip_delivery is None or clip_delivery["complete"]
     ready = (
         has_stamp
         and has_crosscheck
@@ -579,21 +707,26 @@ def build_import_contract_ready(report: "ImportReport") -> Dict[str, Any]:
         and text_delivery_ok
         and result_succeeded
         and open_failure is None
+        and clip_delivery_ok
     )
+
+    checks = {
+        "build_stamp": has_stamp,
+        "scale_crosscheck": has_crosscheck,
+        "actual_text_entity_types": text_ok,
+        "text_delivery": text_delivery_ok,
+        "result_succeeded": result_succeeded,
+        # Compatibility spelling retained for existing Report Doctor clients.
+        "successful_result": result_succeeded,
+        "no_terminal_failure": terminal_failure is None,
+        "no_open_failure": open_failure is None,
+    }
+    if clip_delivery is not None:
+        checks["clip_fill_delivery"] = clip_delivery_ok
 
     return {
         "ready": ready,
-        "checks": {
-            "build_stamp": has_stamp,
-            "scale_crosscheck": has_crosscheck,
-            "actual_text_entity_types": text_ok,
-            "text_delivery": text_delivery_ok,
-            "result_succeeded": result_succeeded,
-            # Compatibility spelling retained for existing Report Doctor clients.
-            "successful_result": result_succeeded,
-            "no_terminal_failure": terminal_failure is None,
-            "no_open_failure": open_failure is None,
-        },
+        "checks": checks,
         "note": (
             "ready for contract consumers"
             if ready
@@ -619,6 +752,8 @@ def enrich_import_report_extras(report: "ImportReport") -> None:
     if "model_3d" not in report.extra:
         host = str((report.host or {}).get("app") or "")
         report.extra["model_3d"] = build_model_3d_extra(host)
+    clip_delivery = _clip_fill_completeness(report.extra)
+    _refresh_clip_fill_diagnostics(report, clip_delivery)
     report.extra["human_summary"] = build_human_summary(report)
     report.extra["import_contract_ready"] = build_import_contract_ready(report)
 
@@ -650,6 +785,8 @@ def build_human_summary(report: ImportReport | Dict[str, Any]) -> str:
     fallback = data.get("fallback") or {}
     extra = data.get("extra") or {}
     diagnostics = extra.get("diagnostics") or {}
+    clip_delivery = _clip_fill_completeness(extra)
+    clip_quality = _clip_fill_quality(clip_delivery)
 
     pages = int(input_block.get("pages") or 0)
     primitives = int(result.get("primitives") or 0)
@@ -725,10 +862,13 @@ def build_human_summary(report: ImportReport | Dict[str, Any]) -> str:
     if fallback.get("used"):
         reason = str(fallback.get("reason") or "fallback").replace("_", " ")
         parts.append(f"Raster or degraded fallback was used ({reason})")
-    elif primitives > 0:
+    elif primitives > 0 and not clip_quality:
         parts.append("Vector extraction completed without raster fallback")
+    elif primitives > 0:
+        parts.append("Editable geometry was retained without raster fallback")
 
-    quality = str(diagnostics.get("quality_level") or "").strip()
+    parts.extend(_clip_fill_summary(clip_delivery))
+    quality = clip_quality or str(diagnostics.get("quality_level") or "").strip()
     if quality:
         parts.append(f"Overall fidelity: {quality}")
 

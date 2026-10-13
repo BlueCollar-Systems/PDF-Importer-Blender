@@ -147,12 +147,8 @@ def prepare_capsules(
     return prepared, unresolved
 
 
-def _native_capsule(spec, collection, material, *, evaluate=True):
-    """Build one exact capsule; evaluate=False leaves its fill check to the caller.
-
-    A caller creating many capsules verifies them after one graph update with
-    _require_filled_surface: every update after a link rebuilds the whole graph.
-    """
+def _construct_native_capsule(spec, collection, material, owned):
+    """Construct exact controls; caller owns cleanup and evaluated proofs."""
     import bpy
 
     capsule = spec["recipe"]["source_capsule_proof"]["capsule"]
@@ -161,6 +157,8 @@ def _native_capsule(spec, collection, material, *, evaluate=True):
     sign = -1 if spec["flip_y"] else 1
     expected = [(x * scale, y * scale * sign, 0.0, weight) for x, y, weight in controls]
     curve = bpy.data.curves.new("PDF_Source_Capsule", "CURVE")
+    ownership = [None, curve]
+    owned.append(ownership)
     obj = None
     try:
         curve.dimensions = "2D"
@@ -197,6 +195,7 @@ def _native_capsule(spec, collection, material, *, evaluate=True):
         obj = bpy.data.objects.new(
             f"PDF_Source_Capsule_{spec['recipe']['source_paint_order']}", curve
         )
+        ownership[0] = obj
         x, y = model_point(
             origin, spec["page_height"], spec["scale_mm"], spec["flip_y"]
         )
@@ -213,29 +212,38 @@ def _native_capsule(spec, collection, material, *, evaluate=True):
         obj["pdf_source_primitive_id"] = spec["primitive_id"]
         obj["pdf_geometry_representation"] = "exact_periodic_rational_quadratic_capsule"
         obj["pdf_boundary_controls_source_local"] = json.dumps(controls)
-        if evaluate:
-            bpy.context.view_layer.update()
-            _require_filled_surface(obj, bpy.context.evaluated_depsgraph_get())
         return obj
     except Exception:
-        if obj is not None:
-            bpy.data.objects.remove(obj, do_unlink=True)
-        bpy.data.curves.remove(curve)
         raise
 
 
-def _require_filled_surface(obj, depsgraph):
-    evaluated = obj.evaluated_get(depsgraph)
+def _verify_native_capsule_surface(obj, graph):
+    evaluated = obj.evaluated_get(graph)
     mesh = evaluated.to_mesh()
     try:
-        if (
-            mesh is None
-            or not mesh.polygons
-            or not any(p.area > 0 for p in mesh.polygons)
-        ):
+        if (mesh is None or not mesh.polygons
+                or not any(p.area > 0 for p in mesh.polygons)):
             raise ValueError("Native capsule produced no filled surface")
     finally:
         evaluated.to_mesh_clear()
+
+
+def _native_capsule(spec, collection, material):
+    """Direct callers retain immediate scene evaluation and strict fill proof."""
+    import bpy
+
+    owned = []
+    try:
+        obj = _construct_native_capsule(spec, collection, material, owned)
+        bpy.context.view_layer.update()
+        _verify_native_capsule_surface(obj, bpy.context.evaluated_depsgraph_get())
+        return obj
+    except Exception:
+        for obj, curve in reversed(owned):
+            if obj is not None:
+                bpy.data.objects.remove(obj, do_unlink=True)
+            bpy.data.curves.remove(curve)
+        raise
 
 
 def _file_sha(path):
