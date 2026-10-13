@@ -33,8 +33,11 @@ def cleanup_preserving_capsules(primitives, prepared, cleanup, **kwargs):
     if len(protected) != len(prepared):
         raise ValueError("Duplicate source capsule ownership before cleanup")
     originals = list(primitives)
+    by_id = {}
+    for p in originals:
+        by_id.setdefault(p.id, []).append(p)
     for spec in prepared:
-        matches = [p for p in originals if p.id == spec["primitive_id"]]
+        matches = by_id.get(spec["primitive_id"], ())
         if len(matches) != 1 or list(matches[0].points) != spec["points_mm"]:
             raise ValueError("Source capsule changed before cleanup")
     eligible = [p for p in originals if p.id not in protected]
@@ -144,7 +147,12 @@ def prepare_capsules(
     return prepared, unresolved
 
 
-def _native_capsule(spec, collection, material):
+def _native_capsule(spec, collection, material, *, evaluate=True):
+    """Build one exact capsule; evaluate=False leaves its fill check to the caller.
+
+    A caller creating many capsules verifies them after one graph update with
+    _require_filled_surface: every update after a link rebuilds the whole graph.
+    """
     import bpy
 
     capsule = spec["recipe"]["source_capsule_proof"]["capsule"]
@@ -205,24 +213,29 @@ def _native_capsule(spec, collection, material):
         obj["pdf_source_primitive_id"] = spec["primitive_id"]
         obj["pdf_geometry_representation"] = "exact_periodic_rational_quadratic_capsule"
         obj["pdf_boundary_controls_source_local"] = json.dumps(controls)
-        bpy.context.view_layer.update()
-        evaluated = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
-        mesh = evaluated.to_mesh()
-        try:
-            if (
-                mesh is None
-                or not mesh.polygons
-                or not any(p.area > 0 for p in mesh.polygons)
-            ):
-                raise ValueError("Native capsule produced no filled surface")
-        finally:
-            evaluated.to_mesh_clear()
+        if evaluate:
+            bpy.context.view_layer.update()
+            _require_filled_surface(obj, bpy.context.evaluated_depsgraph_get())
         return obj
     except Exception:
         if obj is not None:
             bpy.data.objects.remove(obj, do_unlink=True)
         bpy.data.curves.remove(curve)
         raise
+
+
+def _require_filled_surface(obj, depsgraph):
+    evaluated = obj.evaluated_get(depsgraph)
+    mesh = evaluated.to_mesh()
+    try:
+        if (
+            mesh is None
+            or not mesh.polygons
+            or not any(p.area > 0 for p in mesh.polygons)
+        ):
+            raise ValueError("Native capsule produced no filled surface")
+    finally:
+        evaluated.to_mesh_clear()
 
 
 def _file_sha(path):

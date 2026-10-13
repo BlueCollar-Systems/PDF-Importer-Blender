@@ -57,3 +57,22 @@ def test_changed_qualified_centerline_fails_before_cleanup(change):
     with pytest.raises(ValueError, match="changed before cleanup"):
         cleanup_preserving_capsules(values, [spec], lambda *a, **k:called.append(True))
     assert not called
+
+
+def test_dense_sheet_ownership_check_does_not_rescan_every_primitive_per_capsule():
+    reads = []
+
+    class Counted:
+        def __init__(self, ident):
+            self._id, self.points = ident, [(ident, 0.), (ident, 1.)]
+
+        @property
+        def id(self):
+            reads.append(self._id)
+            return self._id
+
+    values = [Counted(i) for i in range(400)]
+    specs = [{"primitive_id": i, "points_mm": [(i, 0.), (i, 1.)]} for i in range(0, 400, 2)]
+    stats = cleanup_preserving_capsules(values, specs, lambda eligible, **k: {"removed_micro": 0})
+    assert stats["preserved_source_capsules"] == 200 and [p._id for p in values] == list(range(400))
+    assert len(reads) <= 4 * len(values)  # Not one page scan per protected capsule.

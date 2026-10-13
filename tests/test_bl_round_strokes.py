@@ -1,6 +1,8 @@
 """Source-bound round ends retain width/placement, not guessed cap defaults."""
 import hashlib
+import json
 import math
+import sys
 
 import pymupdf
 import pytest
@@ -104,6 +106,135 @@ def test_dense_page_paint_index_keeps_complete_overlap_and_tangency_semantics():
 def test_unknown_paint_bounds_never_prove_disjoint_source():
     index=module._PaintBoundsIndex([("image",(float('nan'),0,1,1)),("ignore-text",(0,0,1,1))])
     assert index.candidates((20,20,30,30))==[0]
+
+
+def sheet(tmp_path, count, cols=8):
+    """Separate q/cm-wrapped round-cap segments, each with its own paint state."""
+    path=tmp_path/"sheet.pdf"
+    with pymupdf.open() as doc:
+        page=doc.new_page(width=40+cols*45,height=40+(count//cols+1)*45)
+        xref=doc.get_new_xref()
+        doc.update_object(xref,"<<>>")
+        doc.update_stream(xref,"\n".join(
+            f"q 1 0 0 1 {40+i%cols*45} {40+i//cols*45} cm {i%3*.3:.1f} .2 .5 RG {1+i%3} w 1 J 1 j "
+            f"0 0 m {12+i%5} {i%4*3} l S Q" for i in range(count)).encode())
+        page.set_contents(xref)
+        doc.save(path)
+    return path
+
+
+class _Native(dict):
+    """Blender ID stand-in: custom properties plus plain attributes."""
+
+    def __init__(self, **attrs):
+        super().__init__()
+        self.__dict__.update(attrs)
+
+
+class _Points(list):
+    def add(self, count):
+        self.extend(_Native(co=None) for _ in range(count))
+
+
+class _Scene:
+    """Counts whole-graph evaluations; an unevaluated link cannot be measured."""
+
+    def __init__(self, native_area_factor):
+        self.updates=self.rebuilds=0
+        self.dirty=False
+        self.linked,self.evaluated,self.removed_curves=[],set(),[]
+        self.native_area_factor=native_area_factor
+        self.bpy=_Native(
+            data=_Native(curves=_Native(new=self.curve,remove=self.removed_curves.append),
+                         objects=_Native(new=self.object,remove=self.remove)),
+            context=_Native(view_layer=_Native(update=self.update),evaluated_depsgraph_get=self.graph))
+        self.collection=_Native(objects=_Native(link=self.link))
+
+    def curve(self, name, kind):
+        new_spline=lambda kind:_Native(points=_Points([_Native(co=None)]),bezier_points=_Points([_Native(co=None)]))
+        return _Native(name=name,users=0,materials=[],splines=_Native(new=new_spline))
+
+    def object(self, name, curve):
+        curve.users+=1
+        obj=_Native(name=name,data=curve,parent=None,matrix_world=_Native(copy=lambda:"world"))
+        obj.evaluated_get=lambda graph:self.evaluate(obj,graph)
+        return obj
+
+    def link(self, obj):
+        self.linked.append(obj)
+        self.dirty=True
+
+    def remove(self, obj, do_unlink):
+        assert do_unlink
+        self.linked.remove(obj)
+        obj.data.users-=1
+        self.dirty=True
+
+    def update(self):
+        self.updates+=1
+        self.graph()
+
+    def graph(self):
+        if self.dirty:
+            self.rebuilds+=1
+            self.dirty=False
+            self.evaluated=set(map(id,self.linked))
+        return self
+
+    def evaluate(self, obj, graph):
+        assert graph is self and not self.dirty and id(obj) in self.evaluated
+        spec=json.loads(obj["pdf_source_capsule"])
+        area=spec["recipe"]["source_capsule_proof"]["capsule"]["area"]*spec["scale_mm"]**2/1e6
+        if obj.name.startswith("PDF_Source_Capsule_"):
+            area*=self.native_area_factor
+        mesh=_Native(polygons=[_Native(area=area)],loop_triangles=[_Native(area=area)],calc_loop_triangles=lambda:None)
+        return _Native(to_mesh=lambda:mesh,to_mesh_clear=lambda:None)
+
+
+def dense_sheet_run(monkeypatch,tmp_path,native_area_factor,material):
+    path=sheet(tmp_path,40)
+    specs,unresolved=prepare(path)
+    assert len(specs)==40 and not unresolved
+    scene=_Scene(native_area_factor)
+    monkeypatch.setitem(sys.modules,"bpy",scene.bpy)
+    monkeypatch.setitem(sys.modules,"pdf_vector_importer.bl_geometry_builder",
+                        _Native(_line_bevel_depth=lambda width:width/2000))
+    monkeypatch.setattr(module,"_verify_native_stroke",lambda *a:None)
+    centers={spec["primitive_id"]:_Native(name=f"line-{spec['primitive_id']}",data=_Native(
+        bevel_depth=spec["recipe"]["source_capsule_proof"]["capsule"]["width"]*spec["scale_mm"]/2000,
+        fill_mode="FULL",materials=[material])) for spec in specs}
+    config={"_image_order_stroke_objects":{key:[center] for key,center in centers.items()}}
+    return scene,specs,centers,lambda:module.apply_round_strokes(specs,scene.collection,config,source_path=path)
+
+
+@pytest.mark.parametrize("native_area_factor,updates",[(1,1),(.9,2)])
+def test_dense_sheet_footprints_share_one_graph_update(monkeypatch,tmp_path,native_area_factor,updates):
+    # v1.0.109 updated the whole scene graph twice per round end; a sheet
+    # with thousands of them did not finish importing.
+    material=object()
+    scene,specs,centers,run=dense_sheet_run(monkeypatch,tmp_path,native_area_factor,material)
+    records=run()
+    assert scene.updates==scene.rebuilds==updates
+    prefix="PDF_Source_Capsule_" if native_area_factor==1 else "PDF_Source_Cubic_Capsule_"
+    assert [r["footprint_object"] for r in records]==[prefix+str(s["recipe"]["source_paint_order"]) for s in specs]
+    assert [o.name for o in scene.linked]==[r["footprint_object"] for r in records]
+    assert {r["status"] for r in records}=={"verified" if native_area_factor==1 else "approximated"}
+    for spec,record,footprint in zip(specs,records,scene.linked,strict=True):
+        center=centers[spec["primitive_id"]]
+        assert footprint.parent is center and footprint.matrix_world=="world"
+        assert record["centerline_object"]==center.name and center["pdf_source_round_footprint"]==footprint.name
+        assert footprint.data.materials==[material] and footprint["pdf_normal_round_stroke"]
+    assert len(scene.removed_curves)==(0 if native_area_factor==1 else 40)
+
+
+def test_dense_sheet_unfilled_footprint_aborts_before_any_is_attached(monkeypatch,tmp_path):
+    scene,specs,centers,run=dense_sheet_run(monkeypatch,tmp_path,0,object())
+    with pytest.raises(ValueError,match="no filled surface"):
+        run()
+    first="PDF_Source_Capsule_"+str(specs[0]["recipe"]["source_paint_order"])
+    assert scene.updates==1 and len(scene.removed_curves)==1 and first not in {o.name for o in scene.linked}
+    assert not any(o.parent for o in scene.linked)
+    assert not any("pdf_source_round_footprint" in center for center in centers.values())
 
 
 def _round_spec(index):

@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 import json
 
-from .bl_source_capsules import _file_sha, _native_capsule, model_point
+from .bl_source_capsules import _file_sha, _native_capsule, _require_filled_surface, model_point
 from .image_paint_order import _close, _verify_native_stroke
 from .capsule_nurbs import cubic_capsule_controls, native_float_close
 from .stroke_footprint import bind_similarity_strokes, round_stroke, unclipped_capsules
@@ -161,13 +161,16 @@ def apply_round_strokes(prepared, collection, config, *, source_path, progress_c
     from .import_session import ImportCancelledError, cancel_heartbeat_interval
 
     digest = _file_sha(source_path)
-    records = []
+    built = []
     total = len(prepared)
     heartbeat_every = cancel_heartbeat_interval(total)
     for index, spec in enumerate(prepared):
         if progress_callback is not None and index % heartbeat_every == 0:
             progress_result = progress_callback((index + 1) / float(total))
             if progress_result is False:
+                # Footprints built so far are not verified or parented yet.
+                for _spec, _center, footprint in built:
+                    _discard_footprint(footprint)
                 raise ImportCancelledError("PDF import cancelled during round line ends")
         if digest != spec["recipe"]["source_sha256"]:
             raise ValueError("Round stroke source PDF changed before native construction")
@@ -190,18 +193,48 @@ def apply_round_strokes(prepared, collection, config, *, source_path, progress_c
         center.data.bevel_depth=source_width/2000
         if not native_float_close(center.data.bevel_depth,source_width/2000):
             raise ValueError("Round stroke physical width could not be stored")
-        footprint = _native_capsule(spec, collection, center.data.materials[0])
-        capsule = spec["recipe"]["source_capsule_proof"]["capsule"]
-        approximation = ""
-        if not _footprint_area_matches(footprint, capsule, spec["scale_mm"]):
-            # The pre-3.6 cyclic knot implementation can retain all controls and
-            # flags yet evaluate a different filled shape. Never call that exact.
+        footprint = _native_capsule(spec, collection, center.data.materials[0], evaluate=False)
+        built.append((spec, center, footprint))
+    if not built:
+        return []
+    import bpy
+
+    # Verify every footprint after one graph update. Each update after a new
+    # link rebuilds the whole scene graph, so updating per footprint made
+    # sheets with thousands of round ends take hours.
+    bpy.context.view_layer.update()
+    graph = bpy.context.evaluated_depsgraph_get()
+    approximated = []
+    for index, (spec, _center, footprint) in enumerate(built):
+        try:
+            _require_filled_surface(footprint, graph)
+        except Exception:
             _discard_footprint(footprint)
-            footprint = _cubic_footprint(spec, collection, center.data.materials[0])
-            if not _footprint_area_matches(footprint, capsule, spec["scale_mm"]):
+            raise
+        capsule = spec["recipe"]["source_capsule_proof"]["capsule"]
+        if not _footprint_area_matches(footprint, capsule, spec["scale_mm"], graph):
+            approximated.append(index)
+    if approximated:
+        # The pre-3.6 cyclic knot implementation can retain all controls and
+        # flags yet evaluate a different filled shape. Never call that exact.
+        for index in approximated:
+            spec, center, footprint = built[index]
+            _discard_footprint(footprint)
+            built[index] = (spec, center, _cubic_footprint(spec, collection, center.data.materials[0]))
+        bpy.context.view_layer.update()
+        graph = bpy.context.evaluated_depsgraph_get()
+        for index in approximated:
+            spec, _center, footprint = built[index]
+            capsule = spec["recipe"]["source_capsule_proof"]["capsule"]
+            if not _footprint_area_matches(footprint, capsule, spec["scale_mm"], graph):
                 _discard_footprint(footprint)
                 raise ValueError("Round stroke native filled footprint could not be verified")
-            approximation = "native_rational_fill_differs; circular quarters use bounded cubic curves"
+    approximated = set(approximated)
+    records = []
+    for index, (spec, center, footprint) in enumerate(built):
+        capsule = spec["recipe"]["source_capsule_proof"]["capsule"]
+        approximation = ("native_rational_fill_differs; circular quarters use bounded cubic curves"
+                         if index in approximated else "")
         footprint["pdf_normal_round_stroke"] = True
         world=footprint.matrix_world.copy()
         footprint.parent=center
@@ -228,11 +261,8 @@ def _discard_footprint(obj):
         bpy.data.curves.remove(data)
 
 
-def _footprint_area_matches(obj, capsule, scale):
-    import bpy
-
-    bpy.context.view_layer.update()
-    evaluated=obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
+def _footprint_area_matches(obj, capsule, scale, graph):
+    evaluated=obj.evaluated_get(graph)
     mesh=evaluated.to_mesh()
     try:
         mesh.calc_loop_triangles()
