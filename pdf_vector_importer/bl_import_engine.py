@@ -5106,9 +5106,21 @@ def iter_import_pdf(
                 if prepared_round_strokes and not page_stats.get('model3d_solids'):
                     from .bl_round_strokes import apply_round_strokes
 
-                    records = apply_round_strokes(
-                        prepared_round_strokes, page_col, page_builder_config, source_path=filepath,
-                    )
+                    def _round_progress(frac, phase, _i=i, _pn=page_num):
+                        frac = max(0.0, min(1.0, float(frac)))
+                        # Geometry has reached this page fraction already;
+                        # the label carries round-stage progress until text.
+                        return _progress(_page_progress(_i, 0.82),
+                                         f"{phase} for page {_pn}... ({int(frac * 100)}%)")
+                    try:
+                        records = apply_round_strokes(
+                            prepared_round_strokes, page_col, page_builder_config, source_path=filepath,
+                            progress_callback=_round_progress,
+                        )
+                    except ImportCancelledError:
+                        cancelled_page = page_num
+                        _discard_page_collection(page_col)
+                        break
                     total_stats.setdefault('source_round_stroke_footprints', []).extend(records)
                     page_stats['curves'] = int(page_stats.get('curves', 0)) + len(records)
                 if not page_stats.get('model3d_solids'):
