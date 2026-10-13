@@ -33,8 +33,11 @@ def cleanup_preserving_capsules(primitives, prepared, cleanup, **kwargs):
     if len(protected) != len(prepared):
         raise ValueError("Duplicate source capsule ownership before cleanup")
     originals = list(primitives)
+    by_id = {}
+    for p in originals:
+        by_id.setdefault(p.id, []).append(p)
     for spec in prepared:
-        matches = [p for p in originals if p.id == spec["primitive_id"]]
+        matches = by_id.get(spec["primitive_id"], ())
         if len(matches) != 1 or list(matches[0].points) != spec["points_mm"]:
             raise ValueError("Source capsule changed before cleanup")
     eligible = [p for p in originals if p.id not in protected]
