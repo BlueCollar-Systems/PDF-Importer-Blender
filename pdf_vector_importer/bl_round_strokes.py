@@ -9,9 +9,11 @@ from __future__ import annotations
 import math
 import json
 
-from .bl_source_capsules import _file_sha, _native_capsule, model_point
+from .bl_source_capsules import (
+    _file_sha, _construct_native_capsule, _verify_native_capsule_surface, model_point,
+)
 from .image_paint_order import _close, _verify_native_stroke
-from .capsule_nurbs import cubic_capsule_controls, native_float_close
+from .capsule_nurbs import capsule_controls, cubic_capsule_controls, native_float_close
 from .stroke_footprint import bind_similarity_strokes, round_stroke, unclipped_capsules
 
 
@@ -127,51 +129,119 @@ def prepare_round_strokes(page, page_data, *, source_sha256, page_number,
     return prepared, unresolved
 
 
-def apply_round_strokes(prepared, collection, config, *, source_path):
+class RoundStrokeRollbackFailure(RuntimeError):
+    """Owned footprints or original centerline state could not be restored."""
+
+
+def apply_round_strokes(prepared, collection, config, *, source_path, progress_callback=None):
     if not prepared:
         return []
-    digest = _file_sha(source_path)
-    records = []
-    for spec in prepared:
-        if digest != spec["recipe"]["source_sha256"]:
-            raise ValueError("Round stroke source PDF changed before native construction")
-        owned = config.get("_image_order_stroke_objects", {}).get(spec["primitive_id"], ())
-        if len(owned) != 1:
-            raise ValueError("Round stroke has no unique native centerline")
-        center = owned[0]
-        _verify_native_stroke(center, dict(points_mm=spec["points_mm"], closed=False))
-        if center.data.bevel_depth == 0 and center.data.fill_mode == "NONE":
-            continue  # Explicit wire-only output remains the user's requested form.
-        if len(center.data.materials) != 1:
-            raise ValueError("Round stroke native material is absent")
-        from .bl_geometry_builder import _line_bevel_depth
+    import bpy
+    from .import_session import ImportCancelledError, cancel_heartbeat_interval
+    from .bl_geometry_builder import _line_bevel_depth
+    from .fill_paint_order import same_native_object
 
-        source_width=spec["recipe"]["source_capsule_proof"]["capsule"]["width"]*spec["scale_mm"]
-        if not native_float_close(center.data.bevel_depth,_line_bevel_depth(source_width)):
-            raise ValueError("Round stroke native centerline width changed")
-        # A display hairline floor must not widen this positively proven
-        # physical stroke beyond its exact filled boundary.
-        center.data.bevel_depth=source_width/2000
-        if not native_float_close(center.data.bevel_depth,source_width/2000):
-            raise ValueError("Round stroke physical width could not be stored")
-        footprint = _native_capsule(spec, collection, center.data.materials[0])
-        capsule = spec["recipe"]["source_capsule_proof"]["capsule"]
-        approximation = ""
-        if not _footprint_area_matches(footprint, capsule, spec["scale_mm"]):
-            # The pre-3.6 cyclic knot implementation can retain all controls and
-            # flags yet evaluate a different filled shape. Never call that exact.
-            _discard_footprint(footprint)
-            footprint = _cubic_footprint(spec, collection, center.data.materials[0])
-            if not _footprint_area_matches(footprint, capsule, spec["scale_mm"]):
-                _discard_footprint(footprint)
-                raise ValueError("Round stroke native filled footprint could not be verified")
-            approximation = "native_rational_fill_differs; circular quarters use bounded cubic curves"
-        footprint["pdf_normal_round_stroke"] = True
-        world=footprint.matrix_world.copy()
-        footprint.parent=center
-        footprint.matrix_world=world
-        center["pdf_source_round_footprint"]=footprint.name
-        records.append({"page":spec["recipe"]["page"],
+    digest = _file_sha(source_path)
+    owned, centers, entries = [], [], []
+    footprint_ownership = {}
+    records = []
+    total = len(prepared)
+    heartbeat = cancel_heartbeat_interval(total)
+    seen_primitive_ids = set()
+
+    def checkpoint(index, phase, base=0., span=.4, count=total):
+        if progress_callback and (index % heartbeat == 0 or index == count):
+            if progress_callback(base + span * index / max(1, count), phase) is False:
+                raise ImportCancelledError("Round stroke construction cancelled")
+
+    try:
+        checkpoint(0, "Constructing round strokes")
+        for index, spec in enumerate(prepared):
+            checkpoint(index, "Constructing round strokes")
+            if digest != spec["recipe"]["source_sha256"]:
+                raise ValueError("Round stroke source PDF changed before native construction")
+            matches = config.get("_image_order_stroke_objects", {}).get(spec["primitive_id"], ())
+            if len(matches) != 1 or spec["primitive_id"] in seen_primitive_ids:
+                raise ValueError("Round stroke has no unique native centerline")
+            seen_primitive_ids.add(spec["primitive_id"])
+            center = matches[0]
+            _verify_native_stroke(center, dict(points_mm=spec["points_mm"], closed=False))
+            if center.data.bevel_depth == 0 and center.data.fill_mode == "NONE":
+                continue  # Explicit wire-only output remains the user's requested form.
+            if len(center.data.materials) != 1:
+                raise ValueError("Round stroke native material is absent")
+            material = center.data.materials[0]
+            source_width = spec["recipe"]["source_capsule_proof"]["capsule"]["width"] * spec["scale_mm"]
+            if not native_float_close(center.data.bevel_depth, _line_bevel_depth(source_width)):
+                raise ValueError("Round stroke native centerline width changed")
+            previous = center.get("pdf_source_round_footprint")
+            centers.append((center, center.data.bevel_depth, previous, "pdf_source_round_footprint" in center))
+            center.data.bevel_depth = source_width / 2000
+            if not native_float_close(center.data.bevel_depth, source_width / 2000):
+                raise ValueError("Round stroke physical width could not be stored")
+            footprint = _construct_native_capsule(spec, collection, material, owned)
+            footprint_ownership[id(footprint)] = owned[-1]
+            entries.append([spec, center, material, footprint, ""])
+        checkpoint(total, "Evaluating round strokes")
+        if entries:
+            bpy.context.view_layer.update()
+            graph = bpy.context.evaluated_depsgraph_get()
+            fallback = []
+            for index, entry in enumerate(entries):
+                checkpoint(index, "Verifying round strokes", .4, .2, len(entries))
+                spec, center, material, footprint, _ = entry
+                _verify_round_footprint(footprint, spec, material, collection)
+                _verify_native_capsule_surface(footprint, graph)
+                capsule = spec["recipe"]["source_capsule_proof"]["capsule"]
+                if not _footprint_area_matches(footprint, capsule, spec["scale_mm"], graph=graph):
+                    # Preserve the pre-3.6 bounded cubic fallback, evaluating all
+                    # replacements after one update rather than once per object.
+                    fallback.append(entry)
+            if fallback:
+                for index, entry in enumerate(fallback):
+                    checkpoint(index, "Constructing curved round strokes", .6, .1, len(fallback))
+                    spec, _, material, footprint, _ = entry
+                    _discard_owned_footprint(footprint_ownership.pop(id(footprint)))
+                    entry[3] = _cubic_footprint(spec, collection, material, owned=owned)
+                    entry[4] = "native_rational_fill_differs; circular quarters use bounded cubic curves"
+                checkpoint(0, "Evaluating curved round strokes", .7, 0.)
+                bpy.context.view_layer.update()
+                graph = bpy.context.evaluated_depsgraph_get()
+                # This update can reevaluate the surviving rational footprints
+                # too. Their filled-surface and area proofs must remain current.
+                for index, entry in enumerate(entries):
+                    checkpoint(index, "Verifying curved round strokes", .7, .1, len(entries))
+                    spec, _, material, footprint, approximation = entry
+                    _verify_round_footprint(footprint, spec, material, collection, cubic=bool(approximation))
+                    _verify_native_capsule_surface(footprint, graph)
+                    if not _footprint_area_matches(footprint, spec["recipe"]["source_capsule_proof"]["capsule"], spec["scale_mm"], graph=graph):
+                        raise ValueError("Round stroke native filled footprint could not be verified")
+        for index, (spec, center, material, footprint, approximation) in enumerate(entries):
+            checkpoint(index, "Checking original round strokes", .8, .1, len(entries))
+            matches = config.get("_image_order_stroke_objects", {}).get(spec["primitive_id"], ())
+            _verify_native_stroke(center, dict(points_mm=spec["points_mm"], closed=False))
+            width = spec["recipe"]["source_capsule_proof"]["capsule"]["width"] * spec["scale_mm"]
+            if (len(matches) != 1 or not same_native_object(matches[0], center)
+                    or not native_float_close(center.data.bevel_depth, width / 2000)
+                    or len(center.data.materials) != 1
+                    or not same_native_object(center.data.materials[0], material)):
+                raise ValueError("Round stroke original centerline changed during evaluation")
+            _verify_round_footprint(footprint, spec, material, collection, cubic=bool(approximation))
+        for index, (spec, center, _material, footprint, approximation) in enumerate(entries):
+            checkpoint(index, "Linking round stroke footprints", .9, .09, len(entries))
+            capsule = spec["recipe"]["source_capsule_proof"]["capsule"]
+            footprint["pdf_normal_round_stroke"] = True
+            world = footprint.matrix_world.copy()
+            footprint.parent = center
+            footprint.matrix_world = world
+            center["pdf_source_round_footprint"] = footprint.name
+            if (footprint.get("pdf_normal_round_stroke") is not True
+                    or not same_native_object(footprint.parent, center)
+                    or center.get("pdf_source_round_footprint") != footprint.name
+                    or any(not native_float_close(a,b) for row,wanted in zip(footprint.matrix_world,world,strict=True)
+                           for a,b in zip(row,wanted,strict=True))):
+                raise ValueError("Round footprint source placement or reference was not retained")
+            records.append({"page":spec["recipe"]["page"],
                         "source_draw_order":spec["recipe"]["source_paint_order"],
                         "primitive_id":spec["primitive_id"],"status":"approximated" if approximation else "verified",
                         "representation":"editable_cubic_capsule" if approximation else "editable_rational_quadratic_capsule",
@@ -179,24 +249,155 @@ def apply_round_strokes(prepared, collection, config, *, source_path):
                         "max_radial_error_mm":0.000273*capsule["width"]/2*spec["scale_mm"] if approximation else 0,
                         "centerline_object":center.name,"footprint_object":footprint.name,
                         "source_width_pdf":spec["recipe"]["source_capsule_proof"]["capsule"]["width"],
-                        "source_area_pdf2":spec["recipe"]["source_capsule_proof"]["capsule"]["area"]})
+                            "source_area_pdf2":capsule["area"]})
+        checkpoint(total, "Checking completed round strokes", 1., 0.)
+        # No mutable progress callback follows this seal. Stored definitions,
+        # actual placed ownership and source bytes must remain the same after
+        # the last callback and all parent/reference writes.
+        for spec, center, material, footprint, approximation in entries:
+            matches = config.get("_image_order_stroke_objects", {}).get(spec["primitive_id"], ())
+            _verify_native_stroke(center, dict(points_mm=spec["points_mm"], closed=False))
+            width = spec["recipe"]["source_capsule_proof"]["capsule"]["width"] * spec["scale_mm"]
+            if (len(matches) != 1 or not same_native_object(matches[0], center)
+                    or not native_float_close(center.data.bevel_depth, width / 2000)
+                    or len(center.data.materials) != 1
+                    or not same_native_object(center.data.materials[0], material)
+                    or center.get("pdf_source_round_footprint") != footprint.name
+                    or footprint.get("pdf_normal_round_stroke") is not True):
+                raise ValueError("Round stroke original ownership or reference changed during publication")
+            _verify_round_footprint(footprint, spec, material, collection,
+                                    cubic=bool(approximation), expected_parent=center)
+        if _file_sha(source_path) != digest:
+            raise ValueError("Round stroke source PDF changed during native construction")
+    except BaseException as error:
+        failures = []
+        for row in reversed(owned):
+            try:
+                _discard_owned_footprint(row)
+            except Exception as cleanup:
+                failures.append(str(cleanup))
+        for center, width, reference, present in reversed(centers):
+            try:
+                center.data.bevel_depth = width
+                if not native_float_close(center.data.bevel_depth, width):
+                    raise ValueError("Original stroke width was not restored")
+                if present:
+                    center["pdf_source_round_footprint"] = reference
+                elif "pdf_source_round_footprint" in center:
+                    del center["pdf_source_round_footprint"]
+                if ("pdf_source_round_footprint" in center) != present or (present and center.get("pdf_source_round_footprint") != reference):
+                    raise ValueError("Original stroke footprint reference was not restored")
+            except Exception as cleanup:
+                failures.append(str(cleanup))
+        if failures:
+            raise RoundStrokeRollbackFailure("Round stroke rollback could not be verified: " + "; ".join(failures)) from error
+        raise
     return records
 
 
-def _discard_footprint(obj):
+def _discard_owned_footprint(row):
     import bpy
 
-    data=obj.data
-    bpy.data.objects.remove(obj,do_unlink=True)
-    if data.users==0:
+    obj, data = row
+    if obj is not None:
+        name = obj.name
+        bpy.data.objects.remove(obj, do_unlink=True)
+        if bpy.data.objects.get(name) is not None:
+            raise ValueError("Round footprint object removal was not retained")
+        try:
+            reader = getattr(obj, "as_pointer", None)
+            alive = callable(reader) and reader() != 0
+        except ReferenceError:
+            alive = False
+        if alive:
+            raise ValueError("Round footprint native object still exists")
+        row[0] = None
+    if data is not None:
+        name = data.name
+        if data.users != 0:
+            raise ValueError("Round footprint data remains in use")
         bpy.data.curves.remove(data)
+        if bpy.data.curves.get(name) is not None:
+            raise ValueError("Round footprint curve removal was not retained")
+        try:
+            reader = getattr(data, "as_pointer", None)
+            alive = callable(reader) and reader() != 0
+        except ReferenceError:
+            alive = False
+        if alive:
+            raise ValueError("Round footprint native curve still exists")
+        row[1] = None
 
 
-def _footprint_area_matches(obj, capsule, scale):
+def _verify_round_footprint(obj, spec, material, collection, *, cubic=False, expected_parent=None):
+    from .fill_paint_order import same_native_object
+
+    curve = obj.data
+    if (not same_native_object(collection.objects.get(obj.name), obj)
+            or not same_native_object(obj.parent, expected_parent) or obj.modifiers or obj.constraints
+            or curve.dimensions != "2D" or curve.fill_mode != "BOTH"
+            or curve.bevel_depth != 0 or curve.extrude != 0
+            or len(curve.materials) != 1 or not same_native_object(curve.materials[0], material)
+            or len(curve.splines) != 1):
+        raise ValueError("Round footprint native ownership or material changed")
+    spline = curve.splines[0]
+    capsule = spec["recipe"]["source_capsule_proof"]["capsule"]
+    scale, sign = spec["scale_mm"] / 1000, -1 if spec["flip_y"] else 1
+    if cubic:
+        origin, nodes = cubic_capsule_controls(capsule)
+        expected = [[tuple((x*scale, y*scale*sign, 0.)) for x, y in node] for node in nodes]
+        valid = (spline.type == "BEZIER" and spline.use_cyclic_u
+                 and len(spline.bezier_points) == len(expected)
+                 and all(point.handle_left_type == point.handle_right_type == "FREE"
+                         and all(native_float_close(a,b) for actual,wanted in
+                                 ((point.co,co),(point.handle_left,left),(point.handle_right,right))
+                                 for a,b in zip(actual,wanted,strict=True))
+                         for point,(co,left,right) in zip(spline.bezier_points,expected,strict=True)))
+    else:
+        origin, controls = capsule_controls(capsule)
+        expected = [(x*scale, y*scale*sign, 0., weight) for x,y,weight in controls]
+        valid = (spline.type == "NURBS" and spline.order_u == 3 and not spline.use_endpoint_u
+                 and spline.use_bezier_u and spline.use_cyclic_u and len(spline.points) == len(expected)
+                 and all(native_float_close(a,b) for point,co in zip(spline.points,expected,strict=True)
+                         for a,b in zip(point.co,co,strict=True)))
+    x, y = model_point(origin, spec["page_height"], spec["scale_mm"], spec["flip_y"])
+    matrix = ((1.,0.,0.,x/1000),(0.,1.,0.,y/1000),(0.,0.,1.,0.),(0.,0.,0.,1.))
+    local = (x/1000, y/1000, 0.)
+    if expected_parent is not None:
+        from mathutils import Vector
+
+        # These privately constructed objects start with identity parent
+        # inverse. Their location is now parent-local, while source controls
+        # and the full actual world matrix must remain exactly source-bound.
+        identity = ((1.,0.,0.,0.),(0.,1.,0.,0.),(0.,0.,1.,0.),(0.,0.,0.,1.))
+        if any(not native_float_close(a,b) for row,wanted in zip(obj.matrix_parent_inverse,identity,strict=True)
+               for a,b in zip(row,wanted,strict=True)):
+            raise ValueError("Round footprint native parent inverse changed")
+        inverse = expected_parent.matrix_world.inverted()
+        local_vector = inverse @ Vector(local)
+        local = (local_vector.x, local_vector.y, local_vector.z)
+        # World matrices may still be cached after the last mutable callback.
+        # The actual local basis must also retain the complete source pose,
+        # including rotations that leave the source axis and origin unchanged.
+        basis = tuple(tuple(sum(inverse[i][k]*matrix[k][j] for k in range(4))
+                            for j in range(4)) for i in range(4))
+        if any(not native_float_close(a,b) for row,wanted in zip(obj.matrix_basis,basis,strict=True)
+               for a,b in zip(row,wanted,strict=True)):
+            raise ValueError("Round footprint native local transform changed")
+    if (not valid or not all(native_float_close(a,b) for a,b in zip(obj.location,local,strict=True))
+            or any(not native_float_close(a,b) for row,wanted in zip(obj.matrix_world,matrix,strict=True)
+                   for a,b in zip(row,wanted,strict=True))
+            or json.loads(obj["pdf_source_capsule"]) != json.loads(json.dumps(spec))):
+        raise ValueError("Round footprint original source controls or origin changed")
+
+
+def _footprint_area_matches(obj, capsule, scale, *, graph=None):
     import bpy
 
-    bpy.context.view_layer.update()
-    evaluated=obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    if graph is None:
+        bpy.context.view_layer.update()
+        graph = bpy.context.evaluated_depsgraph_get()
+    evaluated=obj.evaluated_get(graph)
     mesh=evaluated.to_mesh()
     try:
         mesh.calc_loop_triangles()
@@ -211,7 +412,7 @@ def _footprint_area_matches(obj, capsule, scale):
         evaluated.to_mesh_clear()
 
 
-def _cubic_footprint(spec, collection, material):
+def _cubic_footprint(spec, collection, material, *, owned=None):
     import bpy
 
     capsule=spec["recipe"]["source_capsule_proof"]["capsule"]
@@ -220,6 +421,9 @@ def _cubic_footprint(spec, collection, material):
     sign=-1 if spec["flip_y"] else 1
     expected=[[tuple((x*scale,y*scale*sign,0.)) for x,y in node] for node in nodes]
     curve=bpy.data.curves.new("PDF_Source_Cubic_Capsule","CURVE")
+    ownership = [None, curve]
+    if owned is not None:
+        owned.append(ownership)
     obj=None
     try:
         curve.dimensions="2D";curve.fill_mode="BOTH";curve.bevel_depth=0;curve.extrude=0
@@ -235,6 +439,7 @@ def _cubic_footprint(spec, collection, material):
                 raise ValueError("Cubic capsule native source controls changed")
         curve.materials.append(material)
         obj=bpy.data.objects.new(f"PDF_Source_Cubic_Capsule_{spec['recipe']['source_paint_order']}",curve)
+        ownership[0] = obj
         x,y=model_point(origin,spec["page_height"],spec["scale_mm"],spec["flip_y"])
         position=(x/1000,y/1000,0)
         obj.location=position
@@ -245,6 +450,8 @@ def _cubic_footprint(spec, collection, material):
         obj["pdf_source_capsule"]=json.dumps(spec,sort_keys=True)
         return obj
     except Exception:
+        if owned is not None:
+            raise  # The stage verifies cleanup of every created data/object pair.
         if obj is not None:
             bpy.data.objects.remove(obj,do_unlink=True)
         if curve.users==0:
