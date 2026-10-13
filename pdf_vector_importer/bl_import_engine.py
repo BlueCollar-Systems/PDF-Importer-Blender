@@ -4873,13 +4873,34 @@ def iter_import_pdf(
                 )
                 total_stats.setdefault('source_capsule_footprints', []).extend(unresolved_capsules)
                 _add_phase_ms('source_capsule_plan_ms', t_capsule_plan)
-                from .bl_round_strokes import prepare_round_strokes
+                from .bl_round_strokes import (
+                    defer_native_round_footprints, prepare_round_strokes,
+                )
 
                 prepared_round_strokes, unresolved_round_strokes = prepare_round_strokes(
                     page, page_data, source_sha256=source_sha256, page_number=page_num,
                     user_scale=import_cfg.user_scale, flip_y=import_cfg.flip_y,
                 )
                 total_stats.setdefault('source_round_stroke_footprints', []).extend(unresolved_round_strokes)
+                deferred_round_strokes = defer_native_round_footprints(prepared_round_strokes)
+                if deferred_round_strokes is not None:
+                    total_stats.setdefault('source_round_stroke_footprints', []).append(
+                        deferred_round_strokes
+                    )
+                    if _progress(
+                        _page_progress(i, 0.42),
+                        (
+                            f"Page {page_num}: {deferred_round_strokes['prepared_count']} round lines "
+                            "stay editable centerlines so this sheet can finish."
+                        ),
+                    ) is False:
+                        cancelled_page = page_num
+                        break
+                    native_round_strokes = []
+                else:
+                    native_round_strokes = list(prepared_round_strokes)
+            else:
+                native_round_strokes = []
 
             # 9c. Geometry cleanup (remove micro-segments)
             if import_cfg.cleanup_level != "conservative" or import_cfg.min_seg_len > 0:
@@ -5062,7 +5083,7 @@ def iter_import_pdf(
                     spec['primitive_id'] for spec in prepared_capsules
                 )
                 page_builder_config['_image_order_isolated_stroke_ids'].update(
-                    spec['primitive_id'] for spec in prepared_round_strokes
+                    spec['primitive_id'] for spec in native_round_strokes
                 )
                 page_builder_config['_image_order_isolated_stroke_ids'].update(
                     plan['primitive_id'] for plan in rectangle_order_plans if plan['has_border']
@@ -5103,14 +5124,30 @@ def iter_import_pdf(
                     cancelled_page = page_num
                     _discard_page_collection(page_col)
                     break
-                if prepared_round_strokes and not page_stats.get('model3d_solids'):
+                if native_round_strokes and not page_stats.get('model3d_solids'):
                     from .bl_round_strokes import apply_round_strokes
 
-                    records = apply_round_strokes(
-                        prepared_round_strokes, page_col, page_builder_config, source_path=filepath,
-                    )
+                    def _round_progress(frac, _i=i, _pn=page_num):
+                        frac = max(0.0, min(1.0, float(frac)))
+                        return _progress(
+                            _page_progress(_i, 0.82),
+                            f"Round line ends for page {_pn}... ({int(frac * 100)}%)",
+                        )
+                    try:
+                        records = apply_round_strokes(
+                            native_round_strokes, page_col, page_builder_config,
+                            source_path=filepath, progress_callback=_round_progress,
+                        )
+                    except ImportCancelledError:
+                        cancelled_page = page_num
+                        _discard_page_collection(page_col)
+                        break
                     total_stats.setdefault('source_round_stroke_footprints', []).extend(records)
-                    page_stats['curves'] = int(page_stats.get('curves', 0)) + len(records)
+                    built_round_strokes = [
+                        record for record in records
+                        if record.get("status") in {"verified", "approximated"}
+                    ]
+                    page_stats['curves'] = int(page_stats.get('curves', 0)) + len(built_round_strokes)
                 if not page_stats.get('model3d_solids'):
                     from .fill_paint_order import apply_fill_depths
 
