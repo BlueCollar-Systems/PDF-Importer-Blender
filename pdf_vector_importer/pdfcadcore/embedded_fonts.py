@@ -84,6 +84,8 @@ class EmbeddedFontAsset:
     glyph_advances: tuple[int, ...] = field(default=(), repr=False)
     source_binding_method: str = ""
     source_program_candidates: tuple[tuple[int, str], ...] = ()
+    source_inventory_format: str = ""
+    source_inventory_type: str = ""
 
 
 def _without_subset_prefix(name: object) -> str:
@@ -547,6 +549,48 @@ def _repair_truncated_hmtx(source_bytes: bytes) -> bytes:
     if not _fonttools_loadable(repaired):
         return source_bytes
     return repaired
+
+
+def _canonical_source_font_format(source_bytes: bytes, source_format: str) -> str:
+    """Recognize name-keyed CFF bytes behind a PDF Type0 ``cid`` label.
+
+    ``cid`` describes the PDF font container, not necessarily the extracted
+    program. Only the existing single name-keyed CFF1 representation is
+    qualified here; CID-keyed FDArray/ROS programs remain unsupported.
+    """
+    source_format = str(source_format).lower().lstrip(".")
+    if source_format != "cid":
+        return source_format
+    _validate_font_work_bounds(source_bytes)
+    if len(source_bytes) < 4 or source_bytes[0] != 1:
+        raise ExactFontSourceImpossible("cid program is not raw CFF1")
+    try:
+        from fontTools.cffLib import CFFFontSet
+    except ImportError:
+        raise ExactFontRuntimeUnavailable(
+            "free FontTools runtime required to qualify the cid font program"
+        ) from None
+    try:
+        cff = CFFFontSet()
+        cff.decompile(BytesIO(source_bytes), None, isCFF2=False)
+        if len(cff.topDictIndex) != 1:
+            raise ExactFontSourceImpossible("cid CFF program must contain exactly one font")
+        top = cff.topDictIndex[0]
+        if (any(key in top.rawDict for key in ("ROS", "FDArray", "FDSelect"))
+                or "Private" not in top.rawDict):
+            raise ExactFontSourceImpossible("CID-keyed CFF font program is unsupported")
+        order = list(top.charset)
+        _validate_font_work_bounds(source_bytes, glyph_count=len(order))
+        if not order or order[0] != ".notdef":
+            raise ExactFontSourceImpossible("cid CFF has no canonical glyph order")
+    except ExactFontSourceImpossible:
+        raise
+    except (AssertionError, AttributeError, EOFError, IndexError, KeyError,
+            OSError, TypeError, ValueError, struct.error) as exc:
+        raise ExactFontSourceImpossible(
+            f"cid CFF qualification failed: {type(exc).__name__}: {exc}"
+        ) from exc
+    return "cff"
 
 
 def _usable_font(
@@ -1165,6 +1209,8 @@ class EmbeddedFontCatalog:
                 xref = int(record[0])
                 source_format = str(record[1] or "").lower().lstrip(".")
                 source_type = str(record[2] or "")
+                source_inventory_format = source_format
+                source_inventory_type = source_type
                 base_name = _without_subset_prefix(record[3])
                 resource_name = str(record[4] or "")
                 source_encoding = str(record[5] or "")
@@ -1221,10 +1267,13 @@ class EmbeddedFontCatalog:
                     extracted_format = "cff"
                     extracted_type = "Base14 renderer Type1"
                 source_sha = _digest(source_bytes)
+                source_format = _canonical_source_font_format(
+                    source_bytes, extracted_format or source_format
+                )
                 extracted_base = _without_subset_prefix(extracted_name)
                 name_aliases = {base_name}
                 name_aliases.update(
-                    _font_program_name_aliases(source_bytes, extracted_format or source_format)
+                    _font_program_name_aliases(source_bytes, source_format)
                 )
                 if extracted_base and extracted_base not in name_aliases:
                     raise ExactFontSourceImpossible(
@@ -1232,7 +1281,6 @@ class EmbeddedFontCatalog:
                     )
                 if extracted_base:
                     name_aliases.add(extracted_base)
-                source_format = str(extracted_format or source_format).lower().lstrip(".")
                 source_type = str(extracted_type or source_type)
                 if source_sha in ambiguous_programs:
                     raise ExactFontSourceImpossible(
@@ -1283,6 +1331,8 @@ class EmbeddedFontCatalog:
                     ascender=ascender,
                     descender=descender,
                     glyph_advances=glyph_advances,
+                    source_inventory_format=source_inventory_format,
+                    source_inventory_type=source_inventory_type,
                 )
             except ExactFontSourceImpossible as exc:
                 failures[base_name] = EmbeddedFontFailure(

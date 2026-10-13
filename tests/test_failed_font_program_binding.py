@@ -160,7 +160,7 @@ def test_unrelated_failed_program_does_not_replace_proved_type3_absence():
     assert unresolved.reason == "incomplete_source_font_character_binding"
 
 
-def test_real_public_builtin_cid_font_failure_binds_the_original_program():
+def test_real_public_cid_labeled_name_keyed_font_binds_the_original_cff_program():
     document = fitz.open()
     try:
         page = document.new_page(width=240, height=160)
@@ -169,11 +169,13 @@ def test_real_public_builtin_cid_font_failure_binds_the_original_program():
         item = extract_page(page, 1).text_items[0]
         record = page.get_fonts(full=True)[0]
         expected = sha256(document.extract_font(record[0])[3]).hexdigest()
-        assert item.font_asset is None
-        assert item.font_failure.reason == "embedded_font_asset_build_failed"
-        assert item.font_failure.proof_category == "source_specific_impossibility"
-        assert item.font_failure.span_font_name == item.font_name
-        assert item.font_failure.source_xref == record[0]
+        assert item.font_failure is None
+        assert item.font_asset.source_format == "cff"
+        assert item.font_asset.source_inventory_format == record[1] == "cid"
+        assert item.font_asset.source_inventory_type == record[2] == "Type0"
+        assert item.font_asset.span_font_name == item.font_name
+        assert item.font_asset.source_xref == record[0]
+        assert item.font_asset.source_sha256 == expected
         assert all(c.source_font_binding_verified and c.source_font_program_sha256 == expected
                    for c in item.source_char_layout)
     finally:
