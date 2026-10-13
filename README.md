@@ -25,6 +25,8 @@ Powered by the pdfcadcore shared extraction library and PyMuPDF.
 
 Inferred word gaps in symbolic subset fonts can use an empty space glyph observed in the PDF's original font program, preserving editable text instead of an unnecessary image fallback. Visible, unobserved, ambiguous or changed source glyphs remain unverified and follow the existing reported fallback. Source and synthetic font checks cover this proof; native desktop import, save and reopen checks remain pending for this candidate.
 
+Opaque-fill ownership checks now use a temporary native-pointer index when every collection member has a readable nonzero pointer. Each selected object still passes the original native-identity, geometry and material checks; collections that cannot be indexed retain the ordered scan. A final pointer readback rejects changed ownership before fill-depth placement. A synthetic 200-fill regression reduces native-identity comparisons from 20,100 to 200 while retaining all 200 source validations. Native import performance and save/reopen acceptance remain pending; this comparison is not a desktop timing result.
+
 ## Installation
 
 **Windows 64-bit (x64) only for now.** macOS, Linux and Windows on ARM are not
