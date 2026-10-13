@@ -235,3 +235,60 @@ def test_dense_sheet_unfilled_footprint_aborts_before_any_is_attached(monkeypatc
     assert scene.updates==1 and len(scene.removed_curves)==1 and first not in {o.name for o in scene.linked}
     assert not any(o.parent for o in scene.linked)
     assert not any("pdf_source_round_footprint" in center for center in centers.values())
+
+
+def _round_spec(index):
+    return {
+        "primitive_id": index,
+        "recipe": {"page": 1, "source_sha256": "a" * 64, "source_paint_order": index},
+    }
+
+
+def test_round_footprint_budget_keeps_a_small_page_and_defers_a_dense_sheet():
+    small = [_round_spec(i) for i in range(module.MAX_NATIVE_ROUND_FOOTPRINTS)]
+    assert module.defer_native_round_footprints(small) is None
+    # A one-page foundation hatch qualified thousands of isolated round lines.
+    dense = [_round_spec(i) for i in range(4500)]
+    record = module.defer_native_round_footprints(dense)
+    assert record == {
+        "page": 1,
+        "status": "deferred",
+        "reason": "round_stroke_native_footprint_budget",
+        "prepared_count": 4500,
+        "budget": module.MAX_NATIVE_ROUND_FOOTPRINTS,
+    }
+
+
+def test_dense_round_lines_do_not_build_native_footprints(monkeypatch):
+    built = []
+    monkeypatch.setattr(module, "_native_capsule", lambda *args, **kwargs: built.append(args))
+    seen = []
+    records = module.apply_round_strokes(
+        [_round_spec(i) for i in range(4500)],
+        None,
+        {},
+        source_path="unused",
+        progress_callback=seen.append,
+    )
+    assert built == []
+    assert seen == [1.0]
+    assert records[0]["status"] == "deferred"
+    assert "4500 round-ended lines kept their editable centerlines" in module.round_stroke_warning(records)
+
+
+def test_one_round_line_stays_on_the_native_path_and_can_be_cancelled(monkeypatch, tmp_path):
+    from pdf_vector_importer.import_session import ImportCancelledError
+
+    monkeypatch.setattr(module, "_file_sha", lambda _path: "a" * 64)
+    monkeypatch.setattr(
+        module, "_native_capsule",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("native build after cancel")),
+    )
+    with pytest.raises(ImportCancelledError, match="round line ends"):
+        module.apply_round_strokes(
+            [_round_spec(0)],
+            None,
+            {},
+            source_path=str(tmp_path / "unused.pdf"),
+            progress_callback=lambda _frac: False,
+        )
