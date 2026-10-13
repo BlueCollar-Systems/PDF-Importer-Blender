@@ -19,6 +19,60 @@ def same_native_object(first, second):
                 and read_first() != 0 and read_first() == read_second())
 
 
+class _NativeMemberIndex:
+    """Phase-local candidates; the existing comparer still proves every hit."""
+
+    def __init__(self, members):
+        self._members = tuple(members)  # Keep wrappers alive for this one pass.
+        self._by_pointer = {}
+        pointers = []
+        for member in self._members:
+            try:
+                read = getattr(member, 'as_pointer', None)
+                pointer = read() if callable(read) else None
+            except Exception:
+                # Do not introduce an eager failure before the ordered scan
+                # would reach this wrapper (or stop at an earlier identity).
+                self._by_pointer = None
+                return
+            if type(pointer) is not int or pointer == 0:
+                # Python doubles and unusual APIs keep the original semantics.
+                self._by_pointer = None
+                return
+            self._by_pointer.setdefault(pointer, []).append(member)
+            pointers.append(pointer)
+        self._pointers = tuple(pointers)
+
+    def contains(self, obj):
+        if self._by_pointer is not None:
+            try:
+                read = getattr(obj, 'as_pointer', None)
+                pointer = read() if callable(read) else None
+            except Exception:
+                pointer = None
+            if type(pointer) is int and pointer != 0:
+                for member in self._by_pointer.get(pointer, ()):
+                    if same_native_object(obj, member):
+                        return True
+        # Rejected/stale candidates, changed pointers and non-native pointer
+        # values must still use the authoritative original membership scan.
+        return any(same_native_object(obj, member) for member in self._members)
+
+
+    def verify_current(self):
+        """Reject ID changes during validation before any display movement."""
+        if self._by_pointer is None:
+            return
+        for member, expected in zip(self._members, self._pointers, strict=True):
+            try:
+                read = getattr(member, 'as_pointer', None)
+                pointer = read() if callable(read) else None
+            except Exception as error:
+                raise ValueError("Opaque fill native ownership changed during validation") from error
+            if type(pointer) is not int or pointer != expected:
+                raise ValueError("Opaque fill native ownership changed during validation")
+
+
 def fill_depth_plan(records, budget_m=0.00005):
     """Rank only overlapping source paints; disjoint faces may share a depth."""
     if not math.isfinite(budget_m) or not 0 < budget_m <= 0.00005:
@@ -81,7 +135,9 @@ def validate_source_fill(spec, native_members, graph):
     from .visual_style import preview_color, scene_linear_color
 
     obj = spec["object"]
-    if not any(same_native_object(obj, member) for member in native_members) or obj.type != "MESH" or len(obj.data.polygons) != 1:
+    present = (native_members.contains(obj) if isinstance(native_members, _NativeMemberIndex)
+               else any(same_native_object(obj, member) for member in native_members))
+    if not present or obj.type != "MESH" or len(obj.data.polygons) != 1:
         raise ValueError("Opaque fill native ownership changed")
     if obj.parent is not None or obj.modifiers or obj.constraints or obj.hide_render:
         raise ValueError("Opaque fill has an unsupported native transform or visibility")
@@ -143,7 +199,7 @@ def apply_fill_depths(collection, owned):
     bpy.context.view_layer.update()
     graph = bpy.context.evaluated_depsgraph_get()
     records, objects = [], {}
-    native_members = list(collection.all_objects)
+    native_members = _NativeMemberIndex(collection.all_objects)
     for spec in owned:
         obj = spec["object"]
         try:
@@ -160,6 +216,7 @@ def apply_fill_depths(collection, owned):
                   "opaque": spec["fill_opacity"] == 1.0, "bounds": bounds}
         records.append(record)
         objects[record["id"]] = (obj, points, float(obj.location.z), min(p.z for p in corners))
+    native_members.verify_current()
     result = fill_depth_plan(records)
     for component in result:
         if component["status"] != "qualified":
