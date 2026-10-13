@@ -27,6 +27,9 @@ Variants:
     keep-every-sheet fix in, CI requires this import to bring in both sheets
     with no failed text, like the standard fixture.
 
+``cid-cff`` - one embedded name-keyed CFF font behind a PDF Type0/cid label;
+    the host matrix requires actual editable 3D text, with no image fallback.
+
 Usage:
     python scripts/make_ci_fixture.py OUT.pdf [--variant standard|edge-far]
 
@@ -56,6 +59,7 @@ TALL_SHEET = (17 * 72, 14000)
 
 STANDARD_PAGES = 2
 EDGE_FAR_PAGES = 2
+CID_CFF_PAGES = 1
 
 
 def _picture_png(width: int = 48, height: int = 32) -> bytes:
@@ -119,7 +123,19 @@ def build_edge_far(path: str) -> dict:
     return {"variant": "edge-far", "pages": EDGE_FAR_PAGES}
 
 
-BUILDERS = {"standard": build_standard, "edge-far": build_edge_far}
+def build_cid_cff(path: str) -> dict:
+    doc = pymupdf.open()
+    page = doc.new_page(width=240, height=160)
+    page.draw_rect(pymupdf.Rect(10, 10, 90, 55), color=(0, 0, 0), fill=(0.2, 0.4, 0.6))
+    page.draw_line((15, 90), (130, 90), color=(0.8, 0.1, 0.1), width=2, lineCap=1)
+    page.insert_font(fontname="SyntheticControlFont", fontbuffer=pymupdf.Font("helv").buffer)
+    page.insert_text((15, 130), "BLENDER CONTROL", fontname="SyntheticControlFont", fontsize=10)
+    doc.save(path, garbage=3, deflate=True)
+    doc.close()
+    return {"variant": "cid-cff", "pages": CID_CFF_PAGES}
+
+
+BUILDERS = {"standard": build_standard, "edge-far": build_edge_far, "cid-cff": build_cid_cff}
 
 
 def main(argv=None) -> int:

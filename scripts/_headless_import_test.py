@@ -9,6 +9,9 @@ Environment (all optional except the PDF):
     TEST_TEXT_MODE                labels|text|3d_text|glyphs|geometry|raster, default "3d_text"
     TEST_EXPECT_PAGES             require exactly this many sheets imported, each with objects
     TEST_EXPECT_IMAGES            require at least this many pictures placed
+    TEST_EXPECT_TEXT_REPRESENTATION require every text item to use this mode;
+                                  3d_text also requires native extruded font
+                                  entities with the verified packed font
     TEST_EXPECT_FAIL              a reason (e.g. a fix-list id): the run is a known
                                   failure. Failing checks print XFAIL and exit 0; if
                                   every check passes it prints XPASS (time to remove
@@ -23,11 +26,15 @@ Prints one "HEADLESS_IMPORT_RESULT {...}" line and "HEADLESS_IMPORT_PASS" /
 "HEADLESS_IMPORT_FAIL" / "HEADLESS_IMPORT_XFAIL" / "HEADLESS_IMPORT_XPASS".
 """
 import json
+import hashlib
+import math
 import os
 import re
 import sys
 import tempfile
 import traceback
+
+sys.dont_write_bytecode = True
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ADDON_SOURCE = (os.environ.get("TEST_ADDON_SOURCE") or "repo").strip().lower()
@@ -129,7 +136,28 @@ def _report_text_failures(report, limit=6):
     return reasons
 
 
-def _checks(summary, expect_pages, expect_images):
+def _native_text_delivery(report, bpy):
+    delivery = (report.get("extra") or {}).get("text_delivery") or {}
+    rows = []
+    for item in delivery.get("items") or []:
+        entities = []
+        for name in item.get("entity_ids") or []:
+            obj = bpy.data.objects.get(name)
+            packed_sha = expected_sha = ""
+            extrude = 0.0
+            if obj is not None and obj.type == "FONT":
+                extrude = float(obj.data.extrude)
+                packed = obj.data.font.packed_file
+                packed_sha = hashlib.sha256(bytes(packed.data)).hexdigest() if packed is not None else ""
+                expected_sha = str(obj.get("pdf_exact_font_sha256") or "")
+            entities.append({"name": name, "type": obj.type if obj is not None else None,
+                "extrude": extrude, "packed_font_sha_verified": bool(packed_sha and packed_sha == expected_sha)})
+        rows.append({"status": item.get("status"), "final_representation": item.get("final_representation"),
+                     "native_entities": entities})
+    return {"summary": delivery.get("summary") or {}, "items": rows}
+
+
+def _checks(summary, expect_pages, expect_images, expect_text_representation=None):
     problems = []
     if summary["outcome"] != "returned":
         problems.append(f"import raised {summary.get('exception_type')}: {summary.get('exception')}")
@@ -152,6 +180,26 @@ def _checks(summary, expect_pages, expect_images):
             problems.append("no text items were imported")
         if int(stats.get("text_delivery_failed_items") or 0) > 0:
             problems.append(f"text_delivery_failed_items={stats.get('text_delivery_failed_items')}")
+    if expect_text_representation:
+        delivery = summary.get("native_text_delivery") or {}
+        ledger = delivery.get("summary") or {}
+        items = delivery.get("items") or []
+        source_count = int(ledger.get("source_items") or 0)
+        if (source_count <= 0 or len(items) != source_count
+                or ledger.get("delivered_items") != source_count
+                or (ledger.get("final_counts") or {}) != {expect_text_representation: source_count}
+                or ledger.get("fallback_items") != 0 or ledger.get("failed_items") != 0):
+            problems.append(f"text delivery is not entirely requested {expect_text_representation} without fallback")
+        for item in items:
+            entities = item.get("native_entities") or []
+            if item.get("status") != "delivered" or item.get("final_representation") != expect_text_representation or not entities:
+                problems.append("requested text has no complete native delivery")
+            if expect_text_representation == "3d_text" and any(
+                row.get("type") != "FONT" or not math.isfinite(row.get("extrude", 0))
+                or row.get("extrude", 0) <= 0 or row.get("packed_font_sha_verified") is not True
+                for row in entities
+            ):
+                problems.append("requested 3D text lacks native extrusion or verified packed font")
     return problems
 
 
@@ -212,8 +260,11 @@ def main():
     report = _read_report(stats.get("import_report_path") or report_path)
     summary["audit_mode"] = _report_audit_mode(report)
     summary["text_failure_reasons"] = _report_text_failures(report)
+    expected_text = (os.environ.get("TEST_EXPECT_TEXT_REPRESENTATION") or "").strip()
+    if expected_text:
+        summary["native_text_delivery"] = _native_text_delivery(report, bpy)
 
-    problems = _checks(summary, _int_env("TEST_EXPECT_PAGES"), _int_env("TEST_EXPECT_IMAGES"))
+    problems = _checks(summary, _int_env("TEST_EXPECT_PAGES"), _int_env("TEST_EXPECT_IMAGES"), expected_text)
     summary["problems"] = problems
     print("HEADLESS_IMPORT_RESULT", json.dumps(summary, default=str, sort_keys=True))
     for reason in summary["text_failure_reasons"]:
