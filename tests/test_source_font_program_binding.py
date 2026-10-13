@@ -206,13 +206,14 @@ def test_failed_font_build_is_not_reported_as_missing_from_the_pdf():
         "ExactFontSourceImpossible", "unsupported embedded font format: pfa",
         "source_specific_impossibility",
     )
-    catalog = EmbeddedFontCatalog(1, {}, {"Nimbus": failure})
+    catalog = EmbeddedFontCatalog(1, {}, {"Nimbus": failure},
+                                  program_failures=[("ab" * 32, failure)])
     asset, got = catalog.resolve_span("Nimbus", [{
         "source_font_program_sha256": "ab" * 32,
         "source_font_binding_verified": True,
     }])
     assert asset is None
-    assert got is failure
+    assert got == failure
 
 
 def test_mixed_partial_and_wrong_program_spans_fail_closed(deterministic_exact_font):
