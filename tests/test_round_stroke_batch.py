@@ -236,14 +236,15 @@ def assert_restored(host, centers):
     assert all(center.data.bevel_depth == center.data.original_width and 'pdf_source_round_footprint' not in center for center in centers)
 
 
-def test_128_rational_capsules_have_one_update_and_every_surface_area_source_proof(monkeypatch, tmp_path):
+@pytest.mark.parametrize('count', [128, 4500])
+def test_dense_rational_capsules_have_one_update_and_every_surface_area_source_proof(monkeypatch, tmp_path, count):
     host = Host(monkeypatch)
-    path, specs, centers, config = host.fixture(tmp_path, 128)
+    path, specs, centers, config = host.fixture(tmp_path, count)
     before = copy.deepcopy(specs)
     records = module.apply_round_strokes(specs, host.collection, config, source_path=path)
     assert host.updates == 1
-    assert len(records) == 128 and specs == before
-    assert len(host.meshes) == len(host.cleared) == 256
+    assert len(records) == count and specs == before
+    assert len(host.meshes) == len(host.cleared) == count * 2
     assert {generation for _,generation in host.evaluated} == {1}
     assert all(record['status'] == 'verified' for record in records)
     assert all(center.data.bevel_depth == .00001 for center in centers)
