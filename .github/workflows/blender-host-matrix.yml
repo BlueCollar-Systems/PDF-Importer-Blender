@@ -148,6 +148,7 @@ jobs:
         run: |
           python scripts/make_ci_fixture.py "$CI_FIXTURES/ci.pdf"
           python scripts/make_ci_fixture.py "$CI_FIXTURES/ci_edge_far.pdf" --variant edge-far
+          python scripts/make_ci_fixture.py "$CI_FIXTURES/ci_cid_cff.pdf" --variant cid-cff
 
       - name: Import both sheets as Text
         if: ${{ !cancelled() && steps.fixtures.outcome == 'success' }}
@@ -208,6 +209,20 @@ jobs:
             --python scripts/_headless_import_test.py 2>&1 | tee "$CI_OUT/import_edge_far.log"
           grep -q "HEADLESS_IMPORT_PASS" "$CI_OUT/import_edge_far.log"
 
+      - name: Import CID-labeled name-keyed CFF as editable 3D text
+        if: ${{ !cancelled() && steps.fixtures.outcome == 'success' }}
+        env:
+          TEST_ADDON_SOURCE: installed
+          TEST_TEXT_MODE: 3d_text
+          TEST_PAGES: all
+          TEST_EXPECT_PAGES: "1"
+          TEST_EXPECT_TEXT_REPRESENTATION: 3d_text
+        run: |
+          export TEST_PDF="$CI_FIXTURES/ci_cid_cff.pdf" TEST_RESULT_JSON="$CI_OUT/import_cid_cff.json"
+          "$BLENDER_EXE" -b --factory-startup --python-exit-code 1 \
+            --python scripts/_headless_import_test.py 2>&1 | tee "$CI_OUT/import_cid_cff.log"
+          grep -q "HEADLESS_IMPORT_PASS" "$CI_OUT/import_cid_cff.log"
+
       - name: Keep Blender's crash report, if any
         if: ${{ always() }}
         run: |
@@ -233,7 +248,8 @@ jobs:
           checks = (("import_text", "text", "import ci.pdf"),
                     ("import_3d_text", "3d_text", "import ci.pdf"),
                     ("import_glyphs", "glyphs", "import ci.pdf"),
-                    ("import_edge_far", "3d_text", "edge text far down the stack"))
+                    ("import_edge_far", "3d_text", "edge text far down the stack"),
+                    ("import_cid_cff", "3d_text", "CID-labeled CFF editable text"))
           crashed = os.path.isfile(os.path.join(out, "blender.crash.txt"))
           for name, mode, label in checks:
               path = os.path.join(out, name + ".json")

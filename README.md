@@ -1,6 +1,6 @@
 # PDF Vector Importer for Blender
 
-[![Version](https://img.shields.io/badge/Version-1.0.110-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-1.0.111-blue.svg)]()
 
 **BUILT. NOT BOUGHT.** -- BlueCollar-Systems
 
@@ -21,7 +21,11 @@ Powered by the pdfcadcore shared extraction library and PyMuPDF.
 - **Line Width Mapping** -- PDF stroke widths mapped to curve bevel depth
 - **Dash Pattern Preservation** -- Retain PDF dash styling information
 
-## Candidate update (v1.0.110)
+## Candidate update (v1.0.111)
+
+PDF Type0 fonts labeled `cid` can contain ordinary name-keyed CFF programs. When the original bytes prove that structure, the importer uses its existing validated font conversion and original character-to-glyph map to retain editable text. Actual CID-keyed, malformed or ambiguous programs remain rejected. Original PDF inventory labels and exact program hashes are retained separately from the canonical font format.
+
+Failed font builds now retain their evidence by the verified original font program, so a different inventory/span spelling cannot incorrectly stop the text fallback ladder. Missing, mixed, wrong or ambiguous program evidence remains unverified. Existing Type3 and empty-stream absence behavior is preserved.
 
 Inferred word gaps in symbolic subset fonts can use an empty space glyph observed in the PDF's original font program, preserving editable text instead of an unnecessary image fallback. Visible, unobserved, ambiguous or changed source glyphs remain unverified and follow the existing reported fallback.
 

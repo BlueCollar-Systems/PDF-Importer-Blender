@@ -236,6 +236,65 @@ def assert_restored(host, centers):
     assert all(center.data.bevel_depth == center.data.original_width and 'pdf_source_round_footprint' not in center for center in centers)
 
 
+class IntegerSubclass(int):
+    pass
+
+
+@pytest.mark.parametrize('value', [True, 1])
+def test_round_marker_accepts_only_exact_host_true_representations(value):
+    assert module._normal_round_marker_retained({'pdf_normal_round_stroke': value})
+
+
+@pytest.mark.parametrize('value', [False, 0, 2, -1, 1.0, '1', 'True', None,
+                                 object(), IntegerSubclass(1)])
+def test_round_marker_rejects_other_truthy_and_false_representations(value):
+    assert not module._normal_round_marker_retained({'pdf_normal_round_stroke': value})
+    assert not module._normal_round_marker_retained({})
+
+
+@pytest.mark.parametrize('cubic', [False, True])
+def test_legacy_integer_marker_retains_proven_native_round_footprints(monkeypatch, tmp_path, cubic):
+    host = Host(monkeypatch)
+    path, specs, centers, config = host.fixture(tmp_path, 4)
+    original_setitem = NativeObject.__setitem__
+
+    def legacy_setitem(self, key, value):
+        if key == 'pdf_normal_round_stroke' and value is True:
+            value = 1
+        original_setitem(self, key, value)
+
+    monkeypatch.setattr(NativeObject, '__setitem__', legacy_setitem)
+    if cubic:
+        host.rational_ratio = .75
+    records = module.apply_round_strokes(specs, host.collection, config, source_path=path)
+    assert len(records) == 4 and host.updates == (2 if cubic else 1)
+    assert all(record['status'] == ('approximated' if cubic else 'verified') for record in records)
+    assert len(host.meshes) == len(host.cleared) == (16 if cubic else 8)
+    for record, center in zip(records, centers, strict=True):
+        footprint = host.linked[record['footprint_object']]
+        assert type(footprint['pdf_normal_round_stroke']) is int
+        assert footprint['pdf_normal_round_stroke'] == 1
+        assert footprint.parent is center
+        assert center['pdf_source_round_footprint'] == footprint.name
+
+
+@pytest.mark.parametrize('value', [False, 0, 2, -1, 1.0, '1', 'True', None,
+                                 object(), IntegerSubclass(1)])
+def test_invalid_stored_round_marker_rolls_back_the_entire_batch(monkeypatch, tmp_path, value):
+    host = Host(monkeypatch)
+    path, specs, centers, config = host.fixture(tmp_path, 4)
+    original_setitem = NativeObject.__setitem__
+
+    def corrupt_setitem(self, key, stored):
+        original_setitem(self, key, value if key == 'pdf_normal_round_stroke' else stored)
+
+    monkeypatch.setattr(NativeObject, '__setitem__', corrupt_setitem)
+    with pytest.raises(ValueError, match='source placement or reference was not retained'):
+        module.apply_round_strokes(specs, host.collection, config, source_path=path)
+    assert_restored(host, centers)
+    assert len(host.meshes) == len(host.cleared)
+
+
 @pytest.mark.parametrize('count', [128, 4500])
 def test_dense_rational_capsules_have_one_update_and_every_surface_area_source_proof(monkeypatch, tmp_path, count):
     host = Host(monkeypatch)
@@ -408,7 +467,7 @@ def test_publication_cancel_after_stored_references_restores_every_original(monk
     assert not host.linked and len(host.objects.items) == len(host.curves.items) == 301
 
 
-@pytest.mark.parametrize('mutation', ['controls', 'material', 'parent', 'reference', 'world', 'source_file', 'stale_local'])
+@pytest.mark.parametrize('mutation', ['controls', 'material', 'parent', 'reference', 'world', 'source_file', 'stale_local', 'marker'])
 def test_final_callback_cannot_launder_an_earlier_published_footprint(monkeypatch, tmp_path, mutation):
     host = Host(monkeypatch)
     path, specs, centers, config = host.fixture(tmp_path, 4)
@@ -423,6 +482,8 @@ def test_final_callback_cannot_launder_an_earlier_published_footprint(monkeypatc
                 footprint.parent = centers[-1]
             elif mutation == 'reference':
                 centers[0]['pdf_source_round_footprint'] = 'OtherNativeObject'
+            elif mutation == 'marker':
+                footprint['pdf_normal_round_stroke'] = 2
             elif mutation == 'world':
                 world = footprint.matrix_world.copy()
                 world[0][3] += 1.

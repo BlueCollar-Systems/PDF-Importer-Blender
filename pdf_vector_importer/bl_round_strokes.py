@@ -133,6 +133,13 @@ class RoundStrokeRollbackFailure(RuntimeError):
     """Owned footprints or original centerline state could not be restored."""
 
 
+def _normal_round_marker_retained(footprint):
+    # Older Blender ID properties store True as the builtin integer 1. That
+    # representation can also survive when a saved model opens in a newer host.
+    value = footprint.get("pdf_normal_round_stroke")
+    return value is True or (type(value) is int and value == 1)
+
+
 def apply_round_strokes(prepared, collection, config, *, source_path, progress_callback=None):
     if not prepared:
         return []
@@ -235,7 +242,7 @@ def apply_round_strokes(prepared, collection, config, *, source_path, progress_c
             footprint.parent = center
             footprint.matrix_world = world
             center["pdf_source_round_footprint"] = footprint.name
-            if (footprint.get("pdf_normal_round_stroke") is not True
+            if (not _normal_round_marker_retained(footprint)
                     or not same_native_object(footprint.parent, center)
                     or center.get("pdf_source_round_footprint") != footprint.name
                     or any(not native_float_close(a,b) for row,wanted in zip(footprint.matrix_world,world,strict=True)
@@ -263,7 +270,7 @@ def apply_round_strokes(prepared, collection, config, *, source_path, progress_c
                     or len(center.data.materials) != 1
                     or not same_native_object(center.data.materials[0], material)
                     or center.get("pdf_source_round_footprint") != footprint.name
-                    or footprint.get("pdf_normal_round_stroke") is not True):
+                    or not _normal_round_marker_retained(footprint)):
                 raise ValueError("Round stroke original ownership or reference changed during publication")
             _verify_round_footprint(footprint, spec, material, collection,
                                     cubic=bool(approximation), expected_parent=center)
