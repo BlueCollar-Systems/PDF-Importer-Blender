@@ -8,6 +8,8 @@ import math
 from pathlib import Path
 import sys
 
+sys.dont_write_bytecode = True
+
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument("--out",required=True)
@@ -34,7 +36,15 @@ def main():
         records=stats.get('source_round_stroke_footprints',())
         assert len(records)==1 and records[0]['status'] in ('verified','approximated')
         obj=bpy.data.objects[records[0]['footprint_object']]
+        center=bpy.data.objects[records[0]['centerline_object']]
+        def visibility(footprint, parent):
+            return {'source_helper_hidden': parent.hide_viewport and parent.hide_render and parent.hide_select,
+                    'source_helper_marker': parent.get('pdf_display_replaced_by')==footprint.name,
+                    'footprint_visible': footprint.visible_get() and not footprint.hide_render,
+                    'parent_hidden': not parent.visible_get(),
+                    'parent_preserved': footprint.parent==parent}
         bpy.context.view_layer.update();evaluated=obj.evaluated_get(bpy.context.evaluated_depsgraph_get());mesh=evaluated.to_mesh()
+        imported_visibility=visibility(obj,center)
         try:
             mesh.calc_loop_triangles();area=sum(t.area for t in mesh.loop_triangles)*1e6
             points=[tuple(obj.matrix_world@v.co) for v in mesh.vertices]
@@ -50,14 +60,28 @@ def main():
         bpy.ops.wm.save_as_mainfile(filepath=str(output/(name+'.blend')))
         bpy.ops.wm.open_mainfile(filepath=str(output/(name+'.blend')))
         restored=bpy.data.objects[records[0]['footprint_object']]
+        restored_center=bpy.data.objects[records[0]['centerline_object']]
+        bpy.context.view_layer.update()
+        restored_visibility=visibility(restored,restored_center)
+        # A hidden parent must still supply its transform to its visible child.
+        prior_world=restored.matrix_world.copy()
+        restored_center.location.x+=.01
+        bpy.context.view_layer.update()
+        parent_edit_propagates=all(abs(restored.matrix_world[i][3]-prior_world[i][3]-(.01 if i==0 else 0.))<1e-6
+                                   for i in range(3))
         results.append({'case':name,'source_pdf_sha256':hashlib.sha256(source.read_bytes()).hexdigest(),
                         'expected_area_mm2':expected_area,'native_area_mm2':area,
                         'expected_bounds_mm':expected_bounds,'native_bounds_mm':bounds,
                         'source_direction':[ux,uy],'representation':records[0]['representation'],
                         'reported_radial_error_mm':records[0]['max_radial_error_mm'],
+                        'import_visibility': imported_visibility,'restored_visibility': restored_visibility,
+                        'hidden_parent_edit_propagates': parent_edit_propagates,
                         'parent_preserved':restored.parent.name==records[0]['centerline_object'],
-                        'passed':abs(area-expected_area)<.015 and max(abs(a-b) for a,b in zip(bounds,expected_bounds,strict=True))<.002})
+                        'passed':abs(area-expected_area)<.015 and max(abs(a-b) for a,b in zip(bounds,expected_bounds,strict=True))<.002
+                                 and all(imported_visibility.values()) and all(restored_visibility.values())
+                                 and parent_edit_propagates})
     result={'schema':'bcs.blender-round-stroke-native/1','host_version':bpy.app.version_string,
+            'host_version_tuple':list(bpy.app.version),
             'headless':True,'desktop_ui_acceptance':False,'cases':results,'passed':all(r['passed'] for r in results)}
     (output/'NATIVE-RESULT.json').write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
     print(json.dumps(result,indent=2))

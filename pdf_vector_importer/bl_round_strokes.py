@@ -1,7 +1,8 @@
 """Editable round-cap footprints for isolated, opaque Normal PDF strokes.
 
-The original editable centerline stays present. A filled rational boundary
-supplies the round ends missing from Blender's default bevelled open curve.
+The original editable centerline stays present as a hidden source helper. A
+filled rational boundary supplies the round ends missing from Blender's
+default bevelled open curve.
 Unknown clip, blend or overlapping paint is reported, never guessed.
 """
 from __future__ import annotations
@@ -140,6 +141,54 @@ def _normal_round_marker_retained(footprint):
     return value is True or (type(value) is int and value == 1)
 
 
+def _verify_replaceable_centerline(center, expected_z):
+    """A source helper must not hide additional native paint or deformations."""
+    curve = center.data
+    if (getattr(curve, "extrude", 0.) != 0.
+            or getattr(curve, "offset", 0.) != 0.
+            or getattr(curve, "bevel_object", None) is not None
+            or getattr(curve, "taper_object", None) is not None
+            or getattr(curve, "shape_keys", None) is not None
+            or getattr(curve, "bevel_mode", "ROUND") != "ROUND"
+            or not native_float_close(getattr(curve, "bevel_factor_start", 0.), 0.)
+            or not native_float_close(getattr(curve, "bevel_factor_end", 1.), 1.)
+            or any(not native_float_close(getattr(point, "radius", 1.), 1.)
+                   or not native_float_close(getattr(point, "tilt", 0.), 0.)
+                   for point in curve.splines[0].points)):
+        raise ValueError("Round source centerline contains additional native paint")
+    from mathutils import Vector
+
+    matrix = center.matrix_world
+    # Endpoint XY alone cannot prove the native tube width: scaling an axis
+    # perpendicular to the line leaves both endpoints fixed. Permit rigid
+    # transforms (including reflection), with only float32 storage residue in
+    # the unit-axis dot products; never hide a scaled or sheared native tube.
+    if (not all(math.isfinite(float(value)) for row in matrix for value in row)
+            or any(not native_float_close(matrix[3][i], float(i == 3)) for i in range(4))
+            or any(not native_float_close(1. + sum(matrix[k][i] * matrix[k][j] for k in range(3)) - float(i == j), 1.)
+                   for i in range(3) for j in range(i, 3))):
+        raise ValueError("Round source centerline contains additional native scale or shear")
+    if (not math.isfinite(expected_z)
+            or any(not native_float_close((matrix @ Vector(tuple(point.co)[:3])).z, expected_z)
+                   for point in curve.splines[0].points)):
+        raise ValueError("Round source centerline contains additional native Z geometry")
+
+
+def _centerline_display_state(center):
+    return {
+        "hide_viewport": bool(center.hide_viewport),
+        "hide_render": bool(center.hide_render),
+        "hide_select": bool(center.hide_select),
+        "marker_present": "pdf_display_replaced_by" in center,
+        "marker": center.get("pdf_display_replaced_by"),
+    }
+
+
+def _centerline_display_retained(center, footprint):
+    return (center.hide_viewport and center.hide_render and center.hide_select
+            and center.get("pdf_display_replaced_by") == footprint.name)
+
+
 def apply_round_strokes(prepared, collection, config, *, source_path, progress_callback=None):
     if not prepared:
         return []
@@ -155,6 +204,7 @@ def apply_round_strokes(prepared, collection, config, *, source_path, progress_c
     total = len(prepared)
     heartbeat = cancel_heartbeat_interval(total)
     seen_primitive_ids = set()
+    centerline_z = float(config.get("line_z_offset_m", 0.) or 0.)
 
     def checkpoint(index, phase, base=0., span=.4, count=total):
         if progress_callback and (index % heartbeat == 0 or index == count):
@@ -177,12 +227,14 @@ def apply_round_strokes(prepared, collection, config, *, source_path, progress_c
                 continue  # Explicit wire-only output remains the user's requested form.
             if len(center.data.materials) != 1:
                 raise ValueError("Round stroke native material is absent")
+            _verify_replaceable_centerline(center, centerline_z)
             material = center.data.materials[0]
             source_width = spec["recipe"]["source_capsule_proof"]["capsule"]["width"] * spec["scale_mm"]
             if not native_float_close(center.data.bevel_depth, _line_bevel_depth(source_width)):
                 raise ValueError("Round stroke native centerline width changed")
             previous = center.get("pdf_source_round_footprint")
-            centers.append((center, center.data.bevel_depth, previous, "pdf_source_round_footprint" in center))
+            centers.append((center, center.data.bevel_depth, previous,
+                            "pdf_source_round_footprint" in center, _centerline_display_state(center)))
             center.data.bevel_depth = source_width / 2000
             if not native_float_close(center.data.bevel_depth, source_width / 2000):
                 raise ValueError("Round stroke physical width could not be stored")
@@ -227,6 +279,7 @@ def apply_round_strokes(prepared, collection, config, *, source_path, progress_c
             checkpoint(index, "Checking original round strokes", .8, .1, len(entries))
             matches = config.get("_image_order_stroke_objects", {}).get(spec["primitive_id"], ())
             _verify_native_stroke(center, dict(points_mm=spec["points_mm"], closed=False))
+            _verify_replaceable_centerline(center, centerline_z)
             width = spec["recipe"]["source_capsule_proof"]["capsule"]["width"] * spec["scale_mm"]
             if (len(matches) != 1 or not same_native_object(matches[0], center)
                     or not native_float_close(center.data.bevel_depth, width / 2000)
@@ -264,6 +317,7 @@ def apply_round_strokes(prepared, collection, config, *, source_path, progress_c
         for spec, center, material, footprint, approximation in entries:
             matches = config.get("_image_order_stroke_objects", {}).get(spec["primitive_id"], ())
             _verify_native_stroke(center, dict(points_mm=spec["points_mm"], closed=False))
+            _verify_replaceable_centerline(center, centerline_z)
             width = spec["recipe"]["source_capsule_proof"]["capsule"]["width"] * spec["scale_mm"]
             if (len(matches) != 1 or not same_native_object(matches[0], center)
                     or not native_float_close(center.data.bevel_depth, width / 2000)
@@ -274,6 +328,21 @@ def apply_round_strokes(prepared, collection, config, *, source_path, progress_c
                 raise ValueError("Round stroke original ownership or reference changed during publication")
             _verify_round_footprint(footprint, spec, material, collection,
                                     cubic=bool(approximation), expected_parent=center)
+        # Only now is the exact visible footprint certified. Keep its editable
+        # parent and transform chain, but hide the redundant source tube in all
+        # view layers and renders. Blender draws relationship guides to visible
+        # parents even when deselected; page-origin centerlines otherwise add
+        # thousands of dashed spokes across the sheet. No user overlay changes
+        # or geometry/origin edits are needed, and framing preserves this marker.
+        # No progress callback follows these atomic publication writes.
+        for _spec, center, _material, footprint, _approximation in entries:
+            center["pdf_display_replaced_by"] = footprint.name
+            center.hide_viewport = True
+            center.hide_render = True
+            center.hide_select = True
+        if any(not _centerline_display_retained(center, footprint)
+               for _spec, center, _material, footprint, _approximation in entries):
+            raise ValueError("Round stroke source helper display could not be hidden")
         if _file_sha(source_path) != digest:
             raise ValueError("Round stroke source PDF changed during native construction")
     except BaseException as error:
@@ -283,11 +352,33 @@ def apply_round_strokes(prepared, collection, config, *, source_path, progress_c
                 _discard_owned_footprint(row)
             except Exception as cleanup:
                 failures.append(str(cleanup))
-        for center, width, reference, present in reversed(centers):
+        for center, width, reference, present, display in reversed(centers):
+            # One refused visibility setter must not prevent the other flags,
+            # source width or source reference from being restored.
+            for name in ("hide_viewport", "hide_render", "hide_select"):
+                try:
+                    setattr(center, name, display[name])
+                except Exception as cleanup:
+                    failures.append(str(cleanup))
+            try:
+                if display["marker_present"]:
+                    center["pdf_display_replaced_by"] = display["marker"]
+                elif "pdf_display_replaced_by" in center:
+                    del center["pdf_display_replaced_by"]
+            except Exception as cleanup:
+                failures.append(str(cleanup))
+            try:
+                if _centerline_display_state(center) != display:
+                    raise ValueError("Original stroke display state was not restored")
+            except Exception as cleanup:
+                failures.append(str(cleanup))
             try:
                 center.data.bevel_depth = width
                 if not native_float_close(center.data.bevel_depth, width):
                     raise ValueError("Original stroke width was not restored")
+            except Exception as cleanup:
+                failures.append(str(cleanup))
+            try:
                 if present:
                     center["pdf_source_round_footprint"] = reference
                 elif "pdf_source_round_footprint" in center:
