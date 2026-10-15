@@ -88,6 +88,7 @@ class NativeObject(dict):
         self.host, self.name, self.data, self.alive = host, name, data, True
         self.location = (0., 0., 0.)
         self.parent, self.modifiers, self.constraints, self.hide_render = None, [], [], False
+        self.hide_viewport, self.hide_select = False, False
         self.matrix_parent_inverse = Matrix()
         self._world, self._basis = None, None
         self.fail_reference = False
@@ -234,6 +235,147 @@ def assert_restored(host, centers):
     assert len(host.objects.items) == len(centers)
     assert len(host.curves.items) == len(centers)
     assert all(center.data.bevel_depth == center.data.original_width and 'pdf_source_round_footprint' not in center for center in centers)
+    assert all(not center.hide_viewport and not center.hide_render and not center.hide_select
+               and 'pdf_display_replaced_by' not in center for center in centers)
+
+
+@pytest.mark.parametrize('cubic', [False, True])
+def test_only_certified_round_stroke_parents_are_hidden_without_geometry_or_overlay_edits(monkeypatch, tmp_path, cubic):
+    host = Host(monkeypatch)
+    path, specs, centers, config = host.fixture(tmp_path, 4)
+    if cubic:
+        host.rational_ratio = .75
+    original = [(copy.deepcopy(center.matrix_world), copy.deepcopy(center.data.splines[0].points))
+                for center in centers]
+    unrelated = host.objects.new('Unrelated user curve', host.curves.new('User data', 'CURVE'))
+    records = module.apply_round_strokes(specs, host.collection, config, source_path=path)
+    for record, center, (world, points) in zip(records, centers, original, strict=True):
+        footprint = host.linked[record['footprint_object']]
+        assert center.hide_viewport and center.hide_render and center.hide_select
+        assert center['pdf_display_replaced_by'] == footprint.name
+        assert footprint.parent is center and not footprint.hide_viewport and not footprint.hide_render
+        assert center.matrix_world == world and center.data.splines[0].points == points
+    assert not unrelated.hide_viewport and not unrelated.hide_render and not unrelated.hide_select
+    # The host has no window/overlay API: publication must stay object-scoped.
+    assert not hasattr(sys.modules['bpy'].context, 'window_manager')
+
+
+@pytest.mark.parametrize('kind', ['extrude', 'offset', 'bevel_object', 'taper_object', 'shape_keys', 'bevel_mode',
+                                  'bevel_factor_start', 'bevel_factor_end', 'radius', 'tilt', 'perpendicular_scale', 'z'])
+@pytest.mark.parametrize('late', [False, True])
+def test_additional_centerline_paint_is_never_hidden(monkeypatch, tmp_path, kind, late):
+    host = Host(monkeypatch)
+    path, specs, centers, config = host.fixture(tmp_path, 2)
+
+    def change():
+        if kind == 'z':
+            centers[-1].data.splines[0].points[-1].co = (.011, .1, .001, 1.)
+        elif kind in ('radius', 'tilt'):
+            setattr(centers[-1].data.splines[0].points[-1], kind, .3)
+        elif kind == 'perpendicular_scale':
+            matrix = centers[-1].matrix_world.copy()
+            matrix[1][1], matrix[1][3] = 2., -.1  # Both horizontal endpoints stay exactly fixed.
+            centers[-1].matrix_world = matrix
+        else:
+            setattr(centers[-1].data, kind, .01 if kind in ('extrude', 'offset', 'bevel_factor_start', 'bevel_factor_end') else
+                    'PROFILE' if kind == 'bevel_mode' else object())
+
+    def progress(_fraction, phase):
+        if late and phase == 'Checking completed round strokes':
+            change()
+        return True
+
+    if not late:
+        change()
+    with pytest.raises(ValueError, match='additional native'):
+        module.apply_round_strokes(specs, host.collection, config, source_path=path, progress_callback=progress)
+    assert_restored(host, centers)
+
+
+@pytest.mark.parametrize('failure', ['marker', 'viewport', 'render', 'select'])
+def test_partial_display_publication_restores_original_flags_and_markers(monkeypatch, tmp_path, failure):
+    host = Host(monkeypatch)
+    path, specs, centers, config = host.fixture(tmp_path, 3)
+    centers[0].hide_viewport = True
+    centers[0].hide_select = True
+    centers[0]['pdf_display_replaced_by'] = 'Earlier source helper marker'
+    expected = [module._centerline_display_state(center) for center in centers]
+    original_setattr, original_setitem = NativeObject.__setattr__, NativeObject.__setitem__
+
+    def setattr_checked(self, key, value):
+        if self is centers[-1] and key == 'hide_' + failure and value is True:
+            return
+        original_setattr(self, key, value)
+
+    def setitem_checked(self, key, value):
+        if self is centers[-1] and failure == 'marker' and key == 'pdf_display_replaced_by':
+            return
+        original_setitem(self, key, value)
+
+    monkeypatch.setattr(NativeObject, '__setattr__', setattr_checked)
+    monkeypatch.setattr(NativeObject, '__setitem__', setitem_checked)
+    with pytest.raises(ValueError, match='display could not be hidden'):
+        module.apply_round_strokes(specs, host.collection, config, source_path=path)
+    assert not host.linked and len(host.objects.items) == len(centers)
+    assert [module._centerline_display_state(center) for center in centers] == expected
+    assert all(center.data.bevel_depth == center.data.original_width
+               and 'pdf_source_round_footprint' not in center for center in centers)
+
+
+def test_configured_paper_depth_is_preserved_and_wire_only_strokes_stay_visible(monkeypatch, tmp_path):
+    host = Host(monkeypatch)
+    path, specs, centers, config = host.fixture(tmp_path, 2)
+    config['line_z_offset_m'] = .0001
+    for center in centers:
+        for point in center.data.splines[0].points:
+            point.co = tuple(point.co[:2]) + (.0001, 1.)
+    centers[-1].data.bevel_depth = 0.
+    centers[-1].data.fill_mode = 'NONE'
+    records = module.apply_round_strokes(specs, host.collection, config, source_path=path)
+    assert len(records) == 1 and records[0]['centerline_object'] == centers[0].name
+    assert centers[0].hide_viewport and centers[0].hide_render
+    assert all(point.co[2] == .0001 for point in centers[0].data.splines[0].points)
+    assert not centers[-1].hide_viewport and not centers[-1].hide_render and not centers[-1].hide_select
+    assert 'pdf_display_replaced_by' not in centers[-1] and 'pdf_source_round_footprint' not in centers[-1]
+
+
+@pytest.mark.parametrize('attribute', ['hide_viewport', 'hide_render', 'hide_select'])
+@pytest.mark.parametrize('failure', ['silent', 'throws'])
+def test_uncertain_display_rollback_still_restores_other_flags_width_and_reference(monkeypatch, tmp_path, attribute, failure):
+    host = Host(monkeypatch)
+    path, specs, centers, config = host.fixture(tmp_path, 2)
+    centers[0]['pdf_source_round_footprint'] = 'Earlier source footprint'
+    centers[0]['pdf_display_replaced_by'] = 'Earlier display marker'
+    digest = module._file_sha(path)
+    calls = []
+
+    def file_sha(_path):
+        calls.append(True)
+        return digest if len(calls) == 1 else 'changed'
+
+    original_setattr = NativeObject.__setattr__
+
+    def setattr_checked(self, key, value):
+        if self is centers[0] and key == attribute and value is False:
+            if failure == 'throws':
+                raise RuntimeError('One original display flag refuses restoration')
+            return
+        original_setattr(self, key, value)
+
+    monkeypatch.setattr(module, '_file_sha', file_sha)
+    monkeypatch.setattr(NativeObject, '__setattr__', setattr_checked)
+    with pytest.raises(module.RoundStrokeRollbackFailure, match='rollback could not be verified') as caught:
+        module.apply_round_strokes(specs, host.collection, config, source_path=path)
+    assert isinstance(caught.value.__cause__, ValueError)
+    assert 'source PDF changed' in str(caught.value.__cause__)
+    assert getattr(centers[0], attribute) is True
+    assert all(not getattr(centers[0], name) for name in ('hide_viewport', 'hide_render', 'hide_select') if name != attribute)
+    assert centers[0]['pdf_source_round_footprint'] == 'Earlier source footprint'
+    assert centers[0]['pdf_display_replaced_by'] == 'Earlier display marker'
+    assert all(center.data.bevel_depth == center.data.original_width for center in centers)
+    assert not host.linked and len(host.objects.items) == len(centers)
+    assert not centers[-1].hide_viewport and not centers[-1].hide_render and not centers[-1].hide_select
+    assert 'pdf_source_round_footprint' not in centers[-1] and 'pdf_display_replaced_by' not in centers[-1]
 
 
 class IntegerSubclass(int):

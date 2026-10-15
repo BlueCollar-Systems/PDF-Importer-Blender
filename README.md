@@ -1,6 +1,6 @@
 # PDF Vector Importer for Blender
 
-[![Version](https://img.shields.io/badge/Version-1.0.111-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-1.0.112-blue.svg)]()
 
 **BUILT. NOT BOUGHT.** -- BlueCollar-Systems
 
@@ -21,7 +21,13 @@ Powered by the pdfcadcore shared extraction library and PyMuPDF.
 - **Line Width Mapping** -- PDF stroke widths mapped to curve bevel depth
 - **Dash Pattern Preservation** -- Retain PDF dash styling information
 
-## Candidate update (v1.0.111)
+## Candidate update (v1.0.112)
+
+Dense drawings with rounded strokes could show thousands of dashed Blender relationship guides across the sheet. The importer now keeps each verified rounded footprint visible while retaining its redundant source centerline as a hidden editable helper. Both objects, their geometry, materials and parent links remain available; the drawing uses native editable curves. Your viewport overlay settings stay unchanged.
+
+Only source-bound, fully verified replacements qualify. Changed native widths, extra geometry or uncertain construction cannot hide the original drawing. If construction fails, the importer attempts every part of the visibility, width and reference restoration and reports any incomplete cleanup.
+
+## Previous candidate (v1.0.111)
 
 PDF Type0 fonts labeled `cid` can contain ordinary name-keyed CFF programs. When the original bytes prove that structure, the importer uses its existing validated font conversion and original character-to-glyph map to retain editable text. Actual CID-keyed, malformed or ambiguous programs remain rejected. Original PDF inventory labels and exact program hashes are retained separately from the canonical font format.
 
