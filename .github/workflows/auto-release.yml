@@ -33,7 +33,7 @@ jobs:
       build_ref: ${{ steps.release_plan.outputs.build_ref }}
       candidate_artifact: ${{ steps.candidate.outputs.artifact_name }}
       candidate_run_attempt: ${{ steps.candidate.outputs.run_attempt }}
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -212,7 +212,7 @@ jobs:
     permissions:
       actions: read
       contents: write
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout immutable release source
         uses: actions/checkout@v7
