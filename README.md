@@ -27,6 +27,31 @@ Dense drawings with rounded strokes could show thousands of dashed Blender relat
 
 Only source-bound, fully verified replacements qualify. Changed native widths, extra geometry or uncertain construction cannot hide the original drawing. If construction fails, the importer attempts every part of the visibility, width and reference restoration and reports any incomplete cleanup.
 
+
+
+## Dated validation update — October 18, 2026
+
+The local v1.0.112 r18 package README and delivery addendum retain their
+build-time dense-GUI pending state and the earlier 5.2 owner failure on a
+descriptive version-string check. Those records remain unchanged.
+
+The later master test-package guide records exact r18 dense import/save/reopen
+and ordinary desktop Save As/fresh reopen in Blender 5.2.2. It reports a clean
+full sheet with Overlays and Relationship Lines enabled, plus focused native
+compatibility/edit/persistence controls in 3.1.2. This is the later operator
+guide's recorded scope, not a new native test performed for this note.
+
+The exact ZIP and source identity are retained, but the later raw desktop
+receipts were not located in the targeted durable package/validation inventory.
+Locate and bind those receipts, or repeat the bounded exact-r18 desktop checks,
+before treating this reconciliation as independently reverified acceptance.
+The older five-host v1.0.109 matrix is not transferred to v1.0.112. No whole-page
+pixel parity, every-mode coverage or non-Windows runtime support is established.
+
+New imports receive r18's persisted helper-visibility repair. Older saved
+models keep their existing flags. Local r18 is 1.0.112; GitHub Latest remains
+1.0.111. No release or ZIP archive bytes were changed by this dated note.
+
 ## Previous candidate (v1.0.111)
 
 PDF Type0 fonts labeled `cid` can contain ordinary name-keyed CFF programs. When the original bytes prove that structure, the importer uses its existing validated font conversion and original character-to-glyph map to retain editable text. Actual CID-keyed, malformed or ambiguous programs remain rejected. Original PDF inventory labels and exact program hashes are retained separately from the canonical font format.
