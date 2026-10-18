@@ -20,7 +20,8 @@ jobs:
   # dependency suite runs on >=3.10 (D5 ABI floor); real Blender hosts run in
   # blender-host-matrix.yml.
   legacy-syntax:
-    runs-on: ubuntu-latest
+    # ubuntu-latest becomes 26.04, where actions/setup-python has no Python 3.9.
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python-version: ["3.9"]
