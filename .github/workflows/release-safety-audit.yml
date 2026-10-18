@@ -12,6 +12,9 @@ name: release-safety-audit
 on:
   push:
     branches: [main, master]
+  # Probe-only trigger so this job can run on ubuntu-26.04 without a main push.
+  # Removed before the fix pull request.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -22,7 +25,7 @@ defaults:
 
 jobs:
   audit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout
         uses: actions/checkout@v7

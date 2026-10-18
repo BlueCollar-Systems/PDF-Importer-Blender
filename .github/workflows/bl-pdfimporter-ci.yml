@@ -20,7 +20,7 @@ jobs:
   # dependency suite runs on >=3.10 (D5 ABI floor); real Blender hosts run in
   # blender-host-matrix.yml.
   legacy-syntax:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       matrix:
         python-version: ["3.9"]
@@ -37,7 +37,7 @@ jobs:
         run: python -m compileall pdf_vector_importer blender_pdf_vector_importer
 
   version-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -85,7 +85,7 @@ jobs:
         run: python scripts/smoke_release_zip.py "dist/Blender-PDF-Importer_*.zip"
 
   syntax-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       matrix:
         # 3.10 = Blender 3.1-3.6, 3.11 = Blender 4.x, 3.13 = Blender 5.2
