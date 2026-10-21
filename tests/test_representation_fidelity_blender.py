@@ -2270,7 +2270,7 @@ def test_reused_glyph_template_scales_vertical_axis_by_size_ratio():
     # matrix must scale the vertical axis by 12/6 = 2.0 (the advance axis is
     # already scaled through local_advance/target width). Leaving the vertical
     # column a unit vector renders every reused glyph at the FIRST size seen
-    # (mixed tall/tiny letters in 'TOWER', '531-25', 'SHOP BOLTS').
+    # (mixed tall/tiny letters in 'TOWER', '123-45', 'SHOP BOLTS').
     parent = _item()
     parent.font_size = 12.0
     child = bl_text_builder._character_text_item(parent, _large_a_layout())
