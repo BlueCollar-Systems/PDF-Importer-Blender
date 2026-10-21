@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Regression: a both-sides weld symbol is TWO stacked fractions, not one.
 
-Geometry is the pdfcadcore extraction of "1011 (1 OF 2) - Rev 0.pdf" page 1,
+Geometry is the pdfcadcore extraction of page 1 of a private shop drawing from
+the local test set,
 weld symbol at PDF pt (953.9, 937.8): '316' [949.5,927.5,966.8,941.5] + '/'
 above the reference line and '316' [949.5,940.5,966.8,954.6] + '/' below it
 (14 such stacked-over-stacked pairs on that sheet, 96 across the local

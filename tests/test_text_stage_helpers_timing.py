@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """text_ms sub-stage timers: present, accounted, and reported.
 
-On `1011 (1 OF 2) - Rev 0.pdf` the Blender text stage is 88-90% of the importer
+On a large private shop drawing the Blender text stage is 88-90% of the importer
 clock (text 57.2 s of 63.2 s; glyphs 25.4 s of 28.7 s) and had no sub-stages, so the
 next cut was a guess. These tests pin that the timers exist, that they wrap the
 boundaries that matter (font load, object creation, every per-item
