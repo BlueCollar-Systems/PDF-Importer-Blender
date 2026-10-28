@@ -7,6 +7,13 @@
 Import PDF vector drawings as native Blender geometry (Curves, Collections, Materials).
 Powered by the pdfcadcore shared extraction library and PyMuPDF.
 
+## Quick Install (Windows 64-bit, Blender 3.1+)
+
+1. Download `Blender-PDF-Importer_v1.0.112.zip` from the [Releases page](https://github.com/BlueCollar-Systems/PDF-Importer-Blender/releases) (do **not** unzip it).
+2. In Blender, open **Edit → Preferences → Add-ons → Install…** (or **Install from Disk…** in Blender 4.2+), choose the downloaded `.zip`, and enable **Import-Export: PDF Vector Importer**.
+3. Use **File → Import → PDF Vector (.pdf)** (or drag and drop a PDF into Blender 4.1+).
+   - *Upgrading:* Disable the add-on in Preferences, close all Blender windows, reopen Blender, and install the new ZIP.
+
 ## Features
 
 - **4 Import Modes** (BCS-ARCH-001) -- Auto (default, picks strategy per page), Vector, Raster, Hybrid
