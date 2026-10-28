@@ -59,7 +59,9 @@ and Glyphs, requiring both sheets with no failed text. The current
 [five-host run](https://github.com/BlueCollar-Systems/PDF-Importer-Blender/actions/runs/38196670910)
 passed the v1.0.109 add-on source at `c6339283c9904c7a30c71e9cffd0f55fc646ea1e`
 on 2026-10-12 UTC (2026-10-11 America/Chicago), before its merge as
-`66ebf1940b610b9c7711505e416e62a7bfd855c4`.
+`66ebf1940b610b9c7711505e416e62a7bfd855c4`, and the latest scheduled weekly
+[five-host run (40326052885)](https://github.com/BlueCollar-Systems/PDF-Importer-Blender/actions/runs/40326052885)
+passed on 2026-10-26 across Blender 3.1.2, 3.6.23, 4.2.23, 4.5.14 and 5.2.2.
 See [the current evidence record](docs/validation/2026-10-12-compatibility-evidence.md)
 for the bounded desktop checks and source identities.
 
